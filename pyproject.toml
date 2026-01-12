@@ -1,5 +1,5 @@
 [project]
-name = "playhead"
+name = "playheads"
 version = "0.1.0"
 description = "Music Agent Monorepo"
 requires-python = ">=3.11"

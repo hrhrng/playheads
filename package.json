@@ -1,5 +1,5 @@
 {
-    "name": "playhead-root",
+    "name": "playheads-root",
     "private": true,
     "workspaces": [
         "apps/web"
