@@ -1,0 +1,27 @@
+# General
+.DS_Store
+*.log
+node_modules/
+venv/
+.venv/
+__pycache__/
+.env
+.idea/
+.vscode/
+
+# Python
+*.pyc
+.pytest_cache/
+
+# Javascript
+dist/
+build/
+coverage/
+
+# Swift
+.build/
+DerivedData/
+*.xcodeproj/project.xcworkspace/
+*.xcworkspace/xcuserdata/
+
+*.p8
