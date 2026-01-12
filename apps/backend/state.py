@@ -59,64 +59,104 @@ class SessionState(BaseModel):
         return "\n".join(lines)
 
 
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from .models import Conversation, ConversationState, Profile
+from .database import AsyncSessionLocal
+import json
+
 class SessionStore:
-    """In-memory session store. Can be replaced with Redis later."""
+    """Database-backed session store."""
     
     def __init__(self):
-        self._sessions: dict[str, SessionState] = {}
-        self._default_session_id = "default"  # Single user mode for now
+        # We don't hold connections here; we get them per request
+        pass
     
-    def get_session(self, session_id: Optional[str] = None) -> SessionState:
-        """Get or create a session."""
-        sid = session_id or self._default_session_id
-        if sid not in self._sessions:
-            self._sessions[sid] = SessionState(session_id=sid)
-        return self._sessions[sid]
-    
-    def update_session(self, state: SessionState):
-        """Update a session."""
-        state.last_sync = datetime.now()
-        self._sessions[state.session_id] = state
-    
-    def sync_from_frontend(self, session_id: str, data: dict):
-        """Sync state from frontend."""
-        session = self.get_session(session_id)
+    async def get_session(self, db: AsyncSession, session_id: str, user_id: Optional[str] = None) -> SessionState:
+        """Get session from DB or create new."""
         
-        # Update current track
-        if 'current_track' in data and data['current_track']:
-            ct = data['current_track']
-            session.current_track = TrackInfo(
-                id=ct.get('id', ''),
-                name=ct.get('name', 'Unknown'),
-                artist=ct.get('artist', 'Unknown'),
-                album=ct.get('album'),
-                artwork_url=ct.get('artwork_url'),
-                duration=ct.get('duration')
-            )
+        # 1. Try to find existing conversation state
+        stmt = select(ConversationState).join(Conversation).where(Conversation.id == session_id)
+        result = await db.execute(stmt)
+        db_state = result.scalar_one_or_none()
         
-        # Update playlist
-        if 'playlist' in data:
-            session.playlist = [
-                TrackInfo(
-                    id=t.get('id', ''),
-                    name=t.get('name', 'Unknown'),
-                    artist=t.get('artist', 'Unknown'),
-                    album=t.get('album'),
-                    artwork_url=t.get('artwork_url'),
-                    duration=t.get('duration')
-                )
-                for t in data['playlist']
-            ]
-        
-        # Update playback state
-        if 'is_playing' in data:
-            session.is_playing = data['is_playing']
-        if 'playback_position' in data:
-            session.playback_position = data['playback_position']
-        
-        session.last_sync = datetime.now()
-        return session
+        if db_state:
+            # Rehydrate Pydantic model from DB
+            return self._hydrate_session(db_state, session_id)
+            
+        # 2. If not found, create new conversation if user_id provided
+        if user_id:
+            # Check for existing recent conversation or create new
+            # For simplicity, we create a new one if ID provided but not found
+            # typically session_id comes from the client as the conversation ID
+            
+            # Create Conversation
+            new_conv = Conversation(id=uuid.UUID(session_id), user_id=uuid.UUID(user_id))
+            db.add(new_conv)
+            await db.flush() # get ID
+            
+            # ConversationState is auto-created by DB trigger, but we might need to fetch it
+            # Or we can manually create it if the trigger isn't reliable for async flow immediately
+            # Let's rely on manual creation to be safe in app logic
+            new_state = ConversationState(conversation_id=new_conv.id)
+            db.add(new_state)
+            await db.commit()
+            
+            return SessionState(session_id=str(new_conv.id))
+            
+        # Fallback for anon/testing (not persisted)
+        return SessionState(session_id=session_id)
 
+    def _hydrate_session(self, db_state: ConversationState, session_id: str) -> SessionState:
+        """Convert DB model to Pydantic SessionState."""
+        context = db_state.context or {}
+        
+        # Parse tracks from context
+        current_track = None
+        if context.get("current_track"):
+            ct = context["current_track"]
+            current_track = TrackInfo(**ct)
+            
+        playlist = []
+        if context.get("playlist"):
+            playlist = [TrackInfo(**t) for t in context["playlist"]]
+            
+        chat_history = []
+        if db_state.messages:
+            for m in db_state.messages:
+                chat_history.append(Message(**m))
+                
+        return SessionState(
+            session_id=session_id,
+            chat_history=chat_history,
+            current_track=current_track,
+            playlist=playlist,
+            is_playing=context.get("is_playing", False),
+            playback_position=context.get("playback_position", 0.0),
+            last_sync=db_state.last_synced_at or datetime.now()
+        )
 
-# Global store instance
+    async def update_session(self, db: AsyncSession, state: SessionState):
+        """Update session state in DB."""
+        stmt = select(ConversationState).where(ConversationState.conversation_id == uuid.UUID(state.session_id))
+        result = await db.execute(stmt)
+        db_state = result.scalar_one_or_none()
+        
+        if db_state:
+            # Update fields
+            db_state.messages = [m.model_dump(mode='json') for m in state.chat_history]
+            
+            # Update context
+            context = {
+                "is_playing": state.is_playing,
+                "playback_position": state.playback_position,
+                "current_track": state.current_track.model_dump(mode='json') if state.current_track else None,
+                "playlist": [t.model_dump(mode='json') for t in state.playlist]
+            }
+            db_state.context = context
+            db_state.last_synced_at = datetime.now()  # timezone aware?
+            
+            await db.commit()
+
+# Initialize store (stateless wrapper now)
 store = SessionStore()

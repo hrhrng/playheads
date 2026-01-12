@@ -33,16 +33,20 @@ const useAppleMusic = () => {
     // ==========================================================================
     // Sync state to backend
     // ==========================================================================
-    const syncToBackend = useCallback(async () => {
+    const syncToBackend = useCallback(async (data = {}, targetSessionId = null) => {
         if (!isAuthorized) return;
+
+        // Use argument ID if provided, otherwise state ID
+        const sid = targetSessionId || sessionId;
 
         try {
             const payload = {
-                session_id: sessionId,
+                session_id: sid,
                 current_track: formatTrackForSync(currentTrack),
                 playlist: queue.map(formatTrackForSync),
                 is_playing: isPlaying,
-                playback_position: playbackTime.current
+                playback_position: playbackTime.current,
+                ...data // Allow overriding partial state if needed
             };
 
             await fetch(`${API_BASE}/state/sync`, {

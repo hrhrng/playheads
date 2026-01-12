@@ -4,6 +4,7 @@ import { ChatInterface } from './components/ChatInterface'
 import useAppleMusic from './hooks/useAppleMusic'
 import { loginWithSpotify } from './utils/spotifyAuth'
 import { PlaylistSidebar } from './components/PlaylistSidebar'
+import { supabase } from './utils/supabase'
 
 function App() {
   const {
@@ -19,7 +20,7 @@ function App() {
     isInitializing,
     playbackTime,
     seekTo,
-    sessionId,
+    sessionId: appleSessionId, // This might need to sync with Supabase session/conversation ID
     syncToBackend,
     executeAgentActions
   } = useAppleMusic();
@@ -28,7 +29,51 @@ function App() {
   const [isPlaylistCollapsed, setPlaylistCollapsed] = useState(false);
   const [isDJSpeaking, setIsDJSpeaking] = useState(false);
 
-  const isLoggedIn = isAppleAuthorized || spotifyToken;
+  // Supabase Auth State
+  const [session, setSession] = useState(null)
+  const [email, setEmail] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [message, setMessage] = useState(null)
+
+  useEffect(() => {
+    // Check active sessions and subscribe to auth changes
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session)
+    })
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session)
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
+  const handleLogin = async (e) => {
+    e.preventDefault()
+    setLoading(true)
+    setMessage(null)
+
+    // Magic Link Login
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: window.location.origin
+      }
+    })
+
+    if (error) {
+      setMessage({ type: 'error', text: error.message })
+    } else {
+      setMessage({ type: 'success', text: 'Check your email for the login link!' })
+    }
+    setLoading(false)
+  }
+
+  // Combine auth states. Valid if Supabase auth OR music services (for now, eventually music service should be tied to user)
+  // For production readiness, we prioritize Supabase User Login
+  const isLoggedIn = !!session;
 
   // Load initial playlist when authorized
   useEffect(() => {
@@ -68,21 +113,52 @@ function App() {
             <p className="text-xs font-mono text-air-400 uppercase tracking-widest">Sonic Intelligence</p>
           </div>
 
-          {/* Login Buttons */}
-          <div className="w-full space-y-4 pt-8">
+          {/* Email Login Form */}
+          <form onSubmit={handleLogin} className="w-full space-y-4 pt-4">
+            {message && (
+              <div className={`p-3 text-sm rounded-md text-center ${message.type === 'error' ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'}`}>
+                {message.text}
+              </div>
+            )}
+
+            <input
+              type="email"
+              placeholder="Your email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              className="w-full h-12 px-4 rounded-lg border border-air-200 focus:outline-none focus:border-air-900 transition-colors"
+            />
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full h-12 rounded-lg bg-black text-white font-medium text-sm transition-colors flex items-center justify-center gap-3 hover:bg-gray-800 disabled:opacity-50"
+            >
+              {loading ? 'Sending Magic Link...' : 'Sign In with Email'}
+            </button>
+          </form>
+
+          {/* Separator */}
+          <div className="relative w-full">
+            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200"></div></div>
+            <div className="relative flex justify-center text-xs uppercase"><span className="bg-air-50 px-2 text-gray-400">Or connect music</span></div>
+          </div>
+
+          {/* Music Service Login Buttons (Optional flow if we want to allow service-only login, but we prob want User first) */}
+          <div className="w-full space-y-3">
             <button
               onClick={loginApple}
               className="w-full h-12 rounded-lg border border-air-200 bg-white text-air-900 font-medium text-sm hover:border-air-900 transition-colors flex items-center justify-center gap-3"
             >
               <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.74 1.18 0 2.21-1.21 3.96-1.13.62.03 1.95.16 3.09 1.83-2.83 1.62-2.3 5.4.11 6.5l-.23.63a13.3 13.3 0 0 1-1.92 4.4zM13 5c-1.85-.22-3.15 1.5-3.15 3.3a3.6 3.6 0 0 1 3.5-3.3z" />
+                {/* Apple Icon Path ... (truncated for brevity, ensure path is preserved or simplified) */}
+                <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.05-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.74 1.18 0 2.21-1.21 3.96-1.13.62.03 1.95.16 3.09 1.83-2.83 1.62-2.3 5.4.11 6.5l-.23.63a13.3 13.3 0 0 1-1.92 4.4zM13 5c-1.85-.22-3.15 1.5-3.15 3.3a3.6 3.6 0 0 1 3.5-3.3z" />
               </svg>
               Connect Apple Music
             </button>
-
             <button
               onClick={loginWithSpotify}
-              className="w-full h-12 rounded-lg bg-black text-white font-medium text-sm transition-colors flex items-center justify-center gap-3"
+              className="w-full h-12 rounded-lg border border-air-200 bg-white text-air-900 font-medium text-sm hover:border-air-900 transition-colors flex items-center justify-center gap-3"
             >
               <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z" />
@@ -96,6 +172,12 @@ function App() {
       </div>
     );
   }
+
+  // Determine correct session ID for backend
+  // If we have a conversation ID from supabase (logic needed), use it.
+  // For now, assume a single active conversation per user or use default ID
+  // We can default to 'user.id' as the session identifier for 1:1 user-agent mapping simplification in this version
+  const activeSessionId = session?.user?.id || appleSessionId;
 
   // Main app
   return (
@@ -119,9 +201,10 @@ function App() {
           togglePlay={toggleApple}
           playbackTime={playbackTime}
           onSeek={seekTo}
-          sessionId={sessionId}
+          sessionId={activeSessionId}
           onAgentActions={executeAgentActions}
-          syncToBackend={syncToBackend}
+          syncToBackend={(data) => syncToBackend(data, activeSessionId)}
+          userId={session?.user?.id}
         />
       </div>
     </AppLayout>

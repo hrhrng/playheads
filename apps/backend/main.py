@@ -1,15 +1,19 @@
 """
 Music Agent API
 """
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
 from dotenv import load_dotenv
 import os
+from sqlalchemy.ext.asyncio import AsyncSession
 
-# Load environment variables
+# Load environment variables FIRST
 load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
+
+# Then import database which depends on env vars
+from apps.backend.database import get_db
 
 app = FastAPI(title="Playhead Music Agent API", version="2.0.0")
 
@@ -29,12 +33,15 @@ app.add_middleware(
 class ChatRequest(BaseModel):
     message: str
     session_id: Optional[str] = None
+    # Add user_id if authenticated, or we can get it from headers/token later
+    user_id: Optional[str] = None
 
 
 class ChatResponse(BaseModel):
     response: str
     actions: list[str] = []
     session_id: str
+    audio: Optional[str] = None
 
 
 class SyncRequest(BaseModel):
@@ -64,18 +71,46 @@ def read_root():
 
 
 @app.post("/chat", response_model=ChatResponse)
-def chat(request: ChatRequest):
+async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     """Chat with the music agent."""
     try:
         from apps.backend.agent import run_agent
-        result = run_agent(request.message, request.session_id)
         
+        # Determine session ID strategy
+        # Ideally, authenticated user -> specific conversation
+        # Unauthenticated -> anon session not persisted long term or restricted
+        # For now, we trust the client session_id or create new
+        # We also need a way to pass user_id for RLS/persistence ownership
+        
+        # Use provided session_id or 'default' (safe fallback if no auth yet)
+        sid = request.session_id
+        if not sid:
+            # We need a valid UUID for DB if using DB
+            # But the client usually generates one or we do
+            # Let's handle this in run_agent logic or generate here
+            import uuid
+            sid = str(uuid.uuid4())
+            
+        result = await run_agent(db, request.message, sid, request.user_id)
+        
+        # Integrate Minimax TTS
+        audio_hex = None
+        try:
+            from apps.backend.minimax_client import minimax_client
+            if result["response"]:
+                 audio_hex = await minimax_client.generate_speech(result["response"])
+        except Exception as e:
+            print(f"TTS generation failed: {e}")
+
         return ChatResponse(
             response=result["response"],
             actions=result.get("actions", []),
-            session_id=result["session_id"]
+            session_id=result["session_id"],
+            audio=audio_hex
         )
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         print(f"Chat endpoint error: {e}")
         return ChatResponse(
             response="Sorry, I'm having technical difficulties. Try again in a moment! 🎧",
@@ -85,11 +120,17 @@ def chat(request: ChatRequest):
 
 
 @app.get("/state", response_model=StateResponse)
-def get_state(session_id: Optional[str] = None):
+async def get_state(session_id: Optional[str] = None, user_id: Optional[str] = None, db: AsyncSession = Depends(get_db)):
     """Get current session state."""
     from apps.backend.state import store
     
-    session = store.get_session(session_id)
+    # Needs valid UUID handling
+    if not session_id:
+         # Return empty/default state if no ID
+         # Or error?
+         return StateResponse(session_id="default")
+
+    session = await store.get_session(db, session_id, user_id)
     
     return StateResponse(
         session_id=session.session_id,
@@ -105,14 +146,20 @@ def get_state(session_id: Optional[str] = None):
 
 
 @app.post("/state/sync")
-def sync_state(request: SyncRequest):
+async def sync_state(request: SyncRequest, db: AsyncSession = Depends(get_db)):
     """Sync frontend state to backend."""
     from apps.backend.state import store
     
+    if not request.session_id:
+         return {"error": "Session ID required"}
+
     session = store.sync_from_frontend(
-        session_id=request.session_id or "default",
+        session_id=request.session_id,
         data=request.model_dump(exclude_none=True)
     )
+    
+    # Persist sync
+    await store.update_session(db, session)
     
     return {
         "status": "synced",
@@ -122,11 +169,14 @@ def sync_state(request: SyncRequest):
 
 
 @app.post("/action/{action}")
-def execute_action(action: str, index: Optional[int] = None, query: Optional[str] = None):
+async def execute_action(action: str, index: Optional[int] = None, query: Optional[str] = None, session_id: Optional[str] = None, db: AsyncSession = Depends(get_db)):
     """Execute a direct action (play, pause, skip, etc.)."""
     from apps.backend.state import store
     
-    session = store.get_session()
+    if not session_id:
+        return {"error": "Session ID required"}
+        
+    session = await store.get_session(db, session_id)
     
     if action == "play" and index is not None:
         if 0 <= index < len(session.playlist):
