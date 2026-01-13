@@ -14,11 +14,13 @@ export const ChatInterface = ({
     sessionId,
     onAgentActions,
     syncToBackend,
-    onEmptyChange
+    onEmptyChange,
+    onMessageSent
 }) => {
     const [input, setInput] = useState('');
     const [messages, setMessages] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
+    const [isLoadingHistory, setIsLoadingHistory] = useState(false);
     const [showHistory, setShowHistory] = useState(false);
     const endRef = useRef(null);
     const textareaRef = useRef(null);
@@ -28,7 +30,7 @@ export const ChatInterface = ({
         const loadChatHistory = async () => {
             if (!sessionId) return;
 
-            setIsLoading(true);
+            setIsLoadingHistory(true);
             try {
                 const res = await fetch(`${API_BASE}/state?session_id=${sessionId}`);
                 if (res.ok) {
@@ -48,7 +50,7 @@ export const ChatInterface = ({
                 console.error('Failed to load chat history:', e);
                 setMessages([]);
             } finally {
-                setIsLoading(false);
+                setIsLoadingHistory(false);
             }
             setInput('');
             setShowHistory(false);
@@ -112,6 +114,9 @@ export const ChatInterface = ({
             if (data.actions && data.actions.length > 0 && onAgentActions) {
                 await onAgentActions(data.actions);
             }
+
+            // Refresh conversation list
+            if (onMessageSent) onMessageSent();
         } catch (error) {
             console.error('Chat error:', error);
             setMessages(prev => [...prev, { role: 'agent', content: 'Sorry, I had trouble connecting. Try again? 🎧' }]);
@@ -119,6 +124,15 @@ export const ChatInterface = ({
             setIsLoading(false);
         }
     };
+
+    // Show loading while fetching history
+    if (isLoadingHistory) {
+        return (
+            <div className="flex items-center justify-center h-full">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+            </div>
+        );
+    }
 
     // If no messages, show New Chat View
     if (messages.length === 0) {

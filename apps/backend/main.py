@@ -251,6 +251,27 @@ async def list_conversations(db: AsyncSession = Depends(get_db)):
     )
 
 
+@app.delete("/conversations/{conversation_id}")
+async def delete_conversation(conversation_id: str, db: AsyncSession = Depends(get_db)):
+    """Delete a conversation and its state."""
+    from sqlalchemy import delete
+    from apps.backend.models import Conversation, ConversationState
+    import uuid
+    
+    try:
+        conv_uuid = uuid.UUID(conversation_id)
+    except ValueError:
+        return {"error": "Invalid conversation ID"}
+    
+    # Delete conversation state first (foreign key)
+    await db.execute(delete(ConversationState).where(ConversationState.conversation_id == conv_uuid))
+    # Delete conversation
+    await db.execute(delete(Conversation).where(Conversation.id == conv_uuid))
+    await db.commit()
+    
+    return {"success": True, "deleted": conversation_id}
+
+
 # Health check
 @app.get("/health")
 def health():

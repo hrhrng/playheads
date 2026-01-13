@@ -304,6 +304,7 @@ function App() {
           syncToBackend={(data) => syncToBackend(data, activeSessionId)}
           userId={session?.user?.id}
           onEmptyChange={setIsChatEmpty}
+          onMessageSent={fetchConversations}
         />
       </div>
     </AppLayout>
