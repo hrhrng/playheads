@@ -3,15 +3,16 @@ from sqlalchemy.orm import DeclarativeBase
 import os
 from typing import AsyncGenerator
 
+# Use PostgreSQL - DATABASE_URL should be set in .env
 DATABASE_URL = os.getenv("DATABASE_URL")
-
 if not DATABASE_URL:
-    raise ValueError("DATABASE_URL environment variable is not set")
+    raise ValueError("DATABASE_URL environment variable is required")
 
+# Convert PostgreSQL URL to async if needed
 if DATABASE_URL.startswith("postgresql://"):
     DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
 
-# Create Async Engine
+# Create Async Engine with PostgreSQL settings
 engine = create_async_engine(
     DATABASE_URL,
     echo=False,
@@ -22,7 +23,7 @@ engine = create_async_engine(
     pool_pre_ping=True,
     future=True,
     connect_args={
-        "ssl": "require",  # 或 True
+        "ssl": "require",
     },
 )
 

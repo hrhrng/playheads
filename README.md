@@ -11,3 +11,7 @@
 ## Getting Started
 
 See individual directories for setup instructions.
+
+## Apple Music
+
+Backend Apple Music Kit docs: `apps/backend/APPLE_MUSIC.md`

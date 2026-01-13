@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 const API_BASE = 'http://localhost:8000';
 
-const useAppleMusic = () => {
+const useAppleMusic = (userId, activeSessionId) => {
     const [musicKit, setMusicKit] = useState(null);
     const [isAuthorized, setIsAuthorized] = useState(false);
     const [currentTrack, setCurrentTrack] = useState(null);
@@ -10,6 +10,7 @@ const useAppleMusic = () => {
     const [playbackTime, setPlaybackTime] = useState({ current: 0, total: 0 });
     const [queue, setQueueState] = useState([]);
     const [isInitializing, setIsInitializing] = useState(true);
+    const developerTokenRef = useRef(null);
 
     // Generate a fallback UUID for anonymous sessions
     const generateUUID = () => {
@@ -19,9 +20,13 @@ const useAppleMusic = () => {
             return v.toString(16);
         });
     };
-    const [sessionId, setSessionId] = useState(() => generateUUID());
+    // Internal session ID (fallback)
+    const [internalSessionId] = useState(() => generateUUID());
 
-    const syncIntervalRef = useRef(null);
+    // Use active session ID if provided, otherwise internal (reactive with useMemo)
+    const sessionId = useMemo(() => {
+        return activeSessionId || internalSessionId;
+    }, [activeSessionId, internalSessionId]);
 
     // ==========================================================================
     // Helper: Format track for backend sync
@@ -51,6 +56,7 @@ const useAppleMusic = () => {
         try {
             const payload = {
                 session_id: sid,
+                user_id: userId, // Send user_id for permission check
                 current_track: formatTrackForSync(currentTrack),
                 playlist: queue.map(formatTrackForSync),
                 is_playing: isPlaying,
@@ -66,7 +72,7 @@ const useAppleMusic = () => {
         } catch (e) {
             console.error('Sync error:', e);
         }
-    }, [isAuthorized, currentTrack, queue, isPlaying, playbackTime, sessionId, formatTrackForSync]);
+    }, [isAuthorized, currentTrack, queue, isPlaying, playbackTime, sessionId, userId, formatTrackForSync]);
 
     // ==========================================================================
     // Execute agent commands
@@ -128,8 +134,17 @@ const useAppleMusic = () => {
                     return;
                 }
 
+                // Use fixed developer token from environment variable
+                const developerToken = import.meta.env.VITE_APPLE_DEVELOPER_TOKEN;
+                if (!developerToken) {
+                    console.error('VITE_APPLE_DEVELOPER_TOKEN not configured');
+                    setIsInitializing(false);
+                    return;
+                }
+                developerTokenRef.current = developerToken;
+
                 const mk = await window.MusicKit.configure({
-                    developerToken: import.meta.env.VITE_APPLE_DEVELOPER_TOKEN,
+                    developerToken,
                     app: { name: 'Playhead', build: '1.0.0' },
                 });
 
@@ -197,21 +212,12 @@ const useAppleMusic = () => {
     }, []);
 
     // ==========================================================================
-    // Polling: Sync to backend every 5 seconds
+    // Initial sync on authorization (event-driven, no polling)
     // ==========================================================================
     useEffect(() => {
         if (isAuthorized) {
-            // Initial sync
+            // Initial sync when authorized
             syncToBackend();
-
-            // Set up polling
-            syncIntervalRef.current = setInterval(syncToBackend, 5000);
-
-            return () => {
-                if (syncIntervalRef.current) {
-                    clearInterval(syncIntervalRef.current);
-                }
-            };
         }
     }, [isAuthorized, syncToBackend]);
 

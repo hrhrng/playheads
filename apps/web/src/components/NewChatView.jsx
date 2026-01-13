@@ -6,7 +6,9 @@ export const NewChatView = ({ onSend, suggestions = [], isDJSpeaking, isPlaying 
 
     const handleSend = () => {
         if (input.trim()) {
-            onSend(input);
+            const message = input;
+            setInput(''); // Clear input immediately
+            onSend(message);
         }
     };
 
@@ -39,7 +41,7 @@ export const NewChatView = ({ onSend, suggestions = [], isDJSpeaking, isPlaying 
             <div className="flex flex-col items-center w-full max-w-2xl space-y-8 z-20">
                 {/* Heading */}
                 <h2 className="text-3xl font-semibold text-gray-800 tracking-tight">
-                    Where should we play?
+                    What's Going On?
                 </h2>
 
                 {/* Input Area - Centered Style */}
