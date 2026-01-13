@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState } from 'react';
 import { RecordPlayer } from './RecordPlayer';
+import { NewChatView } from './NewChatView';
 
 const API_BASE = 'http://localhost:8000';
 
@@ -12,16 +13,49 @@ export const ChatInterface = ({
     onSeek,
     sessionId,
     onAgentActions,
-    syncToBackend
+    syncToBackend,
+    onEmptyChange
 }) => {
     const [input, setInput] = useState('');
-    const [messages, setMessages] = useState([
-        { role: 'agent', content: 'Welcome to your personal frequency. What are we vibing to? 🎵' }
-    ]);
+    const [messages, setMessages] = useState([]);
     const [isLoading, setIsLoading] = useState(false);
     const [showHistory, setShowHistory] = useState(false);
     const endRef = useRef(null);
     const textareaRef = useRef(null);
+
+    // Load chat history when session ID changes
+    useEffect(() => {
+        const loadChatHistory = async () => {
+            if (!sessionId) return;
+
+            setIsLoading(true);
+            try {
+                const res = await fetch(`${API_BASE}/state?session_id=${sessionId}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.chat_history && data.chat_history.length > 0) {
+                        setMessages(data.chat_history.map(m => ({
+                            role: m.role,
+                            content: m.content
+                        })));
+                    } else {
+                        setMessages([]);
+                    }
+                } else {
+                    setMessages([]);
+                }
+            } catch (e) {
+                console.error('Failed to load chat history:', e);
+                setMessages([]);
+            } finally {
+                setIsLoading(false);
+            }
+            setInput('');
+            setShowHistory(false);
+        };
+
+        loadChatHistory();
+    }, [sessionId]);
 
     // Auto-resize textarea
     useEffect(() => {
@@ -36,13 +70,24 @@ export const ChatInterface = ({
         endRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
 
-    const sendMessage = async () => {
-        if (!input.trim() || isLoading) return;
+    // Notify parent about empty state
+    useEffect(() => {
+        if (onEmptyChange) {
+            onEmptyChange(messages.length === 0);
+        }
+    }, [messages, onEmptyChange]);
 
-        const userMessage = input.trim();
+    const sendMessage = async (overrideInput = null) => {
+        const textToSend = overrideInput || input;
+        if (!textToSend.trim() || isLoading) return;
+
+        const userMessage = textToSend.trim();
         setInput('');
         setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
         setIsLoading(true);
+
+        // If coming from NewChatView, force history to show generally or just transition
+        // But for this UI, if we have messages, we show the main player + transcript accessible
 
         // Sync state before sending message so agent has latest context
         if (syncToBackend) {
@@ -74,6 +119,17 @@ export const ChatInterface = ({
             setIsLoading(false);
         }
     };
+
+    // If no messages, show New Chat View
+    if (messages.length === 0) {
+        return (
+            <NewChatView
+                onSend={(text) => sendMessage(text)}
+                isDJSpeaking={isDJSpeaking}
+                isPlaying={isPlaying}
+            />
+        );
+    }
 
     return (
         <div className="flex flex-col h-full relative bg-white rounded-3xl overflow-hidden shadow-sm border border-white">
@@ -170,7 +226,7 @@ export const ChatInterface = ({
                     />
 
                     <button
-                        onClick={sendMessage}
+                        onClick={() => sendMessage()}
                         disabled={isLoading}
                         className={`p-3 rounded-full transition-all ${isLoading
                             ? 'bg-blue-400 text-white animate-pulse'

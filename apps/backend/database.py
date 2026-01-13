@@ -3,14 +3,11 @@ from sqlalchemy.orm import DeclarativeBase
 import os
 from typing import AsyncGenerator
 
-# Use connection pooling for serverless environments (Supabase Transaction Mode)
-# Ensure your DATABASE_URL is set to port 6543 (transaction pool) or 5432 (session pool/direct)
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 if not DATABASE_URL:
     raise ValueError("DATABASE_URL environment variable is not set")
 
-# Ensure we use asyncpg driver
 if DATABASE_URL.startswith("postgresql://"):
     DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
 
@@ -18,12 +15,17 @@ if DATABASE_URL.startswith("postgresql://"):
 engine = create_async_engine(
     DATABASE_URL,
     echo=False,
-    pool_size=10,
-    max_overflow=20,
-    future=True
+    pool_size=5,
+    max_overflow=10,
+    pool_timeout=30,
+    pool_recycle=1800,
+    pool_pre_ping=True,
+    future=True,
+    connect_args={
+        "ssl": "require",  # 或 True
+    },
 )
 
-# Async Session Factory
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,
     class_=AsyncSession,
@@ -34,7 +36,6 @@ AsyncSessionLocal = async_sessionmaker(
 class Base(DeclarativeBase):
     pass
 
-# Dependency for FastAPI
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with AsyncSessionLocal() as session:
         try:

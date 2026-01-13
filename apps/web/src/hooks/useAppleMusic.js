@@ -10,7 +10,16 @@ const useAppleMusic = () => {
     const [playbackTime, setPlaybackTime] = useState({ current: 0, total: 0 });
     const [queue, setQueueState] = useState([]);
     const [isInitializing, setIsInitializing] = useState(true);
-    const [sessionId, setSessionId] = useState('default');
+
+    // Generate a fallback UUID for anonymous sessions
+    const generateUUID = () => {
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+            const r = Math.random() * 16 | 0;
+            const v = c === 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
+    };
+    const [sessionId, setSessionId] = useState(() => generateUUID());
 
     const syncIntervalRef = useRef(null);
 
@@ -256,12 +265,14 @@ const useAppleMusic = () => {
         syncToBackend();
     };
 
-    const setQueue = async (items) => {
+    const setQueue = async (items, startPlaying = true) => {
         if (!musicKit) return;
         try {
             await musicKit.setQueue({ items });
             if (items.length > 0) setCurrentTrack(items[0]);
-            await musicKit.play();
+            if (startPlaying) {
+                await musicKit.play();
+            }
             syncToBackend();
         } catch (e) {
             console.error('Failed to set queue:', e);

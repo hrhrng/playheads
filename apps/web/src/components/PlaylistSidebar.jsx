@@ -1,7 +1,7 @@
 import React from 'react';
 
 
-export const PlaylistSidebar = ({ currentTrack, isPlaying, queue: propQueue, onPlayTrack, collapsed, toggleCollapse }) => {
+export const PlaylistSidebar = ({ currentTrack, isPlaying, queue: propQueue, onPlayTrack, collapsed, toggleCollapse, showQueue = true }) => {
 
     const formatArtwork = (url, size = 100) => {
         if (!url) return 'https://placehold.co/100';
@@ -9,17 +9,11 @@ export const PlaylistSidebar = ({ currentTrack, isPlaying, queue: propQueue, onP
     };
 
     const queue = (propQueue && propQueue.length > 0) ? propQueue.map(item => ({
-        id: item.id || Math.random().toString(), // Fallback ID
+        id: item.id || Math.random().toString(),
         title: item.title || item.attributes?.name || 'Unknown Title',
         artist: item.artistName || item.attributes?.artistName || 'Unknown Artist',
         cover: formatArtwork(item.artworkURL || item.artwork?.url || item.attributes?.artwork?.url)
-    })) : [
-        // Fallback Mock Data
-        { id: 1, title: 'Strawberry Fields Forever', artist: 'The Beatles', cover: 'https://placehold.co/40' },
-        { id: 2, title: 'God Only Knows', artist: 'The Beach Boys', cover: 'https://placehold.co/40' },
-        { id: 3, title: 'Space Oddity', artist: 'David Bowie', cover: 'https://placehold.co/40' },
-        { id: 4, title: 'Dreams', artist: 'Fleetwood Mac', cover: 'https://placehold.co/40' },
-    ];
+    })) : [];
 
     return (
         <div
@@ -52,6 +46,7 @@ export const PlaylistSidebar = ({ currentTrack, isPlaying, queue: propQueue, onP
                 {collapsed ? (
                     /* Mini View - Vertical Player Strip */
                     <div className="flex-1 flex flex-col items-center pt-8 gap-6 opacity-100 transition-opacity duration-500 delay-100">
+
                         {/* Mini Vinyl Spinner */}
                         <div className={`w-12 h-12 rounded-full bg-black border-2 border-gray-200 flex items-center justify-center ${!!currentTrack && isPlaying ? 'animate-spin-slow' : ''} shadow-md`}>
                             <div className="w-4 h-4 rounded-full bg-white border border-gray-300" />
@@ -74,28 +69,28 @@ export const PlaylistSidebar = ({ currentTrack, isPlaying, queue: propQueue, onP
                     /* Full Expanded View */
                     <div className="flex-1 flex flex-col min-w-0 opacity-100 transition-opacity duration-300">
 
-
-
                         {/* Queue List */}
-                        <div className="flex-1 overflow-y-auto space-y-2 px-4 pb-4">
-                            <h3 className="text-xs font-medium text-gemini-subtext uppercase tracking-wider mb-2 px-2">Up Next</h3>
-                            {queue.map((track, index) => (
-                                <div
-                                    key={track.id}
-                                    onClick={() => onPlayTrack && onPlayTrack(index)}
-                                    className="flex items-center gap-3 p-2 rounded-xl hover:bg-gemini-bg cursor-pointer group transition-colors"
-                                >
-                                    <div className="w-10 h-10 rounded-lg bg-gray-200 overflow-hidden relative shrink-0">
-                                        <img src={track.cover} alt={track.title} className="w-full h-full object-cover" />
-                                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+                        {showQueue && (
+                            <div className="flex-1 overflow-y-auto space-y-2 px-4 pb-4">
+                                <h3 className="text-xs font-medium text-gemini-subtext uppercase tracking-wider mb-2 px-2">Up Next</h3>
+                                {queue.map((track, index) => (
+                                    <div
+                                        key={track.id}
+                                        onClick={() => onPlayTrack && onPlayTrack(index)}
+                                        className="flex items-center gap-3 p-2 rounded-xl hover:bg-gemini-bg cursor-pointer group transition-colors"
+                                    >
+                                        <div className="w-10 h-10 rounded-lg bg-gray-200 overflow-hidden relative shrink-0">
+                                            <img src={track.cover} alt={track.title} className="w-full h-full object-cover" />
+                                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="text-sm font-medium text-gemini-text truncate">{track.title}</div>
+                                            <div className="text-xs text-gemini-subtext truncate">{track.artist}</div>
+                                        </div>
                                     </div>
-                                    <div className="flex-1 min-w-0">
-                                        <div className="text-sm font-medium text-gemini-text truncate">{track.title}</div>
-                                        <div className="text-xs text-gemini-subtext truncate">{track.artist}</div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 )}
             </div>

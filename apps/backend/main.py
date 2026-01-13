@@ -148,17 +148,28 @@ async def get_state(session_id: Optional[str] = None, user_id: Optional[str] = N
 @app.post("/state/sync")
 async def sync_state(request: SyncRequest, db: AsyncSession = Depends(get_db)):
     """Sync frontend state to backend."""
-    from apps.backend.state import store
+    from apps.backend.state import store, TrackInfo
+    from datetime import datetime
     
     if not request.session_id:
          return {"error": "Session ID required"}
 
-    session = store.sync_from_frontend(
-        session_id=request.session_id,
-        data=request.model_dump(exclude_none=True)
-    )
+    # 1. Fetch existing session
+    session = await store.get_session(db, request.session_id)
+
+    # 2. Update fields from request
+    if request.current_track:
+        session.current_track = TrackInfo(**request.current_track)
+    if request.playlist is not None:
+        session.playlist = [TrackInfo(**t) for t in request.playlist]
+    if request.is_playing is not None:
+        session.is_playing = request.is_playing
+    if request.playback_position is not None:
+        session.playback_position = request.playback_position
     
-    # Persist sync
+    session.last_sync = datetime.now()
+    
+    # 3. Persist
     await store.update_session(db, session)
     
     return {
@@ -206,6 +217,38 @@ async def execute_action(action: str, index: Optional[int] = None, query: Option
         return {"action": "play", "index": 0}
     
     return {"error": f"Unknown action: {action}"}
+
+# =============================================================================
+# Conversations List
+# =============================================================================
+
+class ConversationItem(BaseModel):
+    id: str
+    title: str
+    updated_at: str
+
+class ConversationsResponse(BaseModel):
+    conversations: list[ConversationItem]
+
+@app.get("/conversations", response_model=ConversationsResponse)
+async def list_conversations(db: AsyncSession = Depends(get_db)):
+    """List all conversations."""
+    from sqlalchemy import select
+    from apps.backend.models import Conversation
+    
+    stmt = select(Conversation).order_by(Conversation.updated_at.desc()).limit(20)
+    result = await db.execute(stmt)
+    convs = result.scalars().all()
+    
+    return ConversationsResponse(
+        conversations=[
+            ConversationItem(
+                id=str(c.id), 
+                title=c.title or "Untitled Chat",
+                updated_at=c.updated_at.isoformat() if c.updated_at else ""
+            ) for c in convs
+        ]
+    )
 
 
 # Health check

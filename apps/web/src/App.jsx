@@ -35,6 +35,28 @@ function App() {
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState(null)
 
+  // Apple Music Binding State
+  const [isAppleLinked, setIsAppleLinked] = useState(false)
+  const [checkingLink, setCheckingLink] = useState(false)
+  const [customSessionId, setCustomSessionId] = useState(null)
+  const [isChatEmpty, setIsChatEmpty] = useState(true)
+  const [conversations, setConversations] = useState([])
+
+  // Fetch conversations
+  const fetchConversations = async () => {
+    try {
+      const res = await fetch('http://localhost:8000/conversations');
+      const data = await res.json();
+      setConversations(data.conversations || []);
+    } catch (e) {
+      console.error('Failed to fetch conversations:', e);
+    }
+  };
+
+  useEffect(() => {
+    fetchConversations();
+  }, []);
+
   useEffect(() => {
     // Check active sessions and subscribe to auth changes
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -49,6 +71,31 @@ function App() {
 
     return () => subscription.unsubscribe()
   }, [])
+
+  // Check if linked when session exists
+  useEffect(() => {
+    if (session?.user?.id) {
+      setCheckingLink(true)
+      supabase
+        .from('profiles')
+        .select('apple_music_token')
+        .eq('id', session.user.id)
+        .single()
+        .then(({ data, error }) => {
+          // If token exists, we consider it linked
+          // We might also want to verify it's valid, but for binding existence check:
+          if (data && data.apple_music_token) {
+            setIsAppleLinked(true)
+          } else {
+            setIsAppleLinked(false)
+          }
+          setCheckingLink(false)
+        })
+    } else {
+      setIsAppleLinked(false)
+      setCheckingLink(false)
+    }
+  }, [session])
 
   const handleLogin = async (e) => {
     e.preventDefault()
@@ -71,23 +118,60 @@ function App() {
     setLoading(false)
   }
 
-  // Combine auth states. Valid if Supabase auth OR music services (for now, eventually music service should be tied to user)
-  // For production readiness, we prioritize Supabase User Login
+  const handleLinkApple = async () => {
+    // 1. Authorize via MusicKit
+    await loginApple();
+
+    // 2. Get Token and Save to DB
+    const mk = window.MusicKit?.getInstance();
+
+    // Note: user might close popup without auth, so checks are needed
+    if (mk?.isAuthorized && session?.user?.id) {
+      const token = mk.musicUserToken;
+      if (token) {
+        const { error } = await supabase
+          .from('profiles')
+          .update({ apple_music_token: token })
+          .eq('id', session.user.id);
+
+        if (!error) {
+          setIsAppleLinked(true);
+        } else {
+          console.error('Link Error:', error)
+          alert('Failed to save Apple Music link. Please try again.');
+        }
+      }
+    }
+  }
+
+  const handleNewChat = () => {
+    // Generate a UUID v4 compliant string
+    const newId = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+      const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+    setCustomSessionId(newId);
+    setIsChatEmpty(true);
+    console.log("Starting new chat session:", newId);
+  };
+
+  const handleSelectConversation = (conversationId) => {
+    setCustomSessionId(conversationId);
+    setIsChatEmpty(false);
+    console.log("Switching to conversation:", conversationId);
+  };
+
+  // Auth & Linking Status
+  // 1. Not Logged In -> Show Login
+  // 2. Logged In, Checking Link -> Show Loading
+  // 3. Logged In, Not Linked -> Show Link Screen
+  // 4. Logged In, Linked -> Main App
+
   const isLoggedIn = !!session;
 
-  // Load initial playlist when authorized
-  useEffect(() => {
-    if (isAppleAuthorized) {
-      searchApple('The Beatles').then(tracks => {
-        if (tracks.length > 0) {
-          setAppleQueue(tracks);
-        }
-      });
-    }
-  }, [isAppleAuthorized]);
 
-  // Loading state
-  if (isInitializing) {
+  // Loading state (Global Init or Profile Check)
+  if (isInitializing || (isLoggedIn && checkingLink)) {
     return (
       <div className="min-h-screen w-full bg-air-50 flex items-center justify-center">
         <div className="w-16 h-16 rounded-full overflow-hidden grayscale animate-pulse">
@@ -97,7 +181,7 @@ function App() {
     );
   }
 
-  // Login screen
+  // 1. Login Logic
   if (!isLoggedIn) {
     return (
       <div className="min-h-screen w-full bg-air-50 flex flex-col items-center justify-center p-6 relative">
@@ -138,59 +222,73 @@ function App() {
             </button>
           </form>
 
-          {/* Separator */}
-          <div className="relative w-full">
-            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200"></div></div>
-            <div className="relative flex justify-center text-xs uppercase"><span className="bg-air-50 px-2 text-gray-400">Or connect music</span></div>
-          </div>
-
-          {/* Music Service Login Buttons (Optional flow if we want to allow service-only login, but we prob want User first) */}
-          <div className="w-full space-y-3">
-            <button
-              onClick={loginApple}
-              className="w-full h-12 rounded-lg border border-air-200 bg-white text-air-900 font-medium text-sm hover:border-air-900 transition-colors flex items-center justify-center gap-3"
-            >
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                {/* Apple Icon Path ... (truncated for brevity, ensure path is preserved or simplified) */}
-                <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.05-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.74 1.18 0 2.21-1.21 3.96-1.13.62.03 1.95.16 3.09 1.83-2.83 1.62-2.3 5.4.11 6.5l-.23.63a13.3 13.3 0 0 1-1.92 4.4zM13 5c-1.85-.22-3.15 1.5-3.15 3.3a3.6 3.6 0 0 1 3.5-3.3z" />
-              </svg>
-              Connect Apple Music
-            </button>
-            <button
-              onClick={loginWithSpotify}
-              className="w-full h-12 rounded-lg border border-air-200 bg-white text-air-900 font-medium text-sm hover:border-air-900 transition-colors flex items-center justify-center gap-3"
-            >
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z" />
-              </svg>
-              Connect Spotify
-            </button>
-          </div>
+          {/* Separator / Disclaimer */}
+          <div className="absolute bottom-8 text-air-300 text-[10px] font-mono">v2.1.0</div>
         </div>
-
-        <div className="absolute bottom-8 text-air-300 text-[10px] font-mono">v2.0.0</div>
       </div>
     );
   }
 
+  // 3. Link Apple Music Screen
+  if (isLoggedIn && !isAppleLinked) {
+    return (
+      <div className="min-h-screen w-full bg-air-50 flex flex-col items-center justify-center p-6 relative animate-fade-in">
+        <div className="max-w-md w-full text-center space-y-8">
+          {/* Logo - Smaller */}
+          <div className="w-24 h-24 mx-auto rounded-full overflow-hidden grayscale">
+            <img src="/logo.jpg" alt="Playhead" className="w-full h-full object-cover" />
+          </div>
+
+          <div className="space-y-2">
+            <h2 className="text-xl font-semibold text-air-900">Connect Music Service</h2>
+            <p className="text-air-500 text-sm">Link your Apple Music account to enable Playhead's sonic intelligence.</p>
+          </div>
+
+          <div className="pt-4 px-8">
+            <button
+              onClick={handleLinkApple}
+              className="w-full h-12 rounded-lg border border-air-200 bg-white text-air-900 font-medium text-sm hover:border-air-900 transition-colors flex items-center justify-center gap-3 shadow-sm"
+            >
+              <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.05-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.74 1.18 0 2.21-1.21 3.96-1.13.62.03 1.95.16 3.09 1.83-2.83 1.62-2.3 5.4.11 6.5l-.23.63a13.3 13.3 0 0 1-1.92 4.4zM13 5c-1.85-.22-3.15 1.5-3.15 3.3a3.6 3.6 0 0 1 3.5-3.3z" />
+              </svg>
+              Link Apple Music
+            </button>
+            <p className="mt-6 text-xs text-air-400 leading-relaxed">
+              Binding is permanent for this account.
+              <br />Token expires periodically (~6 months) and may require re-login.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+
+
+
   // Determine correct session ID for backend
-  // If we have a conversation ID from supabase (logic needed), use it.
-  // For now, assume a single active conversation per user or use default ID
-  // We can default to 'user.id' as the session identifier for 1:1 user-agent mapping simplification in this version
-  const activeSessionId = session?.user?.id || appleSessionId;
+  // Priority: Custom (New Chat) -> User ID -> Apple ID
+  const activeSessionId = customSessionId || session?.user?.id || appleSessionId;
 
   // Main app
   return (
     <AppLayout
+      onNewChat={handleNewChat}
+      onSelectConversation={handleSelectConversation}
+      conversations={conversations}
       rightPanel={
-        <PlaylistSidebar
-          currentTrack={appleTrack}
-          isPlaying={isApplePlaying}
-          queue={appleQueue}
-          onPlayTrack={playAppleTrack}
-          collapsed={isPlaylistCollapsed}
-          toggleCollapse={() => setPlaylistCollapsed(!isPlaylistCollapsed)}
-        />
+        !isChatEmpty ? (
+          <PlaylistSidebar
+            currentTrack={appleTrack}
+            isPlaying={isApplePlaying}
+            queue={appleQueue}
+            onPlayTrack={playAppleTrack}
+            collapsed={isPlaylistCollapsed}
+            toggleCollapse={() => setPlaylistCollapsed(!isPlaylistCollapsed)}
+            showQueue={true}
+          />
+        ) : null
       }
     >
       <div className="h-full w-full flex flex-col relative z-10">
@@ -205,6 +303,7 @@ function App() {
           onAgentActions={executeAgentActions}
           syncToBackend={(data) => syncToBackend(data, activeSessionId)}
           userId={session?.user?.id}
+          onEmptyChange={setIsChatEmpty}
         />
       </div>
     </AppLayout>

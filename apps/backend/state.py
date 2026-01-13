@@ -136,27 +136,52 @@ class SessionStore:
             last_sync=db_state.last_synced_at or datetime.now()
         )
 
-    async def update_session(self, db: AsyncSession, state: SessionState):
-        """Update session state in DB."""
-        stmt = select(ConversationState).where(ConversationState.conversation_id == uuid.UUID(state.session_id))
-        result = await db.execute(stmt)
-        db_state = result.scalar_one_or_none()
+    async def update_session(self, db: AsyncSession, state: SessionState, user_id: Optional[str] = None):
+        """Update or create session state in DB using upsert."""
+        from sqlalchemy.dialects.postgresql import insert
         
-        if db_state:
-            # Update fields
-            db_state.messages = [m.model_dump(mode='json') for m in state.chat_history]
-            
-            # Update context
-            context = {
-                "is_playing": state.is_playing,
-                "playback_position": state.playback_position,
-                "current_track": state.current_track.model_dump(mode='json') if state.current_track else None,
-                "playlist": [t.model_dump(mode='json') for t in state.playlist]
+        session_uuid = uuid.UUID(state.session_id)
+        
+        # Prepare data
+        messages_data = [m.model_dump(mode='json') for m in state.chat_history]
+        context = {
+            "is_playing": state.is_playing,
+            "playback_position": state.playback_position,
+            "current_track": state.current_track.model_dump(mode='json') if state.current_track else None,
+            "playlist": [t.model_dump(mode='json') for t in state.playlist]
+        }
+        
+        # First ensure conversation exists
+        conv_stmt = select(Conversation).where(Conversation.id == session_uuid)
+        conv_result = await db.execute(conv_stmt)
+        conv = conv_result.scalar_one_or_none()
+        
+        if not conv:
+            try:
+                conv = Conversation(id=session_uuid, user_id=uuid.UUID(user_id) if user_id else None)
+                db.add(conv)
+                await db.flush()
+            except Exception:
+                # Conversation might have been created by another request
+                await db.rollback()
+        
+        # Upsert conversation state
+        stmt = insert(ConversationState).values(
+            conversation_id=session_uuid,
+            messages=messages_data,
+            context=context,
+            last_synced_at=datetime.now()
+        ).on_conflict_do_update(
+            index_elements=['conversation_id'],
+            set_={
+                'messages': messages_data,
+                'context': context,
+                'last_synced_at': datetime.now()
             }
-            db_state.context = context
-            db_state.last_synced_at = datetime.now()  # timezone aware?
-            
-            await db.commit()
+        )
+        
+        await db.execute(stmt)
+        await db.commit()
 
 # Initialize store (stateless wrapper now)
 store = SessionStore()
