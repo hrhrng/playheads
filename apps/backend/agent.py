@@ -3,13 +3,14 @@ Music Agent with LangChain 1.0 API
 """
 import os
 from contextvars import ContextVar
-from typing import Optional
+from typing import Optional, List, Dict
 from langchain.agents import create_agent
 from langchain.tools import tool
 from langchain_openai import ChatOpenAI
 from langchain.messages import AIMessageChunk
 from langchain.agents.middleware import ContextEditingMiddleware, ClearToolUsesEdit
 from langchain.agents import AgentState
+from langgraph.config import get_stream_writer
 
 from apps.backend.state import store, SessionState, TrackInfo
 from apps.backend.apple_music import _apple_music_get
@@ -21,6 +22,30 @@ from apps.backend.apple_music import _apple_music_get
 
 # Context variable to pass session state to tools in async context
 _session_context: ContextVar[Optional[SessionState]] = ContextVar('_session_context', default=None)
+
+# Context variable to pass DB session to tools for real-time state queries
+_db_context: ContextVar[Optional[object]] = ContextVar('_db_context', default=None)
+
+# Context variable to pass user_id for session queries
+_user_id_context: ContextVar[Optional[str]] = ContextVar('_user_id_context', default=None)
+
+
+async def _get_fresh_session() -> Optional[SessionState]:
+    """
+    Re-fetch session from DB to get the latest state.
+    This ensures tools see real-time state changes from the frontend.
+    """
+    db = _db_context.get()
+    session = _session_context.get()
+    user_id = _user_id_context.get()
+
+    if db and session:
+        fresh = await store.get_session(db, session.session_id, user_id)
+        if fresh:
+            _session_context.set(fresh)
+            return fresh
+    return session
+
 
 
 # =============================================================================
@@ -62,9 +87,10 @@ async def search_music(query: str) -> str:
 
 
 @tool
-def get_now_playing() -> str:
+async def get_now_playing() -> str:
     """Get information about the currently playing track."""
-    session = _session_context.get()
+    # Re-fetch latest state from DB to see real-time changes
+    session = await _get_fresh_session()
 
     if not session or not session.current_track:
         return "No track is currently playing."
@@ -80,9 +106,10 @@ def get_now_playing() -> str:
 
 
 @tool
-def get_playlist() -> str:
+async def get_playlist() -> str:
     """Get the current playlist/queue of tracks."""
-    session = _session_context.get()
+    # Re-fetch latest state from DB to see real-time changes
+    session = await _get_fresh_session()
 
     if not session or not session.playlist:
         return "The playlist is empty."
@@ -101,7 +128,7 @@ def get_playlist() -> str:
 
 
 @tool
-def play_track(index: str) -> str:
+async def play_track(index: str) -> str:
     """Play a specific track from the playlist by its position number (1-indexed).
 
     Args:
@@ -126,16 +153,21 @@ def play_track(index: str) -> str:
 
     track = session.playlist[idx - 1]
 
-    # Directly update session state
-    session.current_track = track
-    session.is_playing = True
-    session.playback_position = 0.0
+    # Emit action immediately via stream writer for real-time execution
+    writer = get_stream_writer()
+    writer({
+        "event": "action",
+        "data": {
+            "type": "play_track",
+            "data": {"index": idx - 1}  # Convert to 0-based for frontend
+        }
+    })
 
-    return f"Playing '{track.name}' by {track.artist}"
+    return f"Requesting to play '{track.name}' by {track.artist}"
 
 
 @tool
-def skip_next() -> str:
+async def skip_next() -> str:
     """Skip to the next track in the playlist."""
     session = _session_context.get()
 
@@ -156,12 +188,17 @@ def skip_next() -> str:
 
     next_track = session.playlist[next_idx]
 
-    # Directly update session state
-    session.current_track = next_track
-    session.is_playing = True
-    session.playback_position = 0.0
+    # Emit action immediately via stream writer for real-time execution
+    writer = get_stream_writer()
+    writer({
+        "event": "action",
+        "data": {
+            "type": "play_track",
+            "data": {"index": next_idx}
+        }
+    })
 
-    return f"Skipping to '{next_track.name}' by {next_track.artist}"
+    return f"Requesting to skip to '{next_track.name}' by {next_track.artist}"
 
 
 @tool
@@ -197,16 +234,28 @@ async def add_to_playlist(track_id: str) -> str:
             artwork_url=attrs.get("artwork", {}).get("url"),
             duration=attrs.get("durationInMillis", 0) / 1000.0
         )
-        session.playlist.append(track)
 
-        return f"Added '{track.name}' by {track.artist} to playlist"
+        # Emit action immediately via stream writer for real-time execution
+        writer = get_stream_writer()
+        writer({
+            "event": "action",
+            "data": {
+                "type": "add_to_queue",
+                "data": {
+                    "query": f"{track.name} {track.artist}",
+                    "track_id": track.id
+                }
+            }
+        })
+
+        return f"Requesting to add '{track.name}' by {track.artist} to playlist"
 
     except Exception as e:
         return f"Error adding track: {str(e)}"
 
 
 @tool
-def remove_from_playlist(index: str) -> str:
+async def remove_from_playlist(index: str) -> str:
     """Remove a track from the playlist by its position number (1-indexed).
 
     Args:
@@ -229,10 +278,20 @@ def remove_from_playlist(index: str) -> str:
     if idx < 1 or idx > len(session.playlist):
         return f"Invalid track number. Please choose between 1 and {len(session.playlist)}."
 
-    # Directly remove from playlist
-    removed_track = session.playlist.pop(idx - 1)
+    # Get track info for response (without removing it from local state)
+    track_to_remove = session.playlist[idx - 1]
 
-    return f"Removed '{removed_track.name}' by {removed_track.artist} from playlist"
+    # Emit action immediately via stream writer for real-time execution
+    writer = get_stream_writer()
+    writer({
+        "event": "action",
+        "data": {
+            "type": "remove_track",
+            "data": {"index": idx - 1}  # Convert to 0-based
+        }
+    })
+
+    return f"Requesting to remove '{track_to_remove.name}' by {track_to_remove.artist} from playlist"
 
 
 # =============================================================================
@@ -326,6 +385,10 @@ async def run_agent_stream(db, message: str, session_id: str, user_id: str = Non
     # Set session context for tools to access
     _session_context.set(session)
 
+    # Set DB context so tools can re-fetch fresh state in real-time
+    _db_context.set(db)
+    _user_id_context.set(user_id)
+
     # Get state context from DB (updated via sync events)
     state_context = session.get_context_summary() if hasattr(session, 'get_context_summary') else "No state available"
     print(f"Using DB state: {state_context[:100]}...")  # Log first 100 chars
@@ -365,14 +428,21 @@ async def run_agent_stream(db, message: str, session_id: str, user_id: str = Non
     print(dumps(messages))
 
     try:
-        # Use stream_mode="messages" for token-level streaming (typewriter effect)
-        async for chunk in agent_graph.astream(
+        # Use stream_mode=["messages", "custom"] for token-level streaming + real-time actions
+        async for mode, chunk in agent_graph.astream(
             {"messages": messages},
-            stream_mode="messages"
+            stream_mode=["messages", "custom"]
         ):
             # DEBUG: Print raw chunk
-            print(f"[RAW CHUNK] {chunk}")
+            print(f"[RAW CHUNK] mode={mode}, chunk={chunk}")
 
+            # Handle custom mode (real-time actions emitted from tools via get_stream_writer)
+            if mode == "custom":
+                # Custom chunks are already in {event, data} format from tools
+                yield chunk
+                continue
+
+            # Handle messages mode (existing logic for text/tool events)
             # LangChain returns chunks as arrays: [message_object, metadata]
             msg_obj = None
 
@@ -667,10 +737,12 @@ async def run_agent_stream(db, message: str, session_id: str, user_id: str = Non
     print("[DEBUG] update_session completed")
 
     # Send completion signal with updated state
+    # Note: Actions are now streamed in real-time via "custom" stream mode, so we no longer include them here
     yield {
         "event": "done",
         "data": {
             "session_id": session.session_id,
+            "actions": [],  # Actions are now streamed in real-time
             "state": {
                 "current_track": session.current_track.model_dump() if session.current_track else None,
                 "playlist": [t.model_dump() for t in session.playlist],

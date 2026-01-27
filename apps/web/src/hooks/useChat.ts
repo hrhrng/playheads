@@ -60,7 +60,8 @@ export function useChat({
     sendMessage,
     addUserMessage,
     createSession,
-    loadHistory
+    loadHistory,
+    initialize
   } = useChatStore();
 
   // Track the last loaded sessionId to know when we need to reload
@@ -68,6 +69,11 @@ export function useChat({
 
   // Initialize chat based on sessionId from URL
   useEffect(() => {
+    // Sync userId to store
+    if (userId) {
+      initialize(sessionId, userId);
+    }
+
     // No sessionId = new chat, clear everything
     if (!sessionId) {
       console.log('[useChat] No sessionId, clearing messages');

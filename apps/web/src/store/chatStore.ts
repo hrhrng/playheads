@@ -12,7 +12,8 @@ import type {
   SSEThinkingEvent,
   SSEToolStartEvent,
   SSEToolEndEvent,
-  SSEDoneEvent
+  SSEDoneEvent,
+  SSEActionEvent
 } from '../types';
 
 const API_BASE = 'http://localhost:8000';
@@ -31,7 +32,7 @@ interface ChatStore {
   setInput: (input: string) => void;
   setShowHistory: (show: boolean) => void;
   toggleHistory: () => void;
-  initialize: (sessionId: string, userId: string) => void;
+  initialize: (sessionId: string | null, userId: string) => void;
   setMessages: (messages: Message[]) => void;
   addMessage: (message: Message) => void;
   updateLastMessage: (content: string) => void;
@@ -76,11 +77,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   /**
    * Initialize chat with session and user info
    */
-  initialize: (sessionId: string, userId: string) => {
+  initialize: (sessionId: string | null, userId: string) => {
     const current = get();
     // Only clear messages if switching to a DIFFERENT session
     if (current.sessionId !== sessionId) {
-      set({ sessionId, userId, messages: [] });
+      set({ sessionId, userId, messages: [], isLoading: false, isLoadingHistory: false });
     } else {
       // Just update userId if needed, but preserve messages
       set({ userId });
@@ -364,6 +365,21 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                     toolCall.result = toolEndData.result;
                     toolCall.status = toolEndData.status;
                     updateMessage();
+                  }
+                  break;
+                }
+
+                case 'action': {
+                  // Real-time action from tool execution - execute immediately
+                  const actionData = data as SSEActionEvent;
+                  if (onAgentActions) {
+                    // Fire and forget to avoid blocking stream processing
+                    Promise.resolve(onAgentActions([{
+                      type: actionData.type,
+                      data: actionData.data
+                    }])).catch(err => {
+                      console.error('Error executing real-time action:', err);
+                    });
                   }
                   break;
                 }

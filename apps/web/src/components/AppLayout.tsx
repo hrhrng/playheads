@@ -11,15 +11,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { DeleteConfirmDialog } from './DeleteConfirmDialog';
 import { useNavSidebarState } from '../hooks/useNavSidebarState';
-
-interface Conversation {
-  id: string;
-  title?: string;
-  is_pinned?: boolean;
-  message_count?: number;
-  last_message_preview?: string;
-  [key: string]: unknown;
-}
+import type { Conversation } from '../types';
 
 interface AppLayoutProps {
   /** Main content children */

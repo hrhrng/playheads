@@ -94,6 +94,22 @@ export interface RouterLocationState {
 }
 
 /**
+ * Conversation metadata
+ */
+export interface Conversation {
+  id: string;
+  title?: string;
+  message_count: number;
+  last_message_preview?: string;
+  last_message_at?: string;
+  is_pinned: boolean;
+  updated_at?: string;
+  created_at?: string;
+  is_archived?: boolean;
+  [key: string]: unknown;
+}
+
+/**
  * Window interface extensions
  */
 declare global {

@@ -106,10 +106,18 @@ export interface SSEDoneEvent {
 }
 
 /**
+ * Real-time action event - streamed immediately when tool executes
+ */
+export interface SSEActionEvent {
+  type: AgentAction['type'];
+  data?: Record<string, unknown>;
+}
+
+/**
  * Agent action types
  */
 export interface AgentAction {
-  type: 'play_track' | 'add_to_queue' | 'create_playlist' | 'search_tracks';
+  type: 'play_track' | 'add_to_queue' | 'create_playlist' | 'search_tracks' | 'remove_track';
   data?: Record<string, unknown>;
 }
 

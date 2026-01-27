@@ -115,5 +115,6 @@ export type {
   UserMetadata,
   Identity,
   SupabaseAuthState,
-  RouterLocationState
+  RouterLocationState,
+  Conversation
 } from './global';

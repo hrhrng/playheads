@@ -134,6 +134,8 @@ export interface SetQueueOptions {
 export interface MusicKitQueue {
   items: MediaItem[];
   position?: number;
+  append(object: any): Promise<void>;
+  remove(index: number): Promise<void>;
 }
 
 /**

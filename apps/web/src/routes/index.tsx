@@ -95,8 +95,24 @@ export function HomeRoute({
         userId={session?.user.id || null}
         onAgentActions={async (actions: AgentAction[]) => {
           const actionStrings = actions
-            .filter((a) => a.type === 'play_track')
-            .map((a) => `ACTION:PLAY_INDEX:${a.data?.index}`);
+            .map((a) => {
+              if (a.type === 'play_track') {
+                return `ACTION:PLAY_INDEX:${a.data?.index}`;
+              }
+              if (a.type === 'add_to_queue') {
+                // If we have a track ID, use ADD_ID for precision
+                if (a.data?.track_id) {
+                   return `ACTION:ADD_ID:${a.data.track_id}`;
+                }
+                // Fallback to SEARCH_AND_ADD if no ID (legacy support)
+                return `ACTION:SEARCH_AND_ADD:${a.data?.query}`;
+              }
+              if (a.type === 'remove_track') {
+                return `ACTION:REMOVE_INDEX:${a.data?.index}`;
+              }
+              return null;
+            })
+            .filter((a): a is string => a !== null);
           await executeAgentActions(actionStrings);
         }}
         onMessageSent={fetchConversations}
@@ -183,8 +199,24 @@ export function ChatRoute({
         userId={session?.user.id || null}
         onAgentActions={async (actions: AgentAction[]) => {
           const actionStrings = actions
-            .filter((a) => a.type === 'play_track')
-            .map((a) => `ACTION:PLAY_INDEX:${a.data?.index}`);
+            .map((a) => {
+              if (a.type === 'play_track') {
+                return `ACTION:PLAY_INDEX:${a.data?.index}`;
+              }
+              if (a.type === 'add_to_queue') {
+                // If we have a track ID, use ADD_ID for precision
+                if (a.data?.track_id) {
+                   return `ACTION:ADD_ID:${a.data.track_id}`;
+                }
+                // Fallback to SEARCH_AND_ADD if no ID (legacy support)
+                return `ACTION:SEARCH_AND_ADD:${a.data?.query}`;
+              }
+              if (a.type === 'remove_track') {
+                return `ACTION:REMOVE_INDEX:${a.data?.index}`;
+              }
+              return null;
+            })
+            .filter((a): a is string => a !== null);
           await executeAgentActions(actionStrings);
         }}
         onMessageSent={fetchConversations}

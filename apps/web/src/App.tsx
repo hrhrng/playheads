@@ -51,7 +51,7 @@ function LoginScreen({
   setEmail: (email: string) => void;
   loading: boolean;
   message: AuthMessage | null;
-  onLogin: (e: React.FormEvent) => Promise<void>;
+  onLogin: (e: React.FormEvent<HTMLFormElement>) => Promise<void>;
 }) {
   return (
     <div className="min-h-screen w-full bg-air-50 flex flex-col items-center justify-center p-6 relative">
