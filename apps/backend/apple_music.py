@@ -61,6 +61,18 @@ def _generate_developer_token() -> tuple[str, int]:
 
 
 def get_developer_token() -> tuple[str, int]:
+    # Check for static token in env first
+    static_token = os.getenv("APPLE_MUSIC_DEVELOPER_TOKEN")
+    if static_token:
+        try:
+            # Decode without verification just to get expiration
+            payload = jwt.decode(static_token, options={"verify_signature": False})
+            exp = payload.get("exp", int(time.time()) + 3600)
+            return static_token, int(exp)
+        except Exception:
+            # If decoding fails, just return token with 1 hour expiry assumption
+            return static_token, int(time.time()) + 3600
+
     cached_token = _token_cache.get("token")
     cached_exp = _token_cache.get("exp")
     now = int(time.time())

@@ -1,4 +1,5 @@
-import { useLocation, useNavigate } from 'react-router-dom';
+
+import { useLocation, useNavigate } from '@tanstack/react-router';
 import { RecordPlayer } from './RecordPlayer';
 import { NewChatView } from './NewChatView';
 import { SkeletonLoader } from './SkeletonLoader';
@@ -6,6 +7,23 @@ import { ChatInput } from './chat/ChatInput';
 import { TranscriptOverlay } from './chat/TranscriptOverlay';
 import { useChat } from '../hooks/useChat';
 import { useInitialMessage } from '../hooks/useChatHelpers';
+import { SyncTrack } from '../hooks/useAppleMusic';
+import { Message } from '../store/chatStore';
+
+interface ChatInterfaceProps {
+  isDJSpeaking: boolean;
+  isPlaying: boolean;
+  currentTrack: SyncTrack | null;
+  togglePlay: () => void;
+  playbackTime: { current: number; total: number };
+  onSeek: (time: number | number[]) => void;
+  sessionId: string | null;
+  userId: string | null;
+  onAgentActions?: (actions: any[]) => Promise<void>;
+  onMessageSent?: () => void;
+  onSessionCreated?: (newSessionId: string, preservedMessages: Message[], initialMessage: string) => void;
+  isNewChat?: boolean;
+}
 
 /**
  * ChatInterface - main chat UI component
@@ -29,7 +47,7 @@ export const ChatInterface = ({
   onMessageSent,
   onSessionCreated,
   isNewChat = false
-}) => {
+}: ChatInterfaceProps) => {
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -46,7 +64,16 @@ export const ChatInterface = ({
   } = useChat(sessionId, userId, isNewChat, onAgentActions, onMessageSent, onSessionCreated);
 
   // Auto-send initial message from navigation state
-  useInitialMessage(location.state, sendMessage, isLoading, messages, navigate, location.pathname);
+  // Cast state to unknown then to expected type because TanStack Router state is unknown
+  const state = location.state as { initialMessage?: string; isNewlyCreated?: boolean } | undefined;
+
+  useInitialMessage(
+    state?.initialMessage,
+    state?.isNewlyCreated,
+    sendMessage,
+    isLoading,
+    messages
+  );
 
   // Show loading skeleton while fetching history
   if (isLoadingHistory) {
@@ -57,7 +84,7 @@ export const ChatInterface = ({
   if (messages.length === 0 && isNewChat) {
     return (
       <NewChatView
-        onSend={sendMessage}
+        onSend={(msg) => sendMessage(msg)}
         isDJSpeaking={isDJSpeaking}
         isPlaying={isPlaying}
       />
@@ -127,7 +154,7 @@ export const ChatInterface = ({
           isDJSpeaking={isDJSpeaking}
           isPlaying={isPlaying}
           onInputChange={setInput}
-          onSend={() => sendMessage()}
+          onSend={() => sendMessage(input)}
         />
 
         <div className="text-center mt-3 text-[10px] text-gray-300 font-mono tracking-widest uppercase">

@@ -1,11 +1,74 @@
+
 import { create } from 'zustand';
 
 const API_BASE = 'http://localhost:8000';
 
+export type MessageRole = 'user' | 'agent' | 'system';
+
+export interface TextPart {
+  type: 'text';
+  content: string;
+}
+
+export interface ThinkingPart {
+  type: 'thinking';
+  content: string;
+}
+
+export interface ToolCallPart {
+  type: 'tool_call';
+  id: string;
+  tool_name: string;
+  args: Record<string, any>;
+  result?: any;
+  status: 'pending' | 'success' | 'error';
+}
+
+export type MessagePart = TextPart | ThinkingPart | ToolCallPart;
+
+export interface Message {
+  role: MessageRole;
+  content?: string; // Legacy support or simple text
+  parts?: MessagePart[];
+}
+
+interface ChatState {
+  messages: Message[];
+  input: string;
+  isLoading: boolean;
+  isLoadingHistory: boolean;
+  showHistory: boolean;
+  sessionId: string | null;
+  userId: string | null;
+}
+
+interface ChatActions {
+  setInput: (input: string) => void;
+  setShowHistory: (show: boolean) => void;
+  toggleHistory: () => void;
+  initialize: (sessionId: string, userId: string | null) => void;
+  setMessages: (messages: Message[]) => void;
+  addMessage: (message: Message) => void;
+  updateLastMessage: (content: string) => void;
+  loadHistory: (sessionId: string, userId: string | null) => Promise<'success' | 'not_found' | 'error'>;
+  sendMessage: (
+    messageText: string,
+    onAgentActions?: (actions: any[]) => Promise<void>,
+    onMessageSent?: () => void,
+    skipAddingUserMessage?: boolean
+  ) => Promise<void>;
+  addUserMessage: (messageText: string) => void;
+  handleStreamingResponse: (response: Response, onAgentActions?: (actions: any[]) => Promise<void>) => Promise<void>;
+  createSession: (userId: string) => Promise<string>;
+  reset: () => void;
+}
+
+type ChatStore = ChatState & ChatActions;
+
 /**
  * Chat store - manages chat state, messages, and backend communication
  */
-export const useChatStore = create((set, get) => ({
+export const useChatStore = create<ChatStore>((set, get) => ({
   // State
   messages: [],
   input: '',
@@ -81,7 +144,7 @@ export const useChatStore = create((set, get) => ({
 
       if (res.ok) {
         const data = await res.json();
-        const messages = (data.chat_history || []).map(m => {
+        const messages: Message[] = (data.chat_history || []).map((m: any) => {
           // Support both new format (parts) and old format (content)
           if (m.parts && Array.isArray(m.parts)) {
             return {
@@ -116,11 +179,6 @@ export const useChatStore = create((set, get) => ({
   /**
    * Send a message with streaming response
    * NOTE: User message should be added BEFORE calling this (use addUserMessage)
-   *
-   * @param {string} messageText - The message text to send
-   * @param {Function} onAgentActions - Callback for agent actions
-   * @param {Function} onMessageSent - Callback when message is sent
-   * @param {boolean} skipAddingUserMessage - Skip adding user message (already in state)
    */
   sendMessage: async (messageText, onAgentActions, onMessageSent, skipAddingUserMessage = false) => {
     const { userId, sessionId, isLoading } = get();
@@ -157,7 +215,7 @@ export const useChatStore = create((set, get) => ({
       if (onMessageSent) {
         onMessageSent();
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Chat error:', error);
       set((state) => ({
         messages: [...state.messages, {
@@ -184,15 +242,16 @@ export const useChatStore = create((set, get) => ({
    * Handle streaming SSE response from backend (Enhanced with parts support)
    */
   handleStreamingResponse: async (response, onAgentActions) => {
+    if (!response.body) return;
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
 
     // Track current message parts
-    let currentParts = [];
-    const toolCallsMap = new Map();  // id -> tool_call object
-    let actions = [];
+    let currentParts: MessagePart[] = [];
+    const toolCallsMap = new Map<string, ToolCallPart>();  // id -> tool_call object
+    let actions: any[] = [];
     let agentMessageAdded = false;
-    let currentEvent = null;
+    let currentEvent: string | null = null;
     let currentData = '';
 
     // Helper function to update the current message in store
@@ -272,7 +331,7 @@ export const useChatStore = create((set, get) => ({
                   // DEDUPLICATION: Update existing tool call if it exists (LangGraph sends multiple chunks)
                   const existingToolCall = currentParts.find(
                     p => p.type === 'tool_call' && p.id === data.id
-                  );
+                  ) as ToolCallPart | undefined;
 
                   if (existingToolCall) {
                     console.log(`[DEBUG] Updating existing tool_start for ${data.id}`);
@@ -286,7 +345,7 @@ export const useChatStore = create((set, get) => ({
                   }
 
                   // Add new tool call
-                  const toolCall = {
+                  const toolCall: ToolCallPart = {
                     type: 'tool_call',
                     id: data.id,
                     tool_name: data.tool_name,

@@ -11,8 +11,8 @@ from datetime import datetime
 import os
 from sqlalchemy.ext.asyncio import AsyncSession
 
-# Load environment variables FIRST
-load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
+# Load environment variables FIRST (override=True to override system env vars)
+load_dotenv(os.path.join(os.path.dirname(__file__), '.env'), override=True)
 
 # Then import database which depends on env vars
 from apps.backend.database import get_db
@@ -91,14 +91,22 @@ async def chat_stream_generator(message: str, session_id: str, user_id: str):
     db = AsyncSessionLocal()
 
     try:
-        async for chunk in run_agent_stream(db, message, session_id, user_id):
-            # Send each chunk as Server-Sent Event
-            yield f"data: {json.dumps(chunk)}\n\n"
+        async for event_obj in run_agent_stream(db, message, session_id, user_id):
+            # Extract event type and data
+            event_type = event_obj.get("event", "text")
+            event_data = event_obj.get("data", {})
+
+            # Format as SSE: event: <type>\ndata: <json>\n\n
+            yield f"event: {event_type}\ndata: {json.dumps(event_data)}\n\n"
     except Exception as e:
         import traceback
         traceback.print_exc()
-        error_chunk = {"content": "Sorry, I had a technical difficulty. Try again? 🎧", "done": True, "error": str(e)}
-        yield f"data: {json.dumps(error_chunk)}\n\n"
+        # Send error as text event
+        error_data = {"content": "Sorry, I had a technical difficulty. Try again? 🎧"}
+        yield f"event: text\ndata: {json.dumps(error_data)}\n\n"
+        # Send done event with error
+        done_data = {"actions": [], "error": str(e)}
+        yield f"event: done\ndata: {json.dumps(done_data)}\n\n"
     finally:
         # Ensure database connection is properly closed
         await db.close()
@@ -142,9 +150,9 @@ async def get_state(session_id: Optional[str] = None, user_id: Optional[str] = N
     # Get session (returns None if not exists)
     session = await store.get_session(db, session_id, user_id) if user_id else None
 
-    # If session not found, return empty state
+    # If session not found, raise 404
     if not session:
-        return StateResponse(session_id=session_id)
+        raise HTTPException(status_code=404, detail="Session not found")
 
     return StateResponse(
         session_id=session.session_id,
@@ -153,7 +161,7 @@ async def get_state(session_id: Optional[str] = None, user_id: Optional[str] = N
         is_playing=session.is_playing,
         playback_position=session.playback_position,
         chat_history=[
-            {"role": m.role, "content": m.content, "timestamp": m.timestamp.isoformat()}
+            m.to_frontend_format() | {"timestamp": m.timestamp.isoformat()}
             for m in session.chat_history[-20:]  # Last 20 messages
         ]
     )

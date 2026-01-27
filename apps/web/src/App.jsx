@@ -8,6 +8,8 @@ import { PlaylistSidebar } from './components/PlaylistSidebar'
 import { supabase } from './utils/supabase'
 
 function App() {
+  const location = useLocation();
+  const navigate = useNavigate();
   // Supabase Auth State
   const [session, setSession] = useState(null)
   const [email, setEmail] = useState('')
@@ -25,18 +27,9 @@ function App() {
   const [showAppleLinkOverlay, setShowAppleLinkOverlay] = useState(false)
 
   // Track active conversation ID from URL
-  const location = useLocation()
-  const [activeSessionId, setActiveSessionId] = useState(null)
-
-  // Update active session ID when route changes
-  useEffect(() => {
-    const pathParts = location.pathname.split('/')
-    if (pathParts[1] === 'chat' && pathParts[2]) {
-      setActiveSessionId(pathParts[2])
-    } else {
-      setActiveSessionId(null)
-    }
-  }, [location.pathname])
+  // Derive directly from location to avoid useEffect race conditions
+  const pathParts = location.pathname.split('/')
+  const activeSessionId = (pathParts[1] === 'chat' && pathParts[2]) ? pathParts[2] : null
 
   const {
     isAuthorized: isAppleAuthorized,
@@ -111,7 +104,7 @@ function App() {
       setIsAppleLinked(false)
       setCheckingLink(false)
     }
-  }, [session])
+  }, [session?.user?.id])
 
   const handleLogin = async (e) => {
     e.preventDefault()
@@ -159,10 +152,18 @@ function App() {
   const handleDeleteConversation = async (conversationId) => {
     if (!session?.user?.id) return;
 
+    // Check if we're deleting the current active conversation
+    const isActiveConversation = location.pathname === `/chat/${conversationId}`;
+
     const backup = [...conversations];
 
     // Optimistic update
     setConversations(prev => prev.filter(c => c.id !== conversationId));
+
+    // If deleting current conversation, navigate home immediately
+    if (isActiveConversation) {
+      navigate('/');
+    }
 
     try {
       const res = await fetch(`http://localhost:8000/conversations/${conversationId}?user_id=${session.user.id}`, {

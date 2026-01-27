@@ -42,20 +42,35 @@ export const useAutoScroll = (messages) => {
  * @param {object} locationState - React Router location state
  * @param {Function} sendMessage - Send message function
  * @param {boolean} isLoading - Loading state
- * @param {number} messageCount - Current message count
+ * @param {Array} messages - Current messages array
+ * @param {Function} navigate - Navigate function
+ * @param {string} pathname - Current pathname
  */
-export const useInitialMessage = (locationState, sendMessage, isLoading, messageCount) => {
+export const useInitialMessage = (locationState, sendMessage, isLoading, messages, navigate, pathname) => {
   const hasSentRef = useRef(false);
 
   useEffect(() => {
     const initialMessage = locationState?.initialMessage;
     const isNewlyCreated = locationState?.isNewlyCreated;
 
+    if (!initialMessage) return;
+
+    // Safety check: If we have more than 1 message, we assume the conversation
+    // has progressed beyond the initial message (e.g. response received),
+    // so we shouldn't send again even if state persists.
+    if (isNewlyCreated && Array.isArray(messages) && messages.length > 1) {
+      // Clear navigation state just in case
+      if (navigate && locationState?.initialMessage) {
+         navigate(pathname, { replace: true, state: {} });
+      }
+      return;
+    }
+
     // For newly created sessions, wait until we have messages (from preservedMessages)
     // Then send without adding user message again (it's already in state)
-    if (initialMessage && !isLoading && !hasSentRef.current) {
+    if (!isLoading && !hasSentRef.current) {
       // For newly created sessions, only send when messages are loaded
-      if (isNewlyCreated && messageCount === 0) {
+      if (isNewlyCreated && (!messages || messages.length === 0)) {
         return; // Wait for preservedMessages to load
       }
 
@@ -63,12 +78,17 @@ export const useInitialMessage = (locationState, sendMessage, isLoading, message
       console.log('[useInitialMessage] Auto-sending initial message:', initialMessage);
 
       // Clear the state to prevent sending again
-      if (window.history.replaceState) {
+      console.log('[useInitialMessage] Clearing navigation state...');
+      if (navigate) {
+        console.log('[useInitialMessage] Using navigate to clear state');
+        navigate(pathname, { replace: true, state: {} });
+      } else if (window.history.replaceState) {
+        console.log('[useInitialMessage] Using window.history to clear state');
         window.history.replaceState({}, document.title);
       }
 
       // Skip adding user message if it's a newly created session (already in preservedMessages)
       sendMessage(initialMessage, isNewlyCreated);
     }
-  }, [locationState?.initialMessage, locationState?.isNewlyCreated, sendMessage, isLoading, messageCount]);
+  }, [locationState?.initialMessage, locationState?.isNewlyCreated, sendMessage, isLoading, messages, navigate, pathname]);
 };

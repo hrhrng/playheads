@@ -18,10 +18,19 @@ class TrackInfo(BaseModel):
 
 
 class Message(BaseModel):
-    """A chat message."""
+    """A chat message with support for multi-part content (text, thinking, tool_calls)."""
     role: str  # 'user' or 'agent'
-    content: str
+    content: Optional[str] = None  # For backward compatibility (simple text)
+    parts: Optional[list[dict]] = None  # New format: [{type, content/tool_name/args/etc}]
     timestamp: datetime = Field(default_factory=datetime.now)
+
+    def to_frontend_format(self) -> dict:
+        """Convert to frontend-compatible format."""
+        if self.parts:
+            return {"role": self.role, "parts": self.parts}
+        else:
+            # Backward compatibility
+            return {"role": self.role, "content": self.content}
 
 
 class SessionState(BaseModel):
@@ -33,11 +42,16 @@ class SessionState(BaseModel):
     is_playing: bool = False
     playback_position: float = 0.0  # seconds
     last_sync: datetime = Field(default_factory=datetime.now)
-    pending_actions: list[dict] = Field(default_factory=list)  # Actions to be executed by frontend
     
-    def add_message(self, role: str, content: str):
-        """Add a message to chat history."""
-        self.chat_history.append(Message(role=role, content=content))
+    def add_message(self, role: str, content: str = None, parts: list[dict] = None):
+        """Add a message to chat history.
+
+        Args:
+            role: 'user' or 'agent'
+            content: Simple text content (for backward compatibility)
+            parts: Multi-part message structure (new format)
+        """
+        self.chat_history.append(Message(role=role, content=content, parts=parts))
     
     def get_context_summary(self) -> str:
         """Generate a summary for LLM context."""
@@ -226,8 +240,21 @@ class SessionStore:
 
         session_uuid = uuid.UUID(state.session_id)
 
+        print(f"[DEBUG update_session] Session ID: {state.session_id}")
+        print(f"[DEBUG update_session] Chat history length: {len(state.chat_history)}")
+
         # Prepare conversation state data
         messages_data = [m.model_dump(mode='json') for m in state.chat_history]
+        print(f"[DEBUG update_session] Serialized {len(messages_data)} messages")
+
+        # Debug: Show last message structure
+        if messages_data:
+            last_msg = messages_data[-1]
+            print(f"[DEBUG update_session] Last message: role={last_msg.get('role')}, has_parts={bool(last_msg.get('parts'))}, has_content={bool(last_msg.get('content'))}")
+            if last_msg.get('parts'):
+                import json
+                print(f"[DEBUG update_session] Last message parts structure: {json.dumps(last_msg.get('parts'), indent=2)[:500]}...")
+
         context = {
             "is_playing": state.is_playing,
             "playback_position": state.playback_position,
@@ -243,41 +270,65 @@ class SessionStore:
         if state.chat_history:
             # Get last user or agent message for preview
             last_msg = state.chat_history[-1]
-            last_message_preview = last_msg.content[:100]  # First 100 chars
+
+            # Extract preview text (handle both old and new format)
+            if last_msg.content:
+                last_message_preview = last_msg.content[:100]
+            elif last_msg.parts:
+                # Extract text from parts
+                text_parts = [p.get("content", "") for p in last_msg.parts if p.get("type") == "text"]
+                combined_text = "".join(text_parts)
+                last_message_preview = combined_text[:100] if combined_text else "..."
+            else:
+                last_message_preview = "..."
+
             last_message_at = last_msg.timestamp
 
         # Upsert conversation state
-        stmt = insert(ConversationState).values(
-            conversation_id=session_uuid,
-            messages=messages_data,
-            context=context,
-            last_synced_at=datetime.now()
-        ).on_conflict_do_update(
-            index_elements=['conversation_id'],
-            set_={
-                'messages': messages_data,
-                'context': context,
-                'last_synced_at': datetime.now()
+        print(f"[DEBUG update_session] Upserting conversation state...")
+        try:
+            stmt = insert(ConversationState).values(
+                conversation_id=session_uuid,
+                messages=messages_data,
+                context=context,
+                last_synced_at=datetime.now()
+            ).on_conflict_do_update(
+                index_elements=['conversation_id'],
+                set_={
+                    'messages': messages_data,
+                    'context': context,
+                    'last_synced_at': datetime.now()
+                }
+            )
+            await db.execute(stmt)
+            print(f"[DEBUG update_session] ConversationState upsert executed")
+
+            # Update Conversation metadata
+            update_values = {
+                'message_count': message_count,
+                'last_message_preview': last_message_preview,
+                'last_message_at': last_message_at,
+                'updated_at': datetime.now()
             }
-        )
-        await db.execute(stmt)
 
-        # Update Conversation metadata
-        update_values = {
-            'message_count': message_count,
-            'last_message_preview': last_message_preview,
-            'last_message_at': last_message_at,
-            'updated_at': datetime.now()
-        }
+            print(f"[DEBUG update_session] Updating Conversation metadata: message_count={message_count}, preview='{last_message_preview[:50] if last_message_preview else None}'")
 
-        # Apply updates to Conversation (without title first)
-        conv_update_stmt = (
-            update(Conversation)
-            .where(Conversation.id == session_uuid)
-            .values(**update_values)
-        )
-        await db.execute(conv_update_stmt)
-        await db.commit()
+            # Apply updates to Conversation (without title first)
+            conv_update_stmt = (
+                update(Conversation)
+                .where(Conversation.id == session_uuid)
+                .values(**update_values)
+            )
+            await db.execute(conv_update_stmt)
+            print(f"[DEBUG update_session] Conversation update executed")
+
+            await db.commit()
+            print(f"[DEBUG update_session] Database commit successful")
+        except Exception as e:
+            print(f"[ERROR update_session] Database operation failed: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
 
         # Generate title asynchronously if needed (don't block)
         should_generate_title = (message_count == 2 or message_count % 10 == 0)  # 2 because we have user + agent

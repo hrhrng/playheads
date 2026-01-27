@@ -1,16 +1,80 @@
+
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 const API_BASE = 'http://localhost:8000';
 
-const useAppleMusic = (userId, activeSessionId) => {
-    const [musicKit, setMusicKit] = useState(null);
+// Minimal Type Definitions for MusicKit
+declare global {
+  interface Window {
+    MusicKit: any;
+  }
+}
+
+interface PlaybackTime {
+  current: number;
+  total: number;
+}
+
+interface TrackAttributes {
+  name?: string;
+  title?: string;
+  artistName?: string;
+  albumName?: string;
+  artwork?: {
+    url: string;
+  };
+  durationInMillis?: number;
+  [key: string]: any;
+}
+
+interface MusicKitTrack {
+  id: string;
+  attributes: TrackAttributes;
+  [key: string]: any;
+}
+
+export interface SyncTrack {
+  id: string;
+  name: string;
+  artist: string;
+  album: string;
+  artwork_url: string;
+  duration: number;
+}
+
+interface UseAppleMusicReturn {
+  musicKit: any;
+  isAuthorized: boolean;
+  currentTrack: MusicKitTrack | null;
+  isPlaying: boolean;
+  playbackTime: PlaybackTime;
+  queue: MusicKitTrack[];
+  sessionId: string;
+  login: () => Promise<void>;
+  logout: () => Promise<void>;
+  play: () => Promise<void>;
+  pause: () => Promise<void>;
+  togglePlay: () => Promise<void>;
+  playTrack: (index: number) => Promise<void>;
+  setQueue: (items: any[], startPlaying?: boolean) => Promise<void>;
+  search: (term: string, types?: string[]) => Promise<MusicKitTrack[]>;
+  seekTo: (time: number) => void;
+  skipNext: () => Promise<void>;
+  skipPrev: () => Promise<void>;
+  isInitializing: boolean;
+  syncToBackend: (data?: any, targetSessionId?: string | null) => Promise<void>;
+  executeAgentActions: (actions: string[]) => Promise<void>;
+}
+
+const useAppleMusic = (userId: string | null, activeSessionId: string | null): UseAppleMusicReturn => {
+    const [musicKit, setMusicKit] = useState<any>(null);
     const [isAuthorized, setIsAuthorized] = useState(false);
-    const [currentTrack, setCurrentTrack] = useState(null);
+    const [currentTrack, setCurrentTrack] = useState<MusicKitTrack | null>(null);
     const [isPlaying, setIsPlaying] = useState(false);
-    const [playbackTime, setPlaybackTime] = useState({ current: 0, total: 0 });
-    const [queue, setQueueState] = useState([]);
+    const [playbackTime, setPlaybackTime] = useState<PlaybackTime>({ current: 0, total: 0 });
+    const [queue, setQueueState] = useState<MusicKitTrack[]>([]);
     const [isInitializing, setIsInitializing] = useState(true);
-    const developerTokenRef = useRef(null);
+    const developerTokenRef = useRef<string | null>(null);
 
     // Generate a fallback UUID for anonymous sessions
     const generateUUID = () => {
@@ -31,7 +95,7 @@ const useAppleMusic = (userId, activeSessionId) => {
     // ==========================================================================
     // Helper: Format track for backend sync
     // ==========================================================================
-    const formatTrackForSync = useCallback((track) => {
+    const formatTrackForSync = useCallback((track: MusicKitTrack | null): SyncTrack | null => {
         if (!track) return null;
         const attr = track.attributes || track;
         return {
@@ -47,7 +111,7 @@ const useAppleMusic = (userId, activeSessionId) => {
     // ==========================================================================
     // Sync state to backend
     // ==========================================================================
-    const syncToBackend = useCallback(async (data = {}, targetSessionId = null) => {
+    const syncToBackend = useCallback(async (data = {}, targetSessionId: string | null = null) => {
         if (!isAuthorized) return;
 
         // Use argument ID if provided, otherwise state ID
@@ -77,7 +141,23 @@ const useAppleMusic = (userId, activeSessionId) => {
     // ==========================================================================
     // Execute agent commands
     // ==========================================================================
-    const executeAgentActions = useCallback(async (actions) => {
+    const search = async (term: string, types: string[] = ['songs']): Promise<MusicKitTrack[]> => {
+        if (!musicKit) return [];
+        const storefront = musicKit.storefrontId || 'us';
+        try {
+            const response = await musicKit.api.music(`v1/catalog/${storefront}/search`, {
+                term,
+                types: types.join(','),
+                limit: 10
+            });
+            return response.data?.results?.songs?.data || [];
+        } catch (e) {
+            console.error('Search error:', e);
+            return [];
+        }
+    };
+
+    const executeAgentActions = useCallback(async (actions: string[]) => {
         if (!musicKit || !actions || actions.length === 0) return;
 
         for (const action of actions) {
@@ -163,7 +243,7 @@ const useAppleMusic = (userId, activeSessionId) => {
                     setIsAuthorized(mk.isAuthorized);
                 });
 
-                mk.addEventListener('mediaItemDidChange', (event) => {
+                mk.addEventListener('mediaItemDidChange', (event: any) => {
                     if (event.item) {
                         setCurrentTrack(event.item);
                         setPlaybackTime({ current: 0, total: 0 });
@@ -178,7 +258,7 @@ const useAppleMusic = (userId, activeSessionId) => {
                     }
                 });
 
-                mk.addEventListener('playbackStateDidChange', (event) => {
+                mk.addEventListener('playbackStateDidChange', (event: any) => {
                     setIsPlaying(event.state === window.MusicKit.PlaybackStates.playing);
                     if (mk.nowPlayingItem) {
                         setCurrentTrack(mk.nowPlayingItem);
@@ -189,7 +269,7 @@ const useAppleMusic = (userId, activeSessionId) => {
                     setQueueState([...mk.queue.items]);
                 });
 
-                mk.addEventListener('playbackTimeDidChange', (event) => {
+                mk.addEventListener('playbackTimeDidChange', (event: any) => {
                     setPlaybackTime({
                         current: event.currentPlaybackTime,
                         total: event.currentPlaybackDuration
@@ -235,6 +315,7 @@ const useAppleMusic = (userId, activeSessionId) => {
         const top = (window.screen.height - h) / 2;
         const originalOpen = window.open;
 
+        // @ts-ignore
         window.open = (url, name) => {
             return originalOpen(url, name, `width=${w},height=${h},top=${top},left=${left},resizable=yes,scrollbars=yes`);
         };
@@ -274,7 +355,7 @@ const useAppleMusic = (userId, activeSessionId) => {
         syncToBackend();
     };
 
-    const setQueue = async (items, startPlaying = true) => {
+    const setQueue = async (items: any[], startPlaying = true) => {
         if (!musicKit) return;
         try {
             await musicKit.setQueue({ items });
@@ -288,7 +369,7 @@ const useAppleMusic = (userId, activeSessionId) => {
         }
     };
 
-    const playTrack = async (index) => {
+    const playTrack = async (index: number) => {
         if (!musicKit) return;
         try {
             await musicKit.changeToMediaAtIndex(index);
@@ -301,23 +382,7 @@ const useAppleMusic = (userId, activeSessionId) => {
         }
     };
 
-    const search = async (term, types = ['songs']) => {
-        if (!musicKit) return [];
-        const storefront = musicKit.storefrontId || 'us';
-        try {
-            const response = await musicKit.api.music(`v1/catalog/${storefront}/search`, {
-                term,
-                types: types.join(','),
-                limit: 10
-            });
-            return response.data?.results?.songs?.data || [];
-        } catch (e) {
-            console.error('Search error:', e);
-            return [];
-        }
-    };
-
-    const seekTo = (time) => {
+    const seekTo = (time: number) => {
         if (musicKit) {
             musicKit.seekToTime(time);
             syncToBackend();

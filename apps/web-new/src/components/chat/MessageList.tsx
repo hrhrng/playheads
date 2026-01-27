@@ -1,6 +1,13 @@
+
+import { Message, MessagePart } from '../../store/chatStore';
 import { ToolCall } from './ToolCall';
 import { ThinkingProcess } from './ThinkingProcess';
 import { MarkdownMessage } from './MarkdownMessage';
+
+interface MessageListProps {
+  messages: Message[];
+  isLoading: boolean;
+}
 
 /**
  * MessageList - 紧凑简洁的消息列表
@@ -10,7 +17,7 @@ import { MarkdownMessage } from './MarkdownMessage';
  * - text 部分保持大字体
  * - tool_call 和 thinking 紧凑展示在同一个block
  */
-export const MessageList = ({ messages, isLoading }) => {
+export const MessageList = ({ messages, isLoading }: MessageListProps) => {
     return (
         <div className="space-y-6 pb-12">
             {messages.map((msg, idx) => (
@@ -29,7 +36,7 @@ export const MessageList = ({ messages, isLoading }) => {
                         {msg.parts && Array.isArray(msg.parts) ? (
                             // New format: render parts in chronological order
                             <div className="space-y-3">
-                                {msg.parts.map((part, pIdx) => {
+                                {msg.parts.map((part: MessagePart, pIdx: number) => {
                                     // Render each part in order
                                     if (part.type === 'text') {
                                         return (
@@ -75,7 +82,7 @@ export const MessageList = ({ messages, isLoading }) => {
                                         : 'text-gray-900'
                                 }`}
                             >
-                                {msg.content}
+                                <MarkdownMessage content={msg.content || ''} />
                             </div>
                         )}
                     </div>

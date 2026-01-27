@@ -1,22 +1,23 @@
+
 import { useEffect, useRef } from 'react';
 import { flushSync } from 'react-dom';
-import { useLocation, useNavigate } from 'react-router-dom';
-import { useChatStore } from '../store/chatStore';
+import { useNavigate, useLocation } from '@tanstack/react-router';
+import { useChatStore, Message } from '../store/chatStore';
 
 /**
  * Main chat hook - handles chat lifecycle and session management
- *
- * @param {string} sessionId - Current session ID
- * @param {string} userId - Current user ID
- * @param {boolean} isNewChat - Whether this is a new chat (no session yet)
- * @param {Function} onAgentActions - Callback for agent actions
- * @param {Function} onMessageSent - Callback when message is sent
- * @param {Function} onSessionCreated - Callback when new session is created (newSessionId, preservedMessages, initialMessage)
- * @returns {object} Chat state and methods
  */
-export const useChat = (sessionId, userId, isNewChat, onAgentActions, onMessageSent, onSessionCreated) => {
-  const location = useLocation();
+export const useChat = (
+  sessionId: string | null,
+  userId: string | null,
+  isNewChat: boolean,
+  onAgentActions?: (actions: any[]) => Promise<void>,
+  onMessageSent?: () => void,
+  onSessionCreated?: (newSessionId: string, preservedMessages: Message[], initialMessage: string) => void
+) => {
   const navigate = useNavigate();
+  const location = useLocation();
+
   const {
     messages,
     input,
@@ -34,7 +35,7 @@ export const useChat = (sessionId, userId, isNewChat, onAgentActions, onMessageS
   } = useChatStore();
 
   // Track if we've already loaded this session to prevent re-loading on remount
-  const loadedSessionRef = useRef(null);
+  const loadedSessionRef = useRef<string | null>(null);
 
   // Initialize chat when session/user changes
   useEffect(() => {
@@ -50,8 +51,10 @@ export const useChat = (sessionId, userId, isNewChat, onAgentActions, onMessageS
     initialize(sessionId, userId);
 
     // Check if we have preserved messages from navigation
-    const preservedMessages = location.state?.preservedMessages;
-    const isNewlyCreated = location.state?.isNewlyCreated;
+    // TanStack Router location.state is typed as unknown by default, so we cast it
+    const state = location.state as { preservedMessages?: Message[]; isNewlyCreated?: boolean } | undefined;
+    const preservedMessages = state?.preservedMessages;
+    const isNewlyCreated = state?.isNewlyCreated;
 
     if (isNewlyCreated && preservedMessages) {
       // Restore preserved messages immediately (includes user message)
@@ -67,7 +70,7 @@ export const useChat = (sessionId, userId, isNewChat, onAgentActions, onMessageS
       loadHistory(sessionId, userId).then(status => {
         if (status === 'not_found') {
           console.log("Session not found (404), redirecting to home");
-          navigate('/', { replace: true });
+          navigate({ to: '/', replace: true });
         } else if (status === 'success') {
           loadedSessionRef.current = sessionId;
         } else {
@@ -77,23 +80,24 @@ export const useChat = (sessionId, userId, isNewChat, onAgentActions, onMessageS
         }
       });
     }
-  }, [sessionId, userId, isNewChat, location.state?.isNewlyCreated, navigate]);
+  }, [sessionId, userId, isNewChat, (location.state as any)?.isNewlyCreated, navigate]);
 
   /**
    * Send message handler - creates session for new chats first
    * Uses flushSync to ensure user message appears immediately
    */
-  const handleSendMessage = async (text, skipAddingUserMessage = false) => {
+  const handleSendMessage = async (text?: string, skipAddingUserMessage = false) => {
     const messageText = text || input;
     if (!messageText.trim()) return;
 
     // For new chats without session, create session first and navigate
     if (isNewChat && !sessionId) {
       try {
+        if (!userId) throw new Error("User ID required");
         const newSessionId = await createSession(userId);
 
         // Add user message to preserved messages so it shows immediately on navigation
-        const userMessage = { role: 'user', content: messageText };
+        const userMessage: Message = { role: 'user', content: messageText };
         const preservedMessages = [...messages, userMessage];
 
         // Call onSessionCreated to trigger navigation
@@ -106,6 +110,7 @@ export const useChat = (sessionId, userId, isNewChat, onAgentActions, onMessageS
         // via useInitialMessage hook
       } catch (error) {
         alert('Failed to create session. Please try again.');
+        console.error(error);
       }
     } else {
       // For existing chats, add user message synchronously first (unless skipped)
