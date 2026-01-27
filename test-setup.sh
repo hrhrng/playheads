@@ -33,7 +33,7 @@ echo ""
 
 # 检查前端依赖
 echo "📦 检查前端依赖..."
-cd apps/web
+cd apps/web-new
 if ! npm list react-markdown &> /dev/null; then
     echo "❌ react-markdown 未安装，正在安装..."
     npm install react-markdown remark-gfm
@@ -46,7 +46,7 @@ echo "🔨 构建检查..."
 
 # 检查前端构建
 echo "   检查前端代码..."
-cd apps/web
+cd apps/web-new
 npm run build > /dev/null 2>&1
 if [ $? -eq 0 ]; then
     echo "✅ 前端代码构建成功"
@@ -75,10 +75,10 @@ echo "1️⃣  启动后端（在新终端）："
 echo "   cd apps/backend && uvicorn main:app --reload"
 echo ""
 echo "2️⃣  启动前端（在新终端）："
-echo "   cd apps/web && npm run dev"
+echo "   cd apps/web-new && npm run dev"
 echo ""
 echo "3️⃣  打开浏览器："
-echo "   http://localhost:5173"
+echo "   http://localhost:3001"
 echo ""
 echo "📚 详细测试指南："
 echo "   cat TESTING_GUIDE.md"

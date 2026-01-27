@@ -12,11 +12,11 @@ uvicorn main:app --reload
 
 ### 2. 启动前端
 ```bash
-cd apps/web
+cd apps/web-new
 npm run dev
 ```
 
-前端应该运行在 http://localhost:5173
+前端应该运行在 http://localhost:3001
 
 ---
 
@@ -262,7 +262,7 @@ data: {"actions":[...],"session_id":"..."}
 
 ### 环境
 - 后端：uvicorn main:app --reload (端口 8000)
-- 前端：npm run dev (端口 5173)
+- 前端：npm run dev (端口 3001)
 - 浏览器：Chrome 120+
 - 设备：MacBook Pro / iPhone
 

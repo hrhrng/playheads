@@ -41,6 +41,13 @@
   }
 }
 
+@layer components {
+  /* Unified navigation button style for sidebar */
+  .nav-btn {
+    @apply p-3 rounded-xl text-gemini-subtext hover:bg-white hover:text-gemini-text transition-colors;
+  }
+}
+
 @layer utilities {
   .no-scrollbar::-webkit-scrollbar {
     display: none;

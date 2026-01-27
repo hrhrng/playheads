@@ -34,21 +34,21 @@ INFO:     Application startup complete.
 
 #### 终端 2 - 启动前端
 ```bash
-cd apps/web
+cd apps/web-new
 npm run dev
 ```
 
 **预期输出**：
 ```
-  VITE v5.4.21  ready in XXX ms
+  VITE v7.3.1  ready in XXX ms
 
-  ➜  Local:   http://localhost:5173/
+  ➜  Local:   http://localhost:3001/
   ➜  Network: use --host to expose
   ➜  press h + enter to show help
 ```
 
 #### 浏览器
-打开：http://localhost:5173
+打开：http://localhost:3001
 
 ---
 
