@@ -11,7 +11,7 @@ dev:
 
 dev-web:
 	@echo "Starting web frontend..."
-	rm -rf apps/web/node_modules/.vite && npm run dev -w apps/web
+	rm -rf apps/web/node_modules/.vite && pnpm --filter web dev
 
 dev-backend:
 	@echo "Starting backend..."
@@ -26,7 +26,7 @@ install: install-web install-backend
 
 install-web:
 	@echo "Installing web dependencies..."
-	npm install -w apps/web
+	pnpm install --filter web
 
 install-backend:
 	@echo "Installing backend dependencies..."
@@ -42,7 +42,7 @@ test-backend:
 	uv run --project apps/backend pytest apps/backend/ -v
 
 test-web:
-	npm test -w apps/web
+	pnpm --filter web test
 
 # =============================================================================
 # Lint & Type-check
@@ -51,10 +51,10 @@ test-web:
 lint: lint-web
 
 lint-web:
-	npm run lint -w apps/web
+	pnpm --filter web lint
 
 type-check:
-	npm run type-check -w apps/web
+	pnpm --filter web type-check
 
 # =============================================================================
 # CI (mirrors GitHub Actions)
