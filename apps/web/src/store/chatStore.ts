@@ -10,6 +10,7 @@ import type {
   Message,
   MessagePart,
   AgentAction,
+  FormattedTrack,
   SSETextEvent,
   SSEThinkingEvent,
   SSEToolStartEvent,
@@ -27,11 +28,14 @@ interface ChatStore {
   showHistory: boolean;
   sessionId: string | null;
   userId: string | null;
+  /** Playlist for the currently viewed session (loaded alongside chat history) */
+  viewedPlaylist: FormattedTrack[];
 
   // Actions
   setInput: (input: string) => void;
   setShowHistory: (show: boolean) => void;
   toggleHistory: () => void;
+  setViewedPlaylist: (playlist: FormattedTrack[]) => void;
   initialize: (sessionId: string | null, userId: string) => void;
   setMessages: (messages: Message[]) => void;
   addMessage: (message: Message) => void;
@@ -65,9 +69,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   showHistory: false,
   sessionId: null,
   userId: null,
+  viewedPlaylist: [],
 
   // Actions
   setInput: (input: string) => set({ input }),
+  setViewedPlaylist: (playlist: FormattedTrack[]) => set({ viewedPlaylist: playlist }),
 
   setShowHistory: (show: boolean) => set({ showHistory: show }),
 
@@ -119,7 +125,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
    */
   loadHistory: async (sessionId: string, userId: string): Promise<LoadHistoryStatus> => {
     if (!sessionId) {
-      set({ messages: [], isLoadingHistory: false });
+      set({ messages: [], viewedPlaylist: [], isLoadingHistory: false });
       return 'success';
     }
 
@@ -147,18 +153,18 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             };
           }
         });
-        set({ messages, sessionId });
+        set({ messages, sessionId, viewedPlaylist: data.playlist || [] });
         return 'success';
       } else if (res.status === 404) {
-        set({ messages: [] });
+        set({ messages: [], viewedPlaylist: [] });
         return 'not_found';
       } else {
-        set({ messages: [] });
+        set({ messages: [], viewedPlaylist: [] });
         return 'error';
       }
     } catch (e) {
       console.error('Failed to load chat history:', e);
-      set({ messages: [] });
+      set({ messages: [], viewedPlaylist: [] });
       return 'error';
     } finally {
       set({ isLoadingHistory: false });
@@ -469,6 +475,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     isLoading: false,
     isLoadingHistory: false,
     showHistory: false,
-    sessionId: null
+    sessionId: null,
+    viewedPlaylist: []
   })
 }));

@@ -13,6 +13,7 @@ import type {
   PlaybackTime,
   Message,
   AgentAction,
+  FormattedTrack,
   SupabaseSession,
   Conversation
 } from '../types';
@@ -35,6 +36,9 @@ interface RouteComponentProps {
   executeAgentActions: (actions: AgentAction[]) => Promise<void>;
   fetchConversations: () => Promise<void>;
   onShowAppleMusicOverlay: () => void;
+  viewedPlaylist?: FormattedTrack[];
+  isViewingPlayingConversation?: boolean;
+  onStartPlaybackFromConversation?: (index: number) => void;
 }
 
 /**
@@ -127,6 +131,9 @@ export function ChatRoute({
   executeAgentActions,
   fetchConversations,
   onShowAppleMusicOverlay,
+  viewedPlaylist = [],
+  isViewingPlayingConversation = true,
+  onStartPlaybackFromConversation,
 }: RouteComponentProps) {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -171,6 +178,9 @@ export function ChatRoute({
           toggleCollapse={toggleCollapse}
           width={width}
           onWidthChange={setWidth}
+          viewedPlaylist={viewedPlaylist}
+          isViewingPlayingConversation={isViewingPlayingConversation}
+          onStartPlaybackFromConversation={onStartPlaybackFromConversation}
         />
       }
     >

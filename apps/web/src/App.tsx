@@ -3,8 +3,8 @@
  * @module App
  */
 
-import { useState, useEffect } from 'react';
-import { Routes, Route, useLocation } from 'react-router-dom';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { HomeRoute, ChatRoute } from './routes';
 import useAppleMusic from './hooks/useAppleMusic';
@@ -13,7 +13,9 @@ import { supabase } from './utils/supabase';
 import { ToastProvider } from './components/ToastProvider';
 import { validateAppleMusicToken } from './api/appleMusicAuth';
 import { API_BASE } from './config/api';
-import type { SupabaseSession, Conversation } from './types';
+import { useChatStore } from './store/chatStore';
+import { FloatingMiniPlayer } from './components/FloatingMiniPlayer';
+import type { SupabaseSession, Conversation, FormattedTrack } from './types';
 
 // ============================================================================
 // Types
@@ -181,6 +183,7 @@ function AppleMusicLinkOverlay({
 
 function App() {
   const location = useLocation();
+  const navigate = useNavigate();
 
   // Initialize dev tools in development
   useDevTools();
@@ -199,6 +202,13 @@ function App() {
   const [isAppleLinked, setIsAppleLinked] = useState<boolean>(false);
   const [checkingLink, setCheckingLink] = useState<boolean>(false);
   const [showAppleLinkOverlay, setShowAppleLinkOverlay] = useState<boolean>(false);
+  const [storedMusicUserToken, setStoredMusicUserToken] = useState<string | null>(null);
+
+  // Per-conversation playback state
+  const [playingSessionId, setPlayingSessionId] = useState<string | null>(null);
+  const viewedPlaylist = useChatStore(s => s.viewedPlaylist);
+  const setViewedPlaylist = useChatStore(s => s.setViewedPlaylist);
+  const initialRestoreDone = useRef(false);
 
   // Extract active session ID from URL
   const pathParts = location.pathname.split('/');
@@ -216,11 +226,81 @@ function App() {
     isInitializing,
     playbackTime,
     seekTo,
-    executeAgentActions,
+    executeAgentActions: rawExecuteAgentActions,
+    syncMusicKitState,
+    restoreStateFromBackend,
   } = useAppleMusic({
     userId: session?.user.id || null,
-    activeSessionId
+    activeSessionId,
+    syncSessionId: playingSessionId,
+    storedMusicUserToken,
   });
+
+  // ============================================================================
+  // Per-conversation playback logic
+  // ============================================================================
+
+  // Derived state
+  const isViewingPlayingConversation = !!playingSessionId && playingSessionId === activeSessionId;
+  const showMiniPlayer = !!playingSessionId && !!activeSessionId && playingSessionId !== activeSessionId && isApplePlaying;
+
+  // Wrap executeAgentActions to track which session owns playback
+  const executeAgentActions = useCallback(async (actions: import('./types').AgentAction[]) => {
+    if (activeSessionId) {
+      setPlayingSessionId(activeSessionId);
+    }
+    await rawExecuteAgentActions(actions);
+  }, [activeSessionId, rawExecuteAgentActions]);
+
+  // Wrap playAppleTrack to also set playingSessionId when user clicks sidebar tracks
+  const wrappedPlayAppleTrack = useCallback(async (index: number) => {
+    if (activeSessionId) {
+      setPlayingSessionId(activeSessionId);
+    }
+    await playAppleTrack(index);
+  }, [activeSessionId, playAppleTrack]);
+
+  // Initial restore: when Apple Music first authorizes, restore MusicKit from backend
+  // This only runs once (initialRestoreDone ref guard)
+  useEffect(() => {
+    if (!isAppleMusicAuthorized || isInitializing || initialRestoreDone.current) return;
+    if (!activeSessionId) return;
+
+    initialRestoreDone.current = true;
+
+    let cancelled = false;
+    (async () => {
+      const data = await restoreStateFromBackend(activeSessionId);
+      if (!cancelled && data) {
+        setViewedPlaylist(data.playlist || []);
+        setPlayingSessionId(activeSessionId);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isAppleMusicAuthorized, isInitializing, activeSessionId, restoreStateFromBackend]);
+
+  // viewedPlaylist is now populated by chatStore.loadHistory (single fetch)
+  // so no separate fetch is needed here.
+
+  // Start playback from a non-playing conversation
+  const startPlaybackFromConversation = useCallback(async (trackIndex: number) => {
+    if (!activeSessionId) return;
+
+    // Save current playing session's state first
+    if (playingSessionId && playingSessionId !== activeSessionId) {
+      await syncMusicKitState();
+    }
+
+    // Restore viewed conversation's playlist into MusicKit
+    const data = await restoreStateFromBackend(activeSessionId);
+
+    // Play the selected track
+    await playAppleTrack(trackIndex);
+
+    // Update ownership
+    setPlayingSessionId(activeSessionId);
+    if (data) setViewedPlaylist(data.playlist || []);
+  }, [activeSessionId, playingSessionId, syncMusicKitState, restoreStateFromBackend, playAppleTrack]);
 
   // ============================================================================
   // Auth Effects
@@ -254,7 +334,9 @@ function App() {
       .eq('id', session.user.id)
       .single()
       .then(({ data }) => {
-        setIsAppleLinked(!!data?.apple_music_token);
+        const token = data?.apple_music_token || null;
+        setIsAppleLinked(!!token);
+        setStoredMusicUserToken(token);
         setCheckingLink(false);
       });
   }, [session?.user.id]);
@@ -349,6 +431,7 @@ function App() {
 
         if (!error) {
           setIsAppleLinked(true);
+          setStoredMusicUserToken(token);
           toast.success('Apple Music connected successfully');
         } else {
           console.error('Link Error:', error);
@@ -538,14 +621,29 @@ function App() {
             playbackTime={playbackTime}
             seekTo={seekTo}
             appleQueue={appleQueue}
-            playAppleTrack={playAppleTrack}
+            playAppleTrack={wrappedPlayAppleTrack}
             executeAgentActions={executeAgentActions}
             fetchConversations={fetchConversations}
             onShowAppleMusicOverlay={handleShowAppleMusicOverlay}
-
+            viewedPlaylist={viewedPlaylist}
+            isViewingPlayingConversation={isViewingPlayingConversation}
+            onStartPlaybackFromConversation={startPlaybackFromConversation}
           />
         } />
       </Routes>
+
+      {/* Floating Mini Player - shown when viewing a different conversation than the one playing */}
+      {showMiniPlayer && (
+        <FloatingMiniPlayer
+          currentTrack={appleTrack}
+          isPlaying={isApplePlaying}
+          onTogglePlay={toggleApple}
+          conversationTitle={
+            conversations.find(c => c.id === playingSessionId)?.title || 'Untitled'
+          }
+          onNavigateToConversation={() => navigate(`/chat/${playingSessionId}`)}
+        />
+      )}
     </>
   );
 }
