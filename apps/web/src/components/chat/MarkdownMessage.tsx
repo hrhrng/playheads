@@ -22,7 +22,7 @@ interface MarkdownMessageProps {
  */
 export const MarkdownMessage = ({ content }: MarkdownMessageProps): React.JSX.Element => {
   return (
-    <div className="prose prose-lg max-w-none text-2xl md:text-3xl font-medium">
+    <div className="prose prose-sm max-w-none">
       <ReactMarkdown remarkPlugins={[remarkGfm]}>
         {content}
       </ReactMarkdown>

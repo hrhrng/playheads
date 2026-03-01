@@ -157,7 +157,7 @@ export const PlaylistSidebar = ({
 
         {/* Toggle Button - Absolute Positioned or Flex */}
         <div className={`flex ${collapsed ? 'justify-center py-6' : 'justify-between p-6 pb-2'} items-center`}>
-          {!collapsed && <h2 className="text-lg font-sans font-medium text-gemini-text">Playlist</h2>}
+          {!collapsed && <h2 className="text-sm font-medium text-gemini-text tracking-tight">Playlist</h2>}
           <button
             onClick={toggleCollapse}
             className="p-2 rounded-xl hover:bg-gray-100 text-gemini-subtext hover:text-gemini-text transition-all duration-300 group focus:outline-none focus:ring-0"
@@ -205,7 +205,7 @@ export const PlaylistSidebar = ({
             {/* Queue List */}
             {showQueue && (
               <div className="flex-1 overflow-y-auto space-y-2 px-4 pb-4">
-                <h3 className="text-xs font-medium text-gemini-subtext uppercase tracking-wider mb-2 px-2">Up Next</h3>
+                <h3 className="text-[10px] font-medium text-gemini-subtext uppercase tracking-widest mb-2 px-2">Up Next</h3>
                 {queue.map((track, index) => (
                   <div
                     key={track.id}
@@ -217,8 +217,8 @@ export const PlaylistSidebar = ({
                       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-gemini-text truncate">{track.title}</div>
-                      <div className="text-xs text-gemini-subtext truncate">{track.artist}</div>
+                      <div className="text-[13px] font-medium text-gemini-text truncate leading-snug">{track.title}</div>
+                      <div className="text-[11px] text-gemini-subtext truncate">{track.artist}</div>
                     </div>
                   </div>
                 ))}

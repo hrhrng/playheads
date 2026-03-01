@@ -20,6 +20,7 @@ export type {
   SSEToolStartEvent,
   SSEToolEndEvent,
   SSEDoneEvent,
+  SSEActionEvent,
   AgentAction
 } from './chat';
 
@@ -49,7 +50,6 @@ export type {
   PlayParams,
   FormattedTrack,
   PlaybackTime,
-  AppleMusicAction,
   MusicSearchType,
   SearchResultItem,
   SearchResponse
@@ -118,3 +118,11 @@ export type {
   RouterLocationState,
   Conversation
 } from './global';
+
+// Error types
+export type {
+  ClassifiedError,
+  ErrorContext
+} from './errors';
+
+export { ErrorCategory } from './errors';

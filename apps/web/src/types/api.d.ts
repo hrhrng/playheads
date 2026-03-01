@@ -7,8 +7,9 @@ import type { FormattedTrack } from './apple-music';
 
 /**
  * Backend API base URL
+ * Re-exported from config for backward compatibility
  */
-export const API_BASE = 'http://localhost:8000';
+export { API_BASE } from '../config/api';
 
 /**
  * Chat request payload

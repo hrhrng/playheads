@@ -30,12 +30,11 @@ export interface ChatStoreState {
     messageText: string,
     onAgentActions?: (actions: AgentAction[]) => Promise<void> | void,
     onMessageSent?: () => void,
-    skipAddingUserMessage?: boolean
   ) => Promise<void>;
   addUserMessage: (messageText: string) => void;
   handleStreamingResponse: (
     response: Response,
-    onAgentActions?: (actions: AgentAction[]) => Promise<void> | void
+    onAgentActions?: (actions: AgentAction[]) => Promise<void> | void,
   ) => Promise<void>;
   createSession: (userId: string) => Promise<string>;
   reset: () => void;
@@ -50,7 +49,7 @@ export type LoadHistoryStatus = 'success' | 'not_found' | 'error';
  * Agent action types
  */
 export interface AgentAction {
-  type: 'play_track' | 'add_to_queue' | 'create_playlist' | 'search_tracks';
+  type: 'play_track' | 'add_to_queue' | 'create_playlist' | 'search_tracks' | 'remove_track';
   data?: Record<string, unknown>;
 }
 

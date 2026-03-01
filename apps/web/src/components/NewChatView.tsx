@@ -62,16 +62,15 @@ export const NewChatView = ({
     <div className="flex flex-col items-center justify-center h-full w-full px-4 animate-fade-in relative">
 
       {/* Center Content */}
-      <div className="flex flex-col items-center w-full max-w-2xl space-y-8 z-20">
+      <div className="flex flex-col items-center w-full max-w-xl space-y-6 z-20">
         {/* Heading */}
-        <h2 className="text-3xl font-semibold text-gray-800 tracking-tight">
+        <h2 className="text-xl font-medium text-gray-700 tracking-tight">
           What's Going On?
         </h2>
 
         {/* Input Area - Centered Style */}
         <div className="w-full relative group">
-          <div className="absolute inset-0 bg-gradient-to-r from-blue-100 to-purple-100 rounded-3xl blur opacity-20 group-hover:opacity-30 transition-opacity" />
-          <div className="relative bg-white rounded-3xl shadow-sm border border-gray-200 flex items-center p-2 pl-4 pr-2 focus-within:shadow-md focus-within:border-blue-200 transition-all">
+          <div className="relative bg-white rounded-2xl shadow-sm border border-gray-200 flex items-center p-2 pl-4 pr-2 focus-within:shadow-md focus-within:border-gray-300 transition-all">
             <textarea
               ref={textareaRef}
               rows={1}
@@ -84,18 +83,18 @@ export const NewChatView = ({
                 }
               }}
               placeholder={isDJSpeaking ? 'Push to Interrupt...' : 'Start a vibe...'}
-              className="flex-1 bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-gray-800 placeholder-gray-400 text-lg font-medium resize-none py-3 max-h-32 no-scrollbar"
+              className="flex-1 bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-gray-800 placeholder-gray-400 text-sm resize-none py-2.5 max-h-32 no-scrollbar"
               autoFocus
             />
             <button
               onClick={handleSend}
               disabled={!input.trim()}
-              className={`p-3 rounded-full transition-all flex-shrink-0 ${input.trim()
-                ? 'bg-black text-white hover:bg-gray-800 transform hover:scale-105'
+              className={`p-2 rounded-full transition-all flex-shrink-0 ${input.trim()
+                ? 'bg-gray-800 text-white hover:bg-black'
                 : 'bg-gray-100 text-gray-300'
                 }`}
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 10l7-7m0 0l7 7m-7-7v18" />
               </svg>
             </button>
@@ -108,7 +107,7 @@ export const NewChatView = ({
             <button
               key={idx}
               onClick={() => handleSuggestionClick(text)}
-              className="px-4 py-2 bg-white border border-gray-200 rounded-full text-sm text-gray-500 hover:text-gray-800 hover:border-gray-300 transition-all shadow-sm hover:shadow"
+              className="px-3.5 py-1.5 bg-white border border-gray-200 rounded-full text-xs text-gray-400 hover:text-gray-600 hover:border-gray-300 transition-all"
             >
               {text}
             </button>
@@ -143,7 +142,7 @@ export const NewChatView = ({
       )}
 
       {/* Disclaimer / Footer */}
-      <div className="absolute bottom-6 text-center text-xs text-gray-300 font-mono">
+      <div className="absolute bottom-6 text-center text-[9px] text-gray-300 tracking-[0.2em] uppercase">
         Playhead AI v2.1
       </div>
     </div>

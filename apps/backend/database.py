@@ -4,11 +4,19 @@ import os
 from typing import AsyncGenerator
 
 # Use PostgreSQL - DATABASE_URL should be set in .env
-DATABASE_URL = os.getenv("DATABASE_URL")
-if not DATABASE_URL:
+DATABASE_URL_RAW = os.getenv("DATABASE_URL")
+if not DATABASE_URL_RAW:
     raise ValueError("DATABASE_URL environment variable is required")
 
-# Convert PostgreSQL URL to async if needed
+# Raw URL for psycopg (langgraph checkpointer) — must stay as postgresql://
+# Append sslmode=require for Supabase if not already present
+DATABASE_URL_PSYCOPG = DATABASE_URL_RAW
+if "sslmode" not in DATABASE_URL_PSYCOPG:
+    separator = "&" if "?" in DATABASE_URL_PSYCOPG else "?"
+    DATABASE_URL_PSYCOPG = f"{DATABASE_URL_PSYCOPG}{separator}sslmode=require"
+
+# SQLAlchemy needs the asyncpg driver prefix
+DATABASE_URL = DATABASE_URL_RAW
 if DATABASE_URL.startswith("postgresql://"):
     DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
 

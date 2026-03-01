@@ -5,6 +5,7 @@
 
 import { useEffect, useRef } from 'react';
 import { flushSync } from 'react-dom';
+import { toast } from 'sonner';
 import { useLocation, useNavigate, type NavigateFunction } from 'react-router-dom';
 import { useChatStore } from '../store/chatStore';
 import type { Message, AgentAction } from '../types/chat';
@@ -44,7 +45,7 @@ export function useChat({
   userId,
   onAgentActions,
   onMessageSent,
-  onSessionCreated
+  onSessionCreated,
 }: UseChatParams): UseChatReturn {
   const location = useLocation();
   const navigate = useNavigate() as NavigateFunction;
@@ -143,7 +144,9 @@ export function useChat({
         // via useInitialMessage hook
       } catch (error) {
         console.error('Failed to create session:', error);
-        alert('Failed to create session. Please try again.');
+        toast.error('Failed to create chat session', {
+          description: 'Please refresh the page or try again'
+        });
       }
     } else {
       // For existing chats, add user message synchronously first (unless skipped)
@@ -154,8 +157,8 @@ export function useChat({
         });
       }
 
-      // Then send to backend
-      await sendMessage(messageText, onAgentActions, onMessageSent, skipAddingUserMessage);
+      // Send to backend — graph completes in a single pass, no interrupt/resume
+      await sendMessage(messageText, onAgentActions, onMessageSent);
     }
   };
 

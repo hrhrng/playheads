@@ -5,10 +5,14 @@
 
 import { useState, useEffect } from 'react';
 import { Routes, Route, useLocation } from 'react-router-dom';
+import { toast } from 'sonner';
 import { HomeRoute, ChatRoute } from './routes';
 import useAppleMusic from './hooks/useAppleMusic';
 import { useDevTools } from './utils/devTools';
 import { supabase } from './utils/supabase';
+import { ToastProvider } from './components/ToastProvider';
+import { validateAppleMusicToken } from './api/appleMusicAuth';
+import { API_BASE } from './config/api';
 import type { SupabaseSession, Conversation } from './types';
 
 // ============================================================================
@@ -205,13 +209,14 @@ function App() {
     login: loginApple,
     currentTrack: appleTrack,
     isPlaying: isApplePlaying,
+    isAuthorized: isAppleMusicAuthorized,
     togglePlay: toggleApple,
     queue: appleQueue,
     playTrack: playAppleTrack,
     isInitializing,
     playbackTime,
     seekTo,
-    executeAgentActions
+    executeAgentActions,
   } = useAppleMusic({
     userId: session?.user.id || null,
     activeSessionId
@@ -264,6 +269,28 @@ function App() {
     }
   }, [session, isAppleLinked, checkingLink]);
 
+  // Validate Apple Music token on mount
+  useEffect(() => {
+    if (!session?.user.id || !isAppleLinked) return;
+
+    validateAppleMusicToken(session.user.id)
+      .then(({ valid, reason }) => {
+        if (!valid) {
+          setIsAppleLinked(false);
+          if (reason === 'token_expired') {
+            toast.error('Apple Music session expired', {
+              description: 'Please reconnect your account',
+              duration: 6000
+            });
+          }
+          setShowAppleLinkOverlay(true);
+        }
+      })
+      .catch(err => {
+        console.error('Token validation failed:', err);
+      });
+  }, [session?.user.id, isAppleLinked]);
+
   // ============================================================================
   // Data Fetching
   // ============================================================================
@@ -272,7 +299,7 @@ function App() {
     if (!session?.user.id) return;
 
     try {
-      const res = await fetch(`http://localhost:8000/conversations?user_id=${session.user.id}`);
+      const res = await fetch(`${API_BASE}/conversations?user_id=${session.user.id}`);
       const data = await res.json();
       setConversations(data.conversations || []);
     } catch (e) {
@@ -322,9 +349,16 @@ function App() {
 
         if (!error) {
           setIsAppleLinked(true);
+          toast.success('Apple Music connected successfully');
         } else {
           console.error('Link Error:', error);
-          alert('Failed to save Apple Music link. Please try again.');
+          toast.error('Failed to connect Apple Music', {
+            description: 'Please try again or check your connection',
+            action: {
+              label: 'Retry',
+              onClick: handleLinkApple
+            }
+          });
         }
       }
     }
@@ -346,7 +380,7 @@ function App() {
 
     try {
       const res = await fetch(
-        `http://localhost:8000/conversations/${conversationId}?user_id=${session.user.id}`,
+        `${API_BASE}/conversations/${conversationId}?user_id=${session.user.id}`,
         { method: 'DELETE' }
       );
 
@@ -354,7 +388,13 @@ function App() {
     } catch (err) {
       console.error('Failed to delete conversation:', err);
       setConversations(backup);
-      alert('Failed to delete conversation. Please try again.');
+      toast.error('Failed to delete conversation', {
+        description: 'Please try again',
+        action: {
+          label: 'Retry',
+          onClick: () => handleDeleteConversation(conversationId)
+        }
+      });
     }
   };
 
@@ -376,7 +416,7 @@ function App() {
 
     try {
       const res = await fetch(
-        `http://localhost:8000/conversations/${conversationId}?user_id=${session.user.id}`,
+        `${API_BASE}/conversations/${conversationId}?user_id=${session.user.id}`,
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -403,7 +443,7 @@ function App() {
 
     try {
       const res = await fetch(
-        `http://localhost:8000/conversations/${conversationId}?user_id=${session.user.id}`,
+        `${API_BASE}/conversations/${conversationId}?user_id=${session.user.id}`,
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -421,6 +461,12 @@ function App() {
   const dismissAppleLinkOverlay = (): void => {
     setShowAppleLinkOverlay(false);
     sessionStorage.setItem('apple_link_dismissed', 'true');
+  };
+
+  // Handler to show Apple Music overlay (triggered by toast action)
+  const handleShowAppleMusicOverlay = (): void => {
+    setShowAppleLinkOverlay(true);
+    sessionStorage.removeItem('apple_link_dismissed');
   };
 
   // ============================================================================
@@ -450,6 +496,7 @@ function App() {
   // Main app
   return (
     <>
+      <ToastProvider />
       {showAppleLinkOverlay && (
         <AppleMusicLinkOverlay onLink={handleLinkApple} onDismiss={dismissAppleLinkOverlay} />
       )}
@@ -465,11 +512,14 @@ function App() {
             isDJSpeaking={isDJSpeaking}
             appleTrack={appleTrack}
             isApplePlaying={isApplePlaying}
+            isAppleMusicAuthorized={isAppleMusicAuthorized}
             toggleApple={toggleApple}
             playbackTime={playbackTime}
             seekTo={seekTo}
             executeAgentActions={executeAgentActions}
             fetchConversations={fetchConversations}
+            onShowAppleMusicOverlay={handleShowAppleMusicOverlay}
+
           />
         } />
 
@@ -483,6 +533,7 @@ function App() {
             isDJSpeaking={isDJSpeaking}
             appleTrack={appleTrack}
             isApplePlaying={isApplePlaying}
+            isAppleMusicAuthorized={isAppleMusicAuthorized}
             toggleApple={toggleApple}
             playbackTime={playbackTime}
             seekTo={seekTo}
@@ -490,6 +541,8 @@ function App() {
             playAppleTrack={playAppleTrack}
             executeAgentActions={executeAgentActions}
             fetchConversations={fetchConversations}
+            onShowAppleMusicOverlay={handleShowAppleMusicOverlay}
+
           />
         } />
       </Routes>

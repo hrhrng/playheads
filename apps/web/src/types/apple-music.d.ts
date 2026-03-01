@@ -52,14 +52,6 @@ export interface PlaybackTime {
 }
 
 /**
- * Agent action types for Apple Music
- */
-export type AppleMusicAction =
-  | `ACTION:PLAY_INDEX:${number}`
-  | `ACTION:SEARCH_AND_ADD:${string}`
-  | `ACTION:REMOVE_INDEX:${number}`;
-
-/**
  * Music API search types
  */
 export type MusicSearchType = 'songs' | 'albums' | 'artists' | 'playlists';

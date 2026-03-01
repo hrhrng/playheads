@@ -83,55 +83,59 @@ body {
   /* Darker gray for hover state */
 }
 
-/* Prose (Markdown) Custom Styles */
+/* Prose (Markdown) Custom Styles — compact & refined */
 .prose {
-  color: #111827;
+  color: #374151;
+  font-size: 0.875rem;
+  line-height: 1.7;
 }
 
 .prose code {
   background-color: #f3f4f6;
-  padding: 0.2em 0.4em;
+  padding: 0.15em 0.35em;
   border-radius: 0.25rem;
-  font-size: 0.875em;
-  font-weight: 600;
+  font-size: 0.8em;
+  font-weight: 500;
 }
 
 .prose pre {
   background-color: #1f2937;
   color: #f9fafb;
-  padding: 1rem;
+  padding: 0.875rem;
   border-radius: 0.5rem;
   overflow-x: auto;
+  font-size: 0.8rem;
 }
 
 .prose pre code {
   background-color: transparent;
   padding: 0;
   color: inherit;
-  font-size: 0.875rem;
+  font-size: inherit;
 }
 
 .prose ul {
   list-style-type: disc;
-  margin-left: 1.5em;
-  margin-top: 0.5em;
-  margin-bottom: 0.5em;
+  margin-left: 1.25em;
+  margin-top: 0.4em;
+  margin-bottom: 0.4em;
 }
 
 .prose ol {
   list-style-type: decimal;
-  margin-left: 1.5em;
-  margin-top: 0.5em;
-  margin-bottom: 0.5em;
+  margin-left: 1.25em;
+  margin-top: 0.4em;
+  margin-bottom: 0.4em;
 }
 
 .prose li {
-  margin-top: 0.25em;
-  margin-bottom: 0.25em;
+  margin-top: 0.15em;
+  margin-bottom: 0.15em;
 }
 
 .prose strong {
-  font-weight: 700;
+  font-weight: 600;
+  color: #1f2937;
 }
 
 .prose em {
@@ -148,19 +152,24 @@ body {
 }
 
 .prose blockquote {
-  border-left: 4px solid #e5e7eb;
-  padding-left: 1rem;
+  border-left: 3px solid #e5e7eb;
+  padding-left: 0.875rem;
   font-style: italic;
   color: #6b7280;
 }
 
 .prose h1, .prose h2, .prose h3 {
-  font-weight: 700;
-  margin-top: 1em;
-  margin-bottom: 0.5em;
+  font-weight: 600;
+  color: #1f2937;
+  margin-top: 0.75em;
+  margin-bottom: 0.4em;
 }
 
+.prose h1 { font-size: 1.125rem; }
+.prose h2 { font-size: 1rem; }
+.prose h3 { font-size: 0.9375rem; }
+
 .prose p {
-  margin-top: 0.5em;
-  margin-bottom: 0.5em;
+  margin-top: 0.4em;
+  margin-bottom: 0.4em;
 }

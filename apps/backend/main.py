@@ -1,21 +1,31 @@
 """
 Music Agent API
 """
+import logging
+import os
+from datetime import datetime
+from typing import Optional
+
+from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, HTTPException, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import Optional
-from dotenv import load_dotenv
-from datetime import datetime
-import os
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # Load environment variables FIRST (override=True to override system env vars)
 load_dotenv(os.path.join(os.path.dirname(__file__), '.env'), override=True)
 
+# Configure logging with structured format
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%H:%M:%S",
+)
+log = logging.getLogger("playhead")
+
 # Then import database which depends on env vars
-from apps.backend.database import get_db
+from apps.backend.database import get_db, DATABASE_URL_RAW
 
 app = FastAPI(title="Playhead Music Agent API", version="2.0.0")
 
@@ -33,6 +43,26 @@ app.include_router(apple_music_router)
 
 
 # =============================================================================
+# Startup / Shutdown Events
+# =============================================================================
+
+@app.on_event("startup")
+async def startup_event():
+    """Log configuration summary on startup for quick diagnostics."""
+    db_host = DATABASE_URL_RAW.split("@")[-1].split("/")[0] if "@" in DATABASE_URL_RAW else "unknown"
+    openai_key = os.getenv("OPENAI_API_KEY", "")
+    openai_base = os.getenv("OPENAI_BASE_URL", "(default)")
+
+    log.info("=" * 60)
+    log.info("Playhead Music Agent API v2.0 starting up")
+    log.info("-" * 60)
+    log.info("DB host       : %s", db_host)
+    log.info("OPENAI_API_KEY: %s", f"{openai_key[:8]}...{openai_key[-4:]}" if len(openai_key) > 12 else ("SET" if openai_key else "NOT SET"))
+    log.info("OPENAI_BASE   : %s", openai_base)
+    log.info("=" * 60)
+
+
+# =============================================================================
 # Request/Response Models
 # =============================================================================
 
@@ -40,6 +70,7 @@ class ChatRequest(BaseModel):
     message: str
     session_id: Optional[str] = None  # Optional - backend will create if None
     user_id: str  # Required for authentication
+
 
 
 class ChatResponse(BaseModel):
@@ -76,40 +107,107 @@ def read_root():
     return {"message": "Playhead Music Agent API v2.0", "status": "running"}
 
 
+async def _format_sse_events(agent_event_generator, session_id: str):
+    """
+    Shared helper: convert agent event dicts into SSE wire format.
+
+    Wraps the agent's async generator with error classification and proper
+    SSE formatting. Used by the /chat endpoint.
+    """
+    import json
+
+    try:
+        async for event_obj in agent_event_generator:
+            event_type = event_obj.get("event", "text")
+            event_data = event_obj.get("data", {})
+            yield f"event: {event_type}\ndata: {json.dumps(event_data)}\n\n"
+
+    except Exception as e:
+        # Classify error for structured response and actionable user feedback
+        error_code, user_message, retryable = _classify_error(e)
+        log.error("Stream error [%s] session=%s: %s", error_code, session_id, e, exc_info=True)
+
+        yield f"event: text\ndata: {json.dumps({'content': user_message})}\n\n"
+
+        done_data = {
+            "error": str(e),
+            "error_code": error_code,
+            "retryable": retryable,
+            "actions": [],
+            "state": {},
+        }
+        yield f"event: done\ndata: {json.dumps(done_data)}\n\n"
+
+
 async def chat_stream_generator(message: str, session_id: str, user_id: str):
     """
     Generate streaming chat responses with proper database connection lifecycle.
 
-    This generator creates and manages its own database session to ensure
-    connections are properly closed even if the client disconnects.
+    Creates and manages its own database session to ensure connections are
+    properly closed even if the client disconnects mid-stream.
     """
     from apps.backend.agent import run_agent_stream
     from apps.backend.database import AsyncSessionLocal
-    import json
 
-    # Create dedicated database session for this streaming request
     db = AsyncSessionLocal()
-
     try:
-        async for event_obj in run_agent_stream(db, message, session_id, user_id):
-            # Extract event type and data
-            event_type = event_obj.get("event", "text")
-            event_data = event_obj.get("data", {})
-
-            # Format as SSE: event: <type>\ndata: <json>\n\n
-            yield f"event: {event_type}\ndata: {json.dumps(event_data)}\n\n"
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        # Send error as text event
-        error_data = {"content": "Sorry, I had a technical difficulty. Try again? 🎧"}
-        yield f"event: text\ndata: {json.dumps(error_data)}\n\n"
-        # Send done event with error
-        done_data = {"actions": [], "error": str(e)}
-        yield f"event: done\ndata: {json.dumps(done_data)}\n\n"
+        async for sse_line in _format_sse_events(
+            run_agent_stream(db, message, session_id, user_id),
+            session_id,
+        ):
+            yield sse_line
     finally:
-        # Ensure database connection is properly closed
         await db.close()
+
+
+
+def _classify_error(e: Exception) -> tuple[str, str, bool]:
+    """
+    Classify an exception into (error_code, user_message, retryable).
+
+    Returns a tuple to drive both backend logging and frontend UX:
+    - error_code:   machine-readable tag for the frontend
+    - user_message: human-readable message shown to the user
+    - retryable:    whether the frontend should offer a retry button
+    """
+    from sqlalchemy.exc import IntegrityError, OperationalError, DBAPIError
+
+    error_str = str(e).lower()
+
+    # -- Auth / Apple Music errors -----------------------------------------
+    if isinstance(e, HTTPException):
+        if isinstance(e.detail, dict):
+            code = e.detail.get("error", "UNKNOWN_ERROR")
+            if e.detail.get("action") == "reauth":
+                return code, "Your Apple Music session expired. Please reconnect.", False
+            return code, e.detail.get("message", str(e)), False
+        return "HTTP_ERROR", str(e.detail), False
+
+    # -- Database errors ---------------------------------------------------
+    if isinstance(e, IntegrityError):
+        if "foreign key" in error_str:
+            return "DB_FK_VIOLATION", "Account data issue — please sign out and sign back in.", False
+        return "DB_INTEGRITY", "Data conflict — please try again.", True
+
+    if isinstance(e, OperationalError) or isinstance(e, DBAPIError):
+        return "DB_UNAVAILABLE", "Database connection issue — retrying may help.", True
+
+    # -- LLM / provider errors ---------------------------------------------
+    if "openai" in error_str or "api_key" in error_str:
+        return "LLM_CONFIG_ERROR", "AI service configuration issue. Please contact support.", False
+
+    if "rate limit" in error_str or "429" in error_str:
+        return "LLM_RATE_LIMIT", "Too many requests — please wait a moment and try again.", True
+
+    if "timeout" in error_str:
+        return "LLM_TIMEOUT", "AI service timed out — please try again.", True
+
+    # -- Dependency / import errors ----------------------------------------
+    if isinstance(e, (ImportError, ModuleNotFoundError)):
+        return "DEPENDENCY_MISSING", "Server dependency issue. Please contact support.", False
+
+    # -- Fallback ----------------------------------------------------------
+    return "UNKNOWN_ERROR", "Sorry, something went wrong. Try again? 🎧", True
 
 
 @app.post("/chat")
@@ -117,7 +215,6 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     """Chat with the music agent. Creates session if session_id is None. Supports streaming."""
     import uuid
 
-    # Validate required fields
     if not request.user_id:
         raise HTTPException(400, "user_id is required")
 
@@ -125,9 +222,10 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
     session_id = request.session_id
     if not session_id:
         session_id = str(uuid.uuid4())
-        print(f"Generated new session ID for delayed creation: {session_id}")
+        log.info("New session created: %s (user=%s)", session_id[:8], request.user_id[:8])
 
-    # Always use streaming response
+    log.info("Chat request: session=%s msg=%s", session_id[:8], request.message[:60])
+
     return StreamingResponse(
         chat_stream_generator(request.message, session_id, request.user_id),
         media_type="text/event-stream",
@@ -136,6 +234,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
             "Connection": "keep-alive",
         }
     )
+
 
 
 @app.get("/state", response_model=StateResponse)
@@ -307,30 +406,22 @@ async def create_conversation(
     import uuid
     import traceback
 
-    print(f"Creating conversation for user: {request.user_id}")
-
     try:
         user_uuid = uuid.UUID(request.user_id)
     except ValueError as e:
-        print(f"Invalid user_id format: {request.user_id}")
         raise HTTPException(400, f"Invalid user_id format: {str(e)}")
 
     try:
-        # Generate new conversation ID
         new_conversation_id = str(uuid.uuid4())
-        print(f"Generated conversation ID: {new_conversation_id}")
-
-        # Create the conversation in database
         await store.create_session(db, new_conversation_id, request.user_id)
-        print(f"Successfully created conversation: {new_conversation_id}")
+        log.info("Conversation created: %s (user=%s)", new_conversation_id[:8], request.user_id[:8])
 
         return CreateConversationResponse(
             conversation_id=new_conversation_id,
             created_at=datetime.now().isoformat()
         )
     except Exception as e:
-        traceback.print_exc()
-        print(f"Error creating conversation: {e}")
+        log.error("Failed to create conversation for user=%s: %s", request.user_id[:8], e, exc_info=True)
         raise HTTPException(500, f"Failed to create conversation: {str(e)}")
 
 @app.get("/conversations", response_model=ConversationsResponse)

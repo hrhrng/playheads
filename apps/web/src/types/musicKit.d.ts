@@ -46,6 +46,8 @@ export interface MusicKitInstance {
   seekToTime(time: number): void;
   changeToMediaAtIndex(index: number): Promise<void>;
   setQueue(options: SetQueueOptions): Promise<void>;
+  playbackState: PlaybackStates;
+  currentPlaybackTime: number;
   api: MusicKitAPI;
   addEventListener(eventName: string, callback: (...args: unknown[]) => void): void;
   removeEventListener(eventName: string, callback: (...args: unknown[]) => void): void;

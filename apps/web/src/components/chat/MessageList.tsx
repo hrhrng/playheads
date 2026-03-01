@@ -47,7 +47,7 @@ export const MessageList = ({ messages, isLoading }: MessageListProps): React.JS
             msg.role === 'user' ? 'items-end' : 'items-start'
           }`}
         >
-          <span className="text-[10px] text-gray-500 mb-1 px-1 uppercase tracking-wider font-semibold">
+          <span className="text-[10px] text-gray-400 mb-1.5 px-1 uppercase tracking-widest font-medium">
             {msg.role === 'agent' ? 'DJ' : 'You'}
           </span>
 
@@ -64,8 +64,8 @@ export const MessageList = ({ messages, isLoading }: MessageListProps): React.JS
                         key={`text-${pIdx}`}
                         className={
                           msg.role === 'user'
-                            ? 'text-gray-600 text-right italic text-2xl md:text-3xl'
-                            : 'text-gray-900 text-2xl md:text-3xl'
+                            ? 'text-gray-500 text-right italic text-[15px] leading-relaxed'
+                            : 'text-gray-800 text-[15px] leading-relaxed'
                         }
                       >
                         <MarkdownMessage content={part.content} />
@@ -96,10 +96,10 @@ export const MessageList = ({ messages, isLoading }: MessageListProps): React.JS
             ) : isLegacyMessage(msg) ? (
               // Old format: backward compatibility
               <div
-                className={`text-2xl md:text-3xl font-medium leading-relaxed ${
+                className={`text-[15px] leading-relaxed ${
                   msg.role === 'user'
-                    ? 'text-gray-600 text-right italic'
-                    : 'text-gray-900'
+                    ? 'text-gray-500 text-right italic'
+                    : 'text-gray-800'
                 }`}
               >
                 {msg.content}

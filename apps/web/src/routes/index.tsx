@@ -3,13 +3,11 @@
  * @module routes
  */
 
-import { useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { AppLayout } from '../components/AppLayout';
 import { ChatInterface } from '../components/ChatInterface';
 import { PlaylistSidebar } from '../components/PlaylistSidebar';
 import { useSidebarState } from '../hooks/useSidebarState';
-import { supabase } from '../utils/supabase';
 import type {
   Track,
   PlaybackTime,
@@ -28,13 +26,15 @@ interface RouteComponentProps {
   isDJSpeaking: boolean;
   appleTrack: Track | null;
   isApplePlaying: boolean;
+  isAppleMusicAuthorized: boolean;
   toggleApple: () => void;
   playbackTime: PlaybackTime;
   seekTo: (time: number) => void;
   appleQueue?: Track[];
   playAppleTrack?: (index: number) => Promise<void>;
-  executeAgentActions: (actions: string[]) => Promise<void>;
+  executeAgentActions: (actions: AgentAction[]) => Promise<void>;
   fetchConversations: () => Promise<void>;
+  onShowAppleMusicOverlay: () => void;
 }
 
 /**
@@ -49,11 +49,13 @@ export function HomeRoute({
   isDJSpeaking,
   appleTrack,
   isApplePlaying,
+  isAppleMusicAuthorized,
   toggleApple,
   playbackTime,
   seekTo,
   executeAgentActions,
-  fetchConversations
+  fetchConversations,
+  onShowAppleMusicOverlay,
 }: RouteComponentProps) {
   const navigate = useNavigate();
 
@@ -88,35 +90,17 @@ export function HomeRoute({
         isDJSpeaking={isDJSpeaking}
         currentTrack={appleTrack}
         isPlaying={isApplePlaying}
+        isAppleMusicAuthorized={isAppleMusicAuthorized}
         togglePlay={toggleApple}
         playbackTime={playbackTime}
         onSeek={seekTo}
         sessionId={null}
         userId={session?.user.id || null}
-        onAgentActions={async (actions: AgentAction[]) => {
-          const actionStrings = actions
-            .map((a) => {
-              if (a.type === 'play_track') {
-                return `ACTION:PLAY_INDEX:${a.data?.index}`;
-              }
-              if (a.type === 'add_to_queue') {
-                // If we have a track ID, use ADD_ID for precision
-                if (a.data?.track_id) {
-                   return `ACTION:ADD_ID:${a.data.track_id}`;
-                }
-                // Fallback to SEARCH_AND_ADD if no ID (legacy support)
-                return `ACTION:SEARCH_AND_ADD:${a.data?.query}`;
-              }
-              if (a.type === 'remove_track') {
-                return `ACTION:REMOVE_INDEX:${a.data?.index}`;
-              }
-              return null;
-            })
-            .filter((a): a is string => a !== null);
-          await executeAgentActions(actionStrings);
-        }}
+        onAgentActions={executeAgentActions}
         onMessageSent={fetchConversations}
         onSessionCreated={handleSessionCreated}
+        onShowAppleMusicOverlay={onShowAppleMusicOverlay}
+
       />
     </AppLayout>
   );
@@ -134,13 +118,15 @@ export function ChatRoute({
   isDJSpeaking,
   appleTrack,
   isApplePlaying,
+  isAppleMusicAuthorized,
   toggleApple,
   playbackTime,
   seekTo,
   appleQueue = [],
   playAppleTrack,
   executeAgentActions,
-  fetchConversations
+  fetchConversations,
+  onShowAppleMusicOverlay,
 }: RouteComponentProps) {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -192,35 +178,17 @@ export function ChatRoute({
         isDJSpeaking={isDJSpeaking}
         currentTrack={appleTrack}
         isPlaying={isApplePlaying}
+        isAppleMusicAuthorized={isAppleMusicAuthorized}
         togglePlay={toggleApple}
         playbackTime={playbackTime}
         onSeek={seekTo}
         sessionId={sessionId}
         userId={session?.user.id || null}
-        onAgentActions={async (actions: AgentAction[]) => {
-          const actionStrings = actions
-            .map((a) => {
-              if (a.type === 'play_track') {
-                return `ACTION:PLAY_INDEX:${a.data?.index}`;
-              }
-              if (a.type === 'add_to_queue') {
-                // If we have a track ID, use ADD_ID for precision
-                if (a.data?.track_id) {
-                   return `ACTION:ADD_ID:${a.data.track_id}`;
-                }
-                // Fallback to SEARCH_AND_ADD if no ID (legacy support)
-                return `ACTION:SEARCH_AND_ADD:${a.data?.query}`;
-              }
-              if (a.type === 'remove_track') {
-                return `ACTION:REMOVE_INDEX:${a.data?.index}`;
-              }
-              return null;
-            })
-            .filter((a): a is string => a !== null);
-          await executeAgentActions(actionStrings);
-        }}
+        onAgentActions={executeAgentActions}
         onMessageSent={fetchConversations}
         onSessionCreated={handleSessionCreated}
+        onShowAppleMusicOverlay={onShowAppleMusicOverlay}
+
       />
     </AppLayout>
   );

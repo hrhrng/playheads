@@ -19,8 +19,8 @@ export default {
                 },
             },
             fontFamily: {
-                // Gemini uses Google Sans, we'll map closest
-                'sans': ['"Google Sans"', 'Inter', '-apple-system', 'sans-serif'],
+                // System font stack tuned for CJK + Latin harmony
+                'sans': ['-apple-system', 'BlinkMacSystemFont', '"SF Pro Text"', '"Helvetica Neue"', '"PingFang SC"', '"Hiragino Sans GB"', '"Noto Sans SC"', 'sans-serif'],
             },
             boxShadow: {
                 'gemini-pill': '0 1px 6px rgba(0,0,0,0.12)',

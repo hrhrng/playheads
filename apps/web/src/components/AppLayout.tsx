@@ -11,6 +11,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { DeleteConfirmDialog } from './DeleteConfirmDialog';
 import { useNavSidebarState } from '../hooks/useNavSidebarState';
+import { API_BASE } from '../config/api';
 import type { Conversation } from '../types';
 
 interface AppLayoutProps {
@@ -136,7 +137,7 @@ export const AppLayout = ({
 
     // Then send delete request to backend
     try {
-      const res = await fetch(`http://localhost:8000/conversations/${convId}`, {
+      const res = await fetch(`${API_BASE}/conversations/${convId}`, {
         method: 'DELETE'
       });
 
@@ -224,7 +225,7 @@ export const AppLayout = ({
               <div className="w-6 flex justify-center shrink-0">
                 <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
               </div>
-              <span className={`ml-3 truncate text-base font-semibold text-left transition-all duration-300 ${expanded ? 'opacity-100 flex-1' : 'opacity-0 w-0 ml-0 overflow-hidden'}`}>New Chat</span>
+              <span className={`ml-3 truncate text-sm font-medium text-left transition-all duration-300 ${expanded ? 'opacity-100 flex-1' : 'opacity-0 w-0 ml-0 overflow-hidden'}`}>New Chat</span>
             </button>
           </div>
 

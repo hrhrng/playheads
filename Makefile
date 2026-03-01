@@ -13,7 +13,7 @@ dev-web:
 # 启动后端
 dev-backend:
 	@echo "🔧 Starting backend..."
-	uv run --package backend uvicorn apps.backend.main:app --port 8000 --reload
+	uv run --package backend uvicorn apps.backend.main:app --port 8001 --reload
 
 # 安装所有依赖
 install: install-web install-backend

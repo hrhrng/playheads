@@ -4,6 +4,8 @@
  */
 
 import { create } from 'zustand';
+import { toast } from 'sonner';
+import { API_BASE } from '../config/api';
 import type {
   Message,
   MessagePart,
@@ -15,8 +17,6 @@ import type {
   SSEDoneEvent,
   SSEActionEvent
 } from '../types';
-
-const API_BASE = 'http://localhost:8000';
 
 interface ChatStore {
   // State
@@ -41,12 +41,11 @@ interface ChatStore {
     messageText: string,
     onAgentActions?: (actions: AgentAction[]) => Promise<void> | void,
     onMessageSent?: () => void,
-    skipAddingUserMessage?: boolean
   ) => Promise<void>;
   addUserMessage: (messageText: string) => void;
   handleStreamingResponse: (
     response: Response,
-    onAgentActions?: (actions: AgentAction[]) => Promise<void> | void
+    onAgentActions?: (actions: AgentAction[]) => Promise<void> | void,
   ) => Promise<void>;
   createSession: (userId: string) => Promise<string>;
   reset: () => void;
@@ -167,14 +166,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   /**
-   * Send a message with streaming response
-   * NOTE: User message should be added BEFORE calling this (use addUserMessage)
+   * Send a message with streaming response.
+   *
+   * The agent graph always completes in a single pass — tools emit MusicKit
+   * actions as fire-and-forget SSE events, no interrupt/resume needed.
    */
   sendMessage: async (
     messageText: string,
     onAgentActions?: (actions: AgentAction[]) => Promise<void> | void,
     onMessageSent?: () => void,
-    skipAddingUserMessage = false
   ): Promise<void> => {
     const { userId, sessionId, isLoading } = get();
 
@@ -182,7 +182,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
     if (!userId) {
       console.error('Missing user ID');
-      alert('Unable to send message: User not authenticated. Please refresh the page.');
+      toast.error('Authentication required', {
+        description: 'Please refresh the page and sign in again'
+      });
       return;
     }
 
@@ -203,10 +205,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      // Handle streaming response
       await get().handleStreamingResponse(response, onAgentActions);
 
-      // Refresh conversation list
+      // Refresh conversation list after the turn completes
       if (onMessageSent) {
         onMessageSent();
       }
@@ -219,7 +220,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         } as Message]
       }));
       const errorMessage = error instanceof Error ? error.message : 'Network error';
-      alert(`Failed to send message: ${errorMessage}. Please check your connection.`);
+      toast.error('Failed to send message', {
+        description: errorMessage,
+        action: {
+          label: 'Retry',
+          onClick: () => {
+            get().sendMessage(messageText, onAgentActions, onMessageSent);
+          }
+        }
+      });
     } finally {
       set({ isLoading: false });
     }
@@ -235,24 +244,26 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   /**
-   * Handle streaming SSE response from backend (Enhanced with parts support)
+   * Handle streaming SSE response from backend.
+   *
+   * The graph always completes in a single pass — no interrupt/resume needed.
    */
   handleStreamingResponse: async (
     response: Response,
-    onAgentActions?: (actions: AgentAction[]) => Promise<void> | void
+    onAgentActions?: (actions: AgentAction[]) => Promise<void> | void,
   ): Promise<void> => {
     const reader = response.body!.getReader();
     const decoder = new TextDecoder();
 
-    // Track current message parts
     let currentParts: MessagePart[] = [];
     const toolCallsMap = new Map<string, MessagePart & { type: 'tool_call' }>();
-    let actions: AgentAction[] = [];
     let agentMessageAdded = false;
+
+    let actions: AgentAction[] = [];
     let currentEvent: string | null = null;
     let currentData = '';
 
-    // Helper function to update the current message in store
+    // Helper: update the current agent message in store
     const updateMessage = (): void => {
       set((state) => {
         if (!agentMessageAdded) {
@@ -294,18 +305,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             try {
               const data = JSON.parse(currentData);
 
-              // Handle different event types
               switch (currentEvent) {
                 case 'text': {
-                  // Text content - append to last part if it's text, otherwise create new part
-                  // This ensures chronological order: text -> tool_call -> text
                   const lastPart = currentParts[currentParts.length - 1];
-
                   if (lastPart && lastPart.type === 'text') {
-                    // Continue appending to the current text part
                     (lastPart as { type: 'text'; content: string }).content += (data as SSETextEvent).content;
                   } else {
-                    // Create a new text part (after tool_call or thinking)
                     currentParts.push({ type: 'text', content: (data as SSETextEvent).content });
                   }
                   updateMessage();
@@ -313,37 +318,31 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                 }
 
                 case 'thinking': {
-                  // Thinking process - add as separate part
                   currentParts.push({ type: 'thinking', content: (data as SSEThinkingEvent).content });
                   updateMessage();
                   break;
                 }
 
                 case 'tool_start': {
-                  // VALIDATION: Validate tool_name is not empty
                   const toolStartData = data as SSEToolStartEvent;
                   if (!toolStartData.tool_name || !toolStartData.tool_name.trim()) {
                     console.warn('[WARN] Skipping malformed tool_start:', data);
                     break;
                   }
 
-                  // DEDUPLICATION: Update existing tool call if it exists (LangGraph sends multiple chunks)
+                  // Dedup: update existing tool call if it exists
                   const existingToolCall = currentParts.find(
                     p => p.type === 'tool_call' && (p as { id: string }).id === toolStartData.id
-                  ) as { id: string; tool_name: string; args: Record<string, unknown>; status: 'pending' | 'success' | 'error' } | undefined;
+                  ) as { id: string; tool_name: string; args: Record<string, unknown>; status: string } | undefined;
 
                   if (existingToolCall) {
-                    console.log(`[DEBUG] Updating existing tool_start for ${toolStartData.id}`);
-                    // Update args if new args are more complete (not empty)
                     if (toolStartData.args && Object.keys(toolStartData.args).length > 0) {
                       existingToolCall.args = toolStartData.args;
-                      console.log(`[DEBUG] Updated args for ${toolStartData.id}:`, toolStartData.args);
                       updateMessage();
                     }
                     break;
                   }
 
-                  // Add new tool call
                   const toolCall: MessagePart & { type: 'tool_call' } = {
                     type: 'tool_call',
                     id: toolStartData.id,
@@ -358,7 +357,6 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                 }
 
                 case 'tool_end': {
-                  // Tool call completed - update existing tool_call part
                   const toolEndData = data as SSEToolEndEvent;
                   const toolCall = toolCallsMap.get(toolEndData.id);
                   if (toolCall) {
@@ -370,27 +368,26 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                 }
 
                 case 'action': {
-                  // Real-time action from tool execution - execute immediately
+                  // Execute MusicKit action immediately — awaited to ensure ordering
                   const actionData = data as SSEActionEvent;
                   if (onAgentActions) {
-                    // Fire and forget to avoid blocking stream processing
-                    Promise.resolve(onAgentActions([{
-                      type: actionData.type,
-                      data: actionData.data
-                    }])).catch(err => {
+                    try {
+                      await onAgentActions([{
+                        type: actionData.type,
+                        data: actionData.data
+                      }]);
+                    } catch (err) {
                       console.error('Error executing real-time action:', err);
-                    });
+                    }
                   }
                   break;
                 }
 
                 case 'done': {
-                  // Stream completed
                   const doneData = data as SSEDoneEvent;
                   if (doneData.actions && doneData.actions.length > 0) {
                     actions = doneData.actions;
                   }
-                  // Exit the loop
                   break;
                 }
 
@@ -398,7 +395,6 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                   console.warn('Unknown SSE event type:', currentEvent);
               }
 
-              // Reset for next event
               currentEvent = null;
               currentData = '';
             } catch (e) {
@@ -409,7 +405,6 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       }
     } catch (error) {
       console.error('Streaming error:', error);
-      // Add error message if no parts were added
       if (currentParts.length === 0) {
         set((state) => ({
           messages: [...state.messages, {
@@ -424,7 +419,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     } finally {
       set({ isLoading: false });
 
-      // Execute actions after streaming completes
+      // Execute batched actions from the "done" event (legacy path)
       if (actions.length > 0 && onAgentActions) {
         await onAgentActions(actions);
       }

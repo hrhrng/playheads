@@ -104,7 +104,43 @@ async def _apple_music_get(
     async with httpx.AsyncClient(timeout=15) as client:
         response = await client.get(url, headers=headers, params=params)
     if response.status_code >= 400:
-        raise HTTPException(status_code=response.status_code, detail=response.text)
+        from apps.backend.error_codes import (
+            AUTH_TOKEN_INVALID,
+            PERMISSION_DENIED,
+            RATE_LIMIT,
+            SERVICE_UNAVAILABLE,
+            VALIDATION_ERROR
+        )
+
+        error_code = None
+        retryable = False
+        action = None
+
+        if response.status_code == 401:
+            error_code = AUTH_TOKEN_INVALID
+            action = "reauth"
+        elif response.status_code == 403:
+            error_code = PERMISSION_DENIED
+            action = "reauth"
+        elif response.status_code == 429:
+            error_code = RATE_LIMIT
+            retryable = True
+            action = "retry"
+        elif response.status_code >= 500:
+            error_code = SERVICE_UNAVAILABLE
+            retryable = True
+            action = "retry"
+        else:
+            error_code = VALIDATION_ERROR
+
+        detail = {
+            "error": error_code,
+            "message": response.text,
+            "status": response.status_code,
+            "retryable": retryable,
+            "action": action
+        }
+        raise HTTPException(status_code=response.status_code, detail=detail)
     return response.json()
 
 
@@ -160,3 +196,43 @@ async def user_storefront(music_user_token: Optional[str] = Header(default=None,
     if not music_user_token:
         raise HTTPException(status_code=400, detail="Music-User-Token header is required")
     return await _apple_music_get("v1/me/storefront", user_token=music_user_token)
+
+
+@router.get("/validate-token")
+async def validate_user_token(user_id: str):
+    """
+    Validate user's Apple Music token by making test API call.
+    Returns token validity status.
+    """
+    import uuid as uuid_module
+    from sqlalchemy import select
+    from apps.backend.database import AsyncSessionLocal
+    from apps.backend.models import Profile
+
+    try:
+        user_uuid = uuid_module.UUID(user_id)
+
+        async with AsyncSessionLocal() as db:
+            stmt = select(Profile).where(Profile.id == user_uuid)
+            result = await db.execute(stmt)
+            profile = result.scalar_one_or_none()
+
+            if not profile or not profile.apple_music_token:
+                return {"valid": False, "reason": "no_token"}
+
+            # Test token with lightweight API call
+            try:
+                await _apple_music_get(
+                    "v1/me/storefront",
+                    user_token=profile.apple_music_token
+                )
+                return {"valid": True}
+            except HTTPException as e:
+                if e.status_code in (401, 403):
+                    # Clear invalid token
+                    profile.apple_music_token = None
+                    await db.commit()
+                    return {"valid": False, "reason": "token_expired"}
+                raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

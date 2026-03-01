@@ -3,7 +3,9 @@
  * @module components/ChatInterface
  */
 
+import { useEffect, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import { RecordPlayer } from './RecordPlayer';
 import { NewChatView } from './NewChatView';
 import { SkeletonLoader } from './SkeletonLoader';
@@ -30,12 +32,16 @@ interface ChatInterfaceProps {
   sessionId: string | null;
   /** Current user ID */
   userId: string | null;
+  /** Whether Apple Music is authorized */
+  isAppleMusicAuthorized: boolean;
   /** Callback for agent actions */
   onAgentActions?: (actions: AgentAction[]) => Promise<void> | void;
   /** Callback when message is sent */
   onMessageSent?: () => void;
   /** Callback when new session is created */
   onSessionCreated?: (newSessionId: string, preservedMessages: Message[], initialMessage: string) => void;
+  /** Callback to show Apple Music connection overlay */
+  onShowAppleMusicOverlay?: () => void;
 }
 
 /**
@@ -56,9 +62,11 @@ export const ChatInterface = ({
   onSeek,
   sessionId,
   userId,
+  isAppleMusicAuthorized,
   onAgentActions,
   onMessageSent,
-  onSessionCreated
+  onSessionCreated,
+  onShowAppleMusicOverlay,
 }: ChatInterfaceProps) => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -78,11 +86,35 @@ export const ChatInterface = ({
     userId,
     onAgentActions,
     onMessageSent,
-    onSessionCreated
+    onSessionCreated,
   });
 
+  // Note: Removed initial warning toast as connection handling is now done via overlay and actionable toasts
+
+  // Wrap sendMessage to check Apple Music connection before sending
+  const handleSendMessage = useCallback(async (text?: string, skipAddingUserMessage?: boolean) => {
+    // Check Apple Music connection before sending
+    if (!isAppleMusicAuthorized) {
+      toast.error('Apple Music connection required', {
+        description: 'Connect your Apple Music account to continue',
+        duration: Infinity,
+        action: {
+          label: 'Connect Now',
+          onClick: () => {
+            sessionStorage.removeItem('apple_link_dismissed');
+            onShowAppleMusicOverlay?.();
+          }
+        }
+      });
+      return;
+    }
+
+    // Pass through skipAddingUserMessage to avoid duplicate messages on navigation
+    await sendMessage(text, skipAddingUserMessage);
+  }, [isAppleMusicAuthorized, sendMessage, onShowAppleMusicOverlay]);
+
   // Auto-send initial message from navigation state
-  useInitialMessage(location.state as any, sendMessage, isLoading, messages, navigate, location.pathname);
+  useInitialMessage(location.state as any, handleSendMessage, isLoading, messages, navigate, location.pathname);
 
   // Show loading skeleton while fetching history
   if (isLoadingHistory) {
@@ -93,7 +125,7 @@ export const ChatInterface = ({
   if (messages.length === 0 && !sessionId) {
     return (
       <NewChatView
-        onSend={sendMessage}
+        onSend={handleSendMessage}
         isDJSpeaking={isDJSpeaking}
         isPlaying={isPlaying}
       />
@@ -134,22 +166,24 @@ export const ChatInterface = ({
       </div>
 
       {/* Command Console - Fixed at Bottom */}
-      <div className="absolute bottom-0 left-0 right-0 p-6 pt-8 z-30 bg-gradient-to-t from-white via-white/95 to-transparent">
+      <div className="absolute bottom-0 left-0 right-0 px-6 pb-5 pt-10 z-30 bg-gradient-to-t from-white via-white/95 to-transparent">
         {/* Toggle History Button */}
-        <div className="max-w-3xl mx-auto mb-3 flex justify-start">
+        <div className="max-w-xl mx-auto mb-2 flex justify-start">
           <button
             onClick={toggleHistory}
-            className={`p-2.5 rounded-full bg-white shadow-md border border-gray-200 text-gray-500 hover:text-blue-600 hover:border-blue-200 transition-all ${
-              showHistory ? 'text-blue-600 border-blue-200' : ''
+            className={`p-2 rounded-full border transition-all ${
+              showHistory
+                ? 'bg-gray-800 text-white border-gray-800'
+                : 'bg-white text-gray-400 border-gray-200 hover:text-gray-600 hover:border-gray-300'
             }`}
             title={showHistory ? 'Back to Player' : 'View Transcript'}
           >
             {showHistory ? (
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19V6l12-3v13M9 10l12-3" />
               </svg>
             ) : (
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
             )}
@@ -163,10 +197,10 @@ export const ChatInterface = ({
           isDJSpeaking={isDJSpeaking}
           isPlaying={isPlaying}
           onInputChange={setInput}
-          onSend={() => sendMessage()}
+          onSend={() => handleSendMessage()}
         />
 
-        <div className="text-center mt-3 text-[10px] text-gray-300 font-mono tracking-widest uppercase">
+        <div className="text-center mt-2.5 text-[9px] text-gray-300 tracking-[0.2em] uppercase">
           Playhead Radio &bull; Live
         </div>
       </div>

@@ -1,19 +1,63 @@
 """
-Music Agent with LangChain 1.0 API
+Music Agent with LangGraph and AsyncPGCheckpointer
+
+Heavy dependencies (database, Apple Music) are lazy-imported inside functions
+so the module can be imported without DATABASE_URL — enables unit testing with
+MemorySaver and mock models.
 """
+from __future__ import annotations
+
+import json
+import logging
 import os
 from contextvars import ContextVar
-from typing import Optional, List, Dict
+from typing import Optional, TYPE_CHECKING
 from langchain.agents import create_agent
 from langchain.tools import tool
 from langchain_openai import ChatOpenAI
-from langchain.messages import AIMessageChunk
-from langchain.agents.middleware import ContextEditingMiddleware, ClearToolUsesEdit
-from langchain.agents import AgentState
+from duckduckgo_search import DDGS
 from langgraph.config import get_stream_writer
 
-from apps.backend.state import store, SessionState, TrackInfo
-from apps.backend.apple_music import _apple_music_get
+if TYPE_CHECKING:
+    from apps.backend.state import SessionState, TrackInfo
+
+log = logging.getLogger("playhead.agent")
+
+
+# =============================================================================
+# Singleton Checkpointer (initialized once, reused across requests)
+# =============================================================================
+
+_checkpointer = None
+_checkpointer_setup_done = False
+
+
+async def get_checkpointer():
+    """
+    Get or create a singleton AsyncPostgresSaver with connection pooling.
+    setup() is called only once; subsequent calls return the cached instance.
+    """
+    global _checkpointer, _checkpointer_setup_done
+
+    if _checkpointer is None:
+        from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+        from psycopg_pool import AsyncConnectionPool
+        from apps.backend.database import DATABASE_URL_PSYCOPG
+
+        pool = AsyncConnectionPool(
+            conninfo=DATABASE_URL_PSYCOPG,
+            max_size=5,
+            open=False,
+        )
+        await pool.open()
+        _checkpointer = AsyncPostgresSaver(pool)
+
+    if not _checkpointer_setup_done:
+        await _checkpointer.setup()
+        _checkpointer_setup_done = True
+        log.info("Checkpointer tables initialized")
+
+    return _checkpointer
 
 
 # =============================================================================
@@ -30,21 +74,16 @@ _db_context: ContextVar[Optional[object]] = ContextVar('_db_context', default=No
 _user_id_context: ContextVar[Optional[str]] = ContextVar('_user_id_context', default=None)
 
 
-async def _get_fresh_session() -> Optional[SessionState]:
-    """
-    Re-fetch session from DB to get the latest state.
-    This ensures tools see real-time state changes from the frontend.
-    """
-    db = _db_context.get()
-    session = _session_context.get()
-    user_id = _user_id_context.get()
+def _emit_action(action_type: str, data: dict) -> None:
+    """Emit a MusicKit action to the frontend as an SSE event (fire-and-forget).
 
-    if db and session:
-        fresh = await store.get_session(db, session.session_id, user_id)
-        if fresh:
-            _session_context.set(fresh)
-            return fresh
-    return session
+    The frontend receives this event and executes the corresponding MusicKit JS
+    call.  The agent does NOT block waiting for confirmation — this avoids
+    LangGraph's parallel-interrupt bug (#6624, #6533) and keeps the graph
+    completing in a single pass.
+    """
+    writer = get_stream_writer()
+    writer({"event": "action", "data": {"type": action_type, "data": data}})
 
 
 
@@ -60,6 +99,8 @@ async def search_music(query: str) -> str:
         query: Search query string
     """
     try:
+        from apps.backend.apple_music import _apple_music_get
+
         # Directly call Apple Music API to search
         result = await _apple_music_get(
             "v1/catalog/us/search",
@@ -89,8 +130,8 @@ async def search_music(query: str) -> str:
 @tool
 async def get_now_playing() -> str:
     """Get information about the currently playing track."""
-    # Re-fetch latest state from DB to see real-time changes
-    session = await _get_fresh_session()
+    # Read from ContextVar — kept in sync by add/remove tools during this run
+    session = _session_context.get()
 
     if not session or not session.current_track:
         return "No track is currently playing."
@@ -108,8 +149,8 @@ async def get_now_playing() -> str:
 @tool
 async def get_playlist() -> str:
     """Get the current playlist/queue of tracks."""
-    # Re-fetch latest state from DB to see real-time changes
-    session = await _get_fresh_session()
+    # Read from ContextVar — kept in sync by add/remove tools during this run
+    session = _session_context.get()
 
     if not session or not session.playlist:
         return "The playlist is empty."
@@ -137,6 +178,7 @@ async def play_track(index: str) -> str:
     Returns:
         Confirmation message
     """
+    # Read from ContextVar — kept in sync by add/remove tools during this run
     session = _session_context.get()
 
     try:
@@ -144,7 +186,6 @@ async def play_track(index: str) -> str:
     except (ValueError, TypeError):
         return "Please provide a valid track number."
 
-    # Validate index
     if not session or not session.playlist:
         return "The playlist is empty. Add some tracks first!"
 
@@ -153,17 +194,10 @@ async def play_track(index: str) -> str:
 
     track = session.playlist[idx - 1]
 
-    # Emit action immediately via stream writer for real-time execution
-    writer = get_stream_writer()
-    writer({
-        "event": "action",
-        "data": {
-            "type": "play_track",
-            "data": {"index": idx - 1}  # Convert to 0-based for frontend
-        }
-    })
+    # Emit action and wait for frontend to execute on MusicKit before continuing
+    _emit_action("play_track", {"index": idx - 1})
 
-    return f"Requesting to play '{track.name}' by {track.artist}"
+    return f"Playing '{track.name}' by {track.artist}"
 
 
 @tool
@@ -188,41 +222,31 @@ async def skip_next() -> str:
 
     next_track = session.playlist[next_idx]
 
-    # Emit action immediately via stream writer for real-time execution
-    writer = get_stream_writer()
-    writer({
-        "event": "action",
-        "data": {
-            "type": "play_track",
-            "data": {"index": next_idx}
-        }
-    })
+    _emit_action("play_track", {"index": next_idx})
 
     return f"Requesting to skip to '{next_track.name}' by {next_track.artist}"
 
 
 @tool
-async def add_to_playlist(track_id: str) -> str:
-    """Add a track to the playlist by its Apple Music ID.
+async def add_to_queue(track_id: str) -> str:
+    """Add a track to the queue by its Apple Music ID (from search_music results).
 
     Args:
-        track_id: Apple Music track ID (from search_music results)
+        track_id: Apple Music song ID (e.g. "12345" from search results)
     """
+    from apps.backend.state import TrackInfo
+    from apps.backend.apple_music import _apple_music_get
+
     session = _session_context.get()
-
     if not session:
-        return "Session not available"
-
-    if not track_id:
-        return "Please provide a track ID"
+        return "Session not available."
 
     try:
-        # Fetch track details by ID
+        # Fetch full track info by ID from Apple Music catalog
         result = await _apple_music_get(f"v1/catalog/us/songs/{track_id}")
-
         songs = result.get("data", [])
         if not songs:
-            return f"Track not found: {track_id}"
+            return f"No track found for ID '{track_id}'."
 
         song = songs[0]
         attrs = song.get("attributes", {})
@@ -232,26 +256,22 @@ async def add_to_playlist(track_id: str) -> str:
             artist=attrs.get("artistName", "Unknown Artist"),
             album=attrs.get("albumName"),
             artwork_url=attrs.get("artwork", {}).get("url"),
-            duration=attrs.get("durationInMillis", 0) / 1000.0
+            duration=attrs.get("durationInMillis", 0) / 1000.0,
         )
 
-        # Emit action immediately via stream writer for real-time execution
-        writer = get_stream_writer()
-        writer({
-            "event": "action",
-            "data": {
-                "type": "add_to_queue",
-                "data": {
-                    "query": f"{track.name} {track.artist}",
-                    "track_id": track.id
-                }
-            }
+        # Keep ContextVar in sync so subsequent tools see the new track
+        session.playlist.append(track)
+        position = len(session.playlist)
+
+        # Tell the frontend to enqueue it (fire-and-forget SSE)
+        _emit_action("add_to_queue", {
+            "query": f"{track.name} {track.artist}",
+            "track_id": track.id,
         })
 
-        return f"Requesting to add '{track.name}' by {track.artist} to playlist"
-
+        return f"Added '{track.name}' by {track.artist} to queue (position {position})"
     except Exception as e:
-        return f"Error adding track: {str(e)}"
+        return f"Error adding to queue: {str(e)}"
 
 
 @tool
@@ -278,20 +298,40 @@ async def remove_from_playlist(index: str) -> str:
     if idx < 1 or idx > len(session.playlist):
         return f"Invalid track number. Please choose between 1 and {len(session.playlist)}."
 
-    # Get track info for response (without removing it from local state)
-    track_to_remove = session.playlist[idx - 1]
+    # Pop from ContextVar to keep subsequent tool calls consistent
+    track_to_remove = session.playlist.pop(idx - 1)
 
-    # Emit action immediately via stream writer for real-time execution
-    writer = get_stream_writer()
-    writer({
-        "event": "action",
-        "data": {
-            "type": "remove_track",
-            "data": {"index": idx - 1}  # Convert to 0-based
-        }
-    })
+    _emit_action("remove_track", {"index": idx - 1})
 
-    return f"Requesting to remove '{track_to_remove.name}' by {track_to_remove.artist} from playlist"
+    return f"Removed '{track_to_remove.name}' by {track_to_remove.artist} from playlist"
+
+
+@tool
+def search_web(query: str) -> str:
+    """Search the web for music recommendations, playlist ideas, artist info,
+    trending songs, or genre exploration. Use this to discover music beyond
+    simple track lookups — e.g. "best jazz albums 2024", "songs similar to
+    Bohemian Rhapsody", "周杰伦最新专辑推荐".
+
+    For finding a specific track on Apple Music, use search_music instead.
+
+    Args:
+        query: Search query string for web search
+    """
+    try:
+        with DDGS() as ddgs:
+            results = list(ddgs.text(query, max_results=5))
+        if not results:
+            return "No results found."
+        # Format results concisely for the LLM to digest
+        formatted = []
+        for r in results:
+            title = r.get("title", "")
+            body = r.get("body", "")
+            formatted.append(f"- {title}: {body}")
+        return "\n".join(formatted)
+    except Exception as e:
+        return f"Web search failed: {e}"
 
 
 # =============================================================================
@@ -303,22 +343,24 @@ SYSTEM_PROMPT_TEMPLATE = """You are a friendly music DJ assistant called "Playhe
 Current State:
 {state_context}
 
-Tools available:
-- search_music(query): Search Apple Music with a search query string. Example: search_music("upbeat pop music") or search_music("Beatles")
-- add_to_playlist(track_id): Add a track by its Apple Music ID
-- get_now_playing: Check what's currently playing
-- get_playlist: See the queue
-- play_track(index): Play track by playlist position (1-indexed)
-- skip_next: Skip to next track
-- remove_from_playlist(index): Remove track by playlist position (1-indexed)
+Workflow:
+- "Play X" → search_music(X) → add_to_queue(id) → play_track(position)
+- "Add X to queue" → search_music(X) → add_to_queue(id)
+- "Search X" → search_music(X) — just search, show results
+- "Play track N" → play_track(N) — play an existing track in the playlist
+- "Skip" / "Next" → skip_next()
+- "Remove N" → remove_from_playlist(N)
+- "What's playing?" → get_now_playing()
+- "Show queue" → get_playlist()
+- "Recommend" → search_web(query) → show results → wait for user to pick
 
-IMPORTANT: When calling tools, you MUST provide all required arguments:
-- search_music REQUIRES a query parameter (a string describing what to search for)
-- add_to_playlist REQUIRES a track_id parameter
-- play_track REQUIRES an index parameter
-- remove_from_playlist REQUIRES an index parameter
-
-Workflow: First search_music to get IDs, then add_to_playlist with the ID.
+IMPORTANT:
+- search_music only searches — it does NOT add to queue or play.
+- add_to_queue needs a track_id from search_music results.
+- play_track plays a track ALREADY in the playlist (1-indexed).
+- remove_from_playlist takes a 1-indexed position.
+- search_web is for discovery and recommendations (web results). search_music is for finding specific tracks on Apple Music.
+- When asked to build a playlist, use search_web for ideas, then search_music + add_to_queue for each track.
 
 Be conversational and fun! Keep responses concise."""
 
@@ -327,94 +369,64 @@ Be conversational and fun! Keep responses concise."""
 # Agent Creation (LangChain 1.0 API)
 # =============================================================================
 
-TOOLS = [search_music, get_now_playing, get_playlist, play_track, skip_next, add_to_playlist, remove_from_playlist]
+TOOLS = [search_music, search_web, add_to_queue, play_track, skip_next, remove_from_playlist, get_now_playing, get_playlist]
 
 
-def create_music_agent(state_context: str):
-    """Create the music agent with session context baked into prompt."""
+def create_music_agent(state_context: str, checkpointer=None, model=None):
+    """
+    Create the music agent with session context baked into prompt and checkpointer.
+
+    Args:
+        state_context: Formatted string describing current playback/playlist state.
+        checkpointer: LangGraph checkpointer (AsyncPostgresSaver, MemorySaver, etc).
+        model: Optional pre-built LLM. When None, creates a ChatOpenAI pointed at
+               Kimi K2.5 using env vars. Pass a mock/fake model for testing.
+    """
     system_prompt = SYSTEM_PROMPT_TEMPLATE.format(state_context=state_context)
 
-    # Load OpenAI configuration from environment variables
-    api_key = os.getenv('OPENAI_API_KEY')
-    base_url = os.getenv('OPENAI_BASE_URL')
+    if model is None:
+        api_key = os.getenv("OPENAI_API_KEY")
+        base_url = os.getenv("OPENAI_BASE_URL")
 
-    # Debug logging
-    print(f"[DEBUG] OPENAI_API_KEY: {api_key[:20] if api_key else 'NOT SET'}...")
-    print(f"[DEBUG] OPENAI_BASE_URL: {base_url}")
-    print(f"[DEBUG] Model: kimi-k2-0905-preview")
+        log.debug("LLM config: model=gpt-5-mini, base_url=%s", base_url or "(default)")
 
-    if not api_key:
-        raise ValueError("OPENAI_API_KEY environment variable is not set")
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY environment variable is not set")
 
-    model = ChatOpenAI(
-        model="kimi-k2-0905-preview",
-        api_key=api_key,
-        base_url=base_url if base_url else None,
-        streaming=True
-    )
+        model = ChatOpenAI(
+            model="gpt-5-mini",
+            api_key=api_key,
+            base_url=base_url if base_url else None,
+            streaming=True,
+        )
 
-    # create_agent returns a graph object
+    # create_agent returns a graph object with checkpointer
     agent_graph = create_agent(
         model=model,
         tools=TOOLS,
-        system_prompt=system_prompt
+        system_prompt=system_prompt,
+        checkpointer=checkpointer
     )
 
     return agent_graph
 
 
-async def run_agent_stream(db, message: str, session_id: str, user_id: str = None):
+async def _process_astream(agent_graph, stream_input, config):
     """
-    Run the agent with streaming output using LangChain 1.0 API.
+    Core streaming logic shared between initial chat and resume flows.
 
-    For new conversations:
-    - Session should be created BEFORE calling this function (via /session/create endpoint)
-    - This function only handles the chat logic
+    Processes astream() events, yields SSE events for the frontend, then checks
+    whether the graph was interrupted or completed. Yields either an "interrupt"
+    or "done" terminal event.
+
+    Args:
+        agent_graph: The LangGraph agent graph
+        stream_input: {"messages": [...]} for initial, Command(resume=...) for resume
+        config: LangGraph config with thread_id
+
+    Yields:
+        SSE event dicts: text, thinking, tool_start, tool_end, action, interrupt, done
     """
-    if not user_id:
-        raise ValueError("user_id is required for conversation persistence")
-
-    # Get or create session (should already exist from /session/create)
-    session = await store.get_session(db, session_id, user_id)
-
-    if session is None:
-        # Fallback: Create session if it doesn't exist (shouldn't happen with new flow)
-        print(f"[WARNING] Session {session_id} not found, creating it now (should be pre-created)")
-        session = await store.create_session(db, session_id, user_id)
-
-    # Set session context for tools to access
-    _session_context.set(session)
-
-    # Set DB context so tools can re-fetch fresh state in real-time
-    _db_context.set(db)
-    _user_id_context.set(user_id)
-
-    # Get state context from DB (updated via sync events)
-    state_context = session.get_context_summary() if hasattr(session, 'get_context_summary') else "No state available"
-    print(f"Using DB state: {state_context[:100]}...")  # Log first 100 chars
-
-    # Create agent graph
-    agent_graph = create_music_agent(state_context)
-
-    # Build messages from chat history
-    messages = []
-    for msg in session.chat_history[-10:]:
-        if msg.role == "user":
-            messages.append({"role": "user", "content": msg.content})
-        else:
-            # For new format with parts, extract text content
-            content = msg.content
-            if not content and msg.parts:
-                # Extract text from parts
-                text_parts = [p.get("content", "") for p in msg.parts if p.get("type") == "text"]
-                content = "".join(text_parts)
-
-            messages.append({"role": "assistant", "content": content or ""})
-
-    # Add current message
-    messages.append({"role": "user", "content": message})
-
-    # Stream agent response using LangChain 1.0 API with token-level streaming
     full_response = ""
     active_tool_calls = {}  # Track tool calls: {call_id: tool_name}
 
@@ -423,29 +435,21 @@ async def run_agent_stream(db, message: str, session_id: str, user_id: str = Non
     current_text_part = None  # Accumulate text content
     tool_calls_map = {}  # {call_id: tool_call_dict}
     tool_call_args_buffer = {}  # {call_id: accumulated_args_string}
-
-    from langchain_core.load import dumps
-    print(dumps(messages))
+    emitted_tool_starts = set()  # tool_ids whose tool_start event has been sent
 
     try:
-        # Use stream_mode=["messages", "custom"] for token-level streaming + real-time actions
         async for mode, chunk in agent_graph.astream(
-            {"messages": messages},
+            stream_input,
+            config=config,
             stream_mode=["messages", "custom"]
         ):
-            # DEBUG: Print raw chunk
-            print(f"[RAW CHUNK] mode={mode}, chunk={chunk}")
-
-            # Handle custom mode (real-time actions emitted from tools via get_stream_writer)
+            # Handle custom mode (real-time actions from tools via get_stream_writer)
             if mode == "custom":
-                # Custom chunks are already in {event, data} format from tools
                 yield chunk
                 continue
 
-            # Handle messages mode (existing logic for text/tool events)
-            # LangChain returns chunks as arrays: [message_object, metadata]
+            # Handle messages mode
             msg_obj = None
-
             if isinstance(chunk, (list, tuple)) and len(chunk) > 0:
                 msg_obj = chunk[0]
             elif chunk:
@@ -454,7 +458,29 @@ async def run_agent_stream(db, message: str, session_id: str, user_id: str = Non
             if not msg_obj:
                 continue
 
-            # 1. Extract text content (handle both string and list formats)
+            # 0. Extract reasoning/thinking content
+            # Claude: structured content blocks with type="thinking" (handled below)
+            # Kimi fallback: additional_kwargs.reasoning_content
+            reasoning = None
+            if hasattr(msg_obj, 'additional_kwargs'):
+                reasoning = msg_obj.additional_kwargs.get('reasoning_content')
+            elif isinstance(msg_obj, dict):
+                kwargs = msg_obj.get('kwargs', {})
+                ak = kwargs.get('additional_kwargs', {})
+                reasoning = ak.get('reasoning_content')
+
+            if reasoning:
+                message_parts.append({"type": "thinking", "content": reasoning})
+                yield {"event": "thinking", "data": {"content": reasoning}}
+
+            # 1. Extract text content
+            # Determine message type early — ToolMessages carry tool results,
+            # which must only appear in the tool_end event (tool card OUTPUT),
+            # not duplicated as plain text in the chat body.
+            msg_type = getattr(msg_obj, 'type', None) or (
+                msg_obj.get('type') if isinstance(msg_obj, dict) else None
+            )
+
             content = None
             if hasattr(msg_obj, 'content'):
                 content = msg_obj.content
@@ -462,56 +488,33 @@ async def run_agent_stream(db, message: str, session_id: str, user_id: str = Non
                 kwargs = msg_obj.get('kwargs', {})
                 content = kwargs.get('content') or msg_obj.get('content')
 
-            # Process content (can be string or list of parts)
-            if content:
+            if msg_type != 'tool' and content:
                 if isinstance(content, list):
-                    # Multi-part content (text + thinking)
                     for part in content:
                         if isinstance(part, dict):
                             if part.get("type") == "text":
                                 text_content = part.get("text", "")
                                 if text_content:
                                     full_response += text_content
-
-                                    # Collect for history
                                     if current_text_part is None:
                                         current_text_part = {"type": "text", "content": text_content}
                                         message_parts.append(current_text_part)
                                     else:
                                         current_text_part["content"] += text_content
-
-                                    yield {
-                                        "event": "text",
-                                        "data": {"content": text_content}
-                                    }
+                                    yield {"event": "text", "data": {"content": text_content}}
                             elif part.get("type") == "thinking":
                                 thinking_content = part.get("thinking", "")
                                 if thinking_content:
-                                    # Collect for history
-                                    message_parts.append({
-                                        "type": "thinking",
-                                        "content": thinking_content
-                                    })
-
-                                    yield {
-                                        "event": "thinking",
-                                        "data": {"content": thinking_content}
-                                    }
+                                    message_parts.append({"type": "thinking", "content": thinking_content})
+                                    yield {"event": "thinking", "data": {"content": thinking_content}}
                 elif isinstance(content, str) and content:
-                    # Simple string content
                     full_response += content
-
-                    # Collect for history
                     if current_text_part is None:
                         current_text_part = {"type": "text", "content": content}
                         message_parts.append(current_text_part)
                     else:
                         current_text_part["content"] += content
-
-                    yield {
-                        "event": "text",
-                        "data": {"content": content}
-                    }
+                    yield {"event": "text", "data": {"content": content}}
 
             # 2. Extract tool calls
             tool_calls = None
@@ -522,71 +525,53 @@ async def run_agent_stream(db, message: str, session_id: str, user_id: str = Non
                 tool_calls = kwargs.get('tool_calls')
 
             if tool_calls:
-                # IMPORTANT: Reset current_text_part to create a new text segment after tool calls
-                # This ensures chronological order: text -> tool_call -> text
-                current_text_part = None
-
-                print(f"[DEBUG] Received {len(tool_calls)} tool_call(s) in this chunk")
+                current_text_part = None  # Reset to preserve chronological order
                 for tool_call in tool_calls:
-                    # Handle both dict and object formats
                     if isinstance(tool_call, dict):
                         tool_id = tool_call.get('id')
                         tool_name = tool_call.get('name', '')
                         tool_args = tool_call.get('args', {})
                     else:
-                        # Handle ToolCall object
                         tool_id = getattr(tool_call, 'id', None)
                         tool_name = getattr(tool_call, 'name', '')
                         tool_args = getattr(tool_call, 'args', {})
 
-                    # VALIDATION: Skip malformed tool calls (empty or whitespace-only names)
                     if not tool_name or not tool_name.strip():
-                        print(f"[DEBUG] Skipping malformed tool call: id={tool_id}, name='{tool_name}'")
                         continue
-
-                    # Generate stable ID if missing
                     if not tool_id:
                         tool_id = f"{tool_name}:{hash(str(tool_args))}"
 
-                    # DEDUPLICATION: Update existing tool call if it exists (LangGraph sends multiple chunks)
+                    # Dedup: update existing tool call args if more complete
                     if tool_id in active_tool_calls:
-                        print(f"[DEBUG] Updating existing tool call: {tool_id} with args={tool_args}")
-                        # Find and update the existing tool_call_part
-                        if tool_id in tool_calls_map:
-                            existing_part = tool_calls_map[tool_id]
-                            # Update args if new args are more complete (not empty)
-                            if tool_args and tool_args != {}:
-                                existing_part["args"] = tool_args
-                                print(f"[DEBUG] Updated args for {tool_id}: {tool_args}")
+                        if tool_id in tool_calls_map and tool_args and tool_args != {}:
+                            tool_calls_map[tool_id]["args"] = tool_args
+                            # Emit deferred tool_start now that args are available
+                            if tool_id not in emitted_tool_starts:
+                                emitted_tool_starts.add(tool_id)
+                                yield {"event": "tool_start", "data": {
+                                    "id": tool_id, "tool_name": active_tool_calls[tool_id],
+                                    "args": tool_args
+                                }}
                         continue
 
-                    print(f"[DEBUG] Valid tool call: id={tool_id}, name={tool_name}, args={tool_args}")
-
-                    # Track this tool call
+                    log.info("Tool call: %s(%s)", tool_name, tool_args)
                     active_tool_calls[tool_id] = tool_name
 
-                    # Collect for history
                     tool_call_part = {
-                        "type": "tool_call",
-                        "id": tool_id,
-                        "tool_name": tool_name,
-                        "args": tool_args,
-                        "status": "pending"
+                        "type": "tool_call", "id": tool_id,
+                        "tool_name": tool_name, "args": tool_args, "status": "pending"
                     }
                     tool_calls_map[tool_id] = tool_call_part
                     message_parts.append(tool_call_part)
 
-                    # Emit tool_start event
-                    yield {
-                        "event": "tool_start",
-                        "data": {
-                            "id": tool_id,
-                            "tool_name": tool_name,
-                            "args": tool_args
-                        }
-                    }
+                    # Only emit tool_start when args are populated.
+                    # For streaming parallel calls, args arrive empty first
+                    # and get filled via tool_call_chunks later.
+                    if tool_args and tool_args != {}:
+                        emitted_tool_starts.add(tool_id)
+                        yield {"event": "tool_start", "data": {"id": tool_id, "tool_name": tool_name, "args": tool_args}}
 
-            # 2.5. Process tool_call_chunks to accumulate streaming args
+            # 2.5. Process tool_call_chunks (streaming args accumulation)
             tool_call_chunks = None
             if hasattr(msg_obj, 'tool_call_chunks'):
                 tool_call_chunks = msg_obj.tool_call_chunks
@@ -595,161 +580,202 @@ async def run_agent_stream(db, message: str, session_id: str, user_id: str = Non
                 tool_call_chunks = kwargs.get('tool_call_chunks')
 
             if tool_call_chunks:
-                for chunk in tool_call_chunks:
-                    # Extract chunk data
-                    if isinstance(chunk, dict):
-                        chunk_id = chunk.get('id')
-                        chunk_name = chunk.get('name')
-                        chunk_args = chunk.get('args', '')
-                        chunk_index = chunk.get('index', 0)
+                for tc_chunk in tool_call_chunks:
+                    if isinstance(tc_chunk, dict):
+                        chunk_id = tc_chunk.get('id')
+                        chunk_args = tc_chunk.get('args', '')
+                        chunk_index = tc_chunk.get('index')
                     else:
-                        chunk_id = getattr(chunk, 'id', None)
-                        chunk_name = getattr(chunk, 'name', None)
-                        chunk_args = getattr(chunk, 'args', '')
-                        chunk_index = getattr(chunk, 'index', 0)
+                        chunk_id = getattr(tc_chunk, 'id', None)
+                        chunk_args = getattr(tc_chunk, 'args', '')
+                        chunk_index = getattr(tc_chunk, 'index', None)
 
-                    # Find the tool call by index (chunks usually use index instead of id)
-                    # Map index to the tool call we created earlier
-                    if chunk_index == 0 and len(active_tool_calls) > 0:
-                        # Get the first (or latest) tool call
-                        tool_id = list(active_tool_calls.keys())[-1] if active_tool_calls else None
+                    # Resolve which tool_id this chunk belongs to:
+                    # 1) chunk carries its own id that matches a registered call
+                    # 2) fall back to index-based positional lookup
+                    tool_id = None
+                    if chunk_id and chunk_id in active_tool_calls:
+                        tool_id = chunk_id
+                    elif chunk_index is not None and active_tool_calls:
+                        tool_ids_list = list(active_tool_calls.keys())
+                        if chunk_index < len(tool_ids_list):
+                            tool_id = tool_ids_list[chunk_index]
 
-                        if tool_id and chunk_args:
-                            # Initialize buffer if not exists
-                            if tool_id not in tool_call_args_buffer:
-                                tool_call_args_buffer[tool_id] = ""
+                    if not tool_id or not chunk_args:
+                        continue
 
-                            # Accumulate args string
-                            tool_call_args_buffer[tool_id] += chunk_args
+                    if tool_id not in tool_call_args_buffer:
+                        tool_call_args_buffer[tool_id] = ""
+                    tool_call_args_buffer[tool_id] += chunk_args
 
-                            # Try to parse accumulated JSON
-                            try:
-                                import json
-                                parsed_args = json.loads(tool_call_args_buffer[tool_id])
-
-                                # Update the tool_call_part with parsed args
-                                if tool_id in tool_calls_map:
-                                    tool_calls_map[tool_id]["args"] = parsed_args
-                                    print(f"[DEBUG] Parsed complete args for {tool_id}: {parsed_args}")
-
-                                    # Emit updated tool_start with complete args
-                                    yield {
-                                        "event": "tool_start",
-                                        "data": {
-                                            "id": tool_id,
-                                            "tool_name": tool_calls_map[tool_id]["tool_name"],
-                                            "args": parsed_args
-                                        }
-                                    }
-                            except json.JSONDecodeError:
-                                # Not yet complete JSON, keep accumulating
-                                print(f"[DEBUG] Accumulating args for {tool_id}: '{tool_call_args_buffer[tool_id]}'")
+                    try:
+                        parsed_args = json.loads(tool_call_args_buffer[tool_id])
+                        if tool_id in tool_calls_map:
+                            tool_calls_map[tool_id]["args"] = parsed_args
+                            # Args are complete — emit tool_start if not already sent
+                            if tool_id not in emitted_tool_starts:
+                                emitted_tool_starts.add(tool_id)
+                                yield {"event": "tool_start", "data": {
+                                    "id": tool_id, "tool_name": tool_calls_map[tool_id]["tool_name"],
+                                    "args": parsed_args
+                                }}
+                    except json.JSONDecodeError:
+                        pass
 
             # 3. Extract tool results (ToolMessage)
-            msg_type = None
-            if hasattr(msg_obj, 'type'):
-                msg_type = msg_obj.type
-            elif isinstance(msg_obj, dict):
-                msg_type = msg_obj.get('type')
-
+            # msg_type already resolved above (before text extraction)
             if msg_type == 'tool':
-                # This is a ToolMessage with execution result
-                tool_call_id = None
-                result_content = None
-
-                if hasattr(msg_obj, 'tool_call_id'):
-                    tool_call_id = msg_obj.tool_call_id
-                    result_content = msg_obj.content
-                elif isinstance(msg_obj, dict):
-                    tool_call_id = msg_obj.get('tool_call_id')
-                    result_content = msg_obj.get('content')
+                tool_call_id = getattr(msg_obj, 'tool_call_id', None) or (msg_obj.get('tool_call_id') if isinstance(msg_obj, dict) else None)
+                result_content = getattr(msg_obj, 'content', None) or (msg_obj.get('content') if isinstance(msg_obj, dict) else None)
 
                 if tool_call_id:
                     tool_name = active_tool_calls.get(tool_call_id, "unknown")
+                    is_error = isinstance(result_content, str) and "error" in result_content.lower()
 
-                    # Determine if it's an error
-                    is_error = False
-                    if isinstance(result_content, str):
-                        result_lower = result_content.lower()
-                        is_error = (
-                            result_lower.startswith("error") or
-                            "error" in result_lower
-                        )
+                    # Safety net: ensure tool_start was emitted before tool_end.
+                    # Covers tools with genuinely empty args, or edge cases where
+                    # streaming chunks didn't trigger emission.
+                    if tool_call_id not in emitted_tool_starts:
+                        emitted_tool_starts.add(tool_call_id)
+                        args = tool_calls_map.get(tool_call_id, {}).get("args", {})
+                        yield {"event": "tool_start", "data": {
+                            "id": tool_call_id, "tool_name": tool_name, "args": args
+                        }}
 
-                    # Update tool_calls_map for history
                     if tool_call_id in tool_calls_map:
                         tool_calls_map[tool_call_id]["result"] = str(result_content) if result_content else ""
                         tool_calls_map[tool_call_id]["status"] = "error" if is_error else "success"
 
-                    # Emit tool_end event
-                    yield {
-                        "event": "tool_end",
-                        "data": {
-                            "id": tool_call_id,
-                            "tool_name": tool_name,
-                            "result": str(result_content) if result_content else "",
-                            "status": "error" if is_error else "success"
-                        }
-                    }
-
-                    # Remove from active tracking
+                    yield {"event": "tool_end", "data": {
+                        "id": tool_call_id, "tool_name": tool_name,
+                        "result": str(result_content) if result_content else "",
+                        "status": "error" if is_error else "success"
+                    }}
                     active_tool_calls.pop(tool_call_id, None)
 
     except Exception as e:
-        print(f"Agent streaming error: {e}")
-        import traceback
-        traceback.print_exc()
+        log.error("Agent streaming error: %s", e, exc_info=True)
         error_msg = "Sorry, I had a little hiccup. Try again? 🎧"
         full_response = error_msg
-        yield {
-            "event": "text",
-            "data": {"content": error_msg}
-        }
+        yield {"event": "text", "data": {"content": error_msg}}
 
-    # If no response was generated, use fallback
+    # -------------------------------------------------------------------------
+    # After astream ends: check if graph paused (interrupt) or completed (done)
+    # -------------------------------------------------------------------------
+    try:
+        graph_state = await agent_graph.aget_state(config)
+    except Exception as e:
+        log.error("Failed to read graph state: %s", e)
+        graph_state = None
+
+    if graph_state and graph_state.tasks and graph_state.tasks[0].interrupts:
+        # Unexpected interrupt — tools should no longer call interrupt().
+        # Log a warning but treat it as done to avoid hanging the frontend.
+        interrupts = graph_state.tasks[0].interrupts
+        log.warning(
+            "Unexpected graph interrupt (%d pending): %s — tools should use "
+            "_emit_action (fire-and-forget), not interrupt()",
+            len(interrupts), interrupts[-1].value,
+        )
+
+    # Graph completed — yield done with accumulated parts & response
     if not full_response:
         fallback_msg = "I'm here to help with your music!"
         full_response = fallback_msg
-        yield {
-            "event": "text",
-            "data": {"content": fallback_msg}
-        }
+        yield {"event": "text", "data": {"content": fallback_msg}}
 
-    # Add messages to history with complete structure
-    session.add_message("user", content=message)
-    print(f"[DEBUG] Added user message: {message[:50]}...")
-
-    # Save agent message with parts (or fallback to content if no parts)
-    if message_parts:
-        print(f"[DEBUG] Collected {len(message_parts)} message parts")
-        print(f"[DEBUG] Message parts structure: {[p.get('type') for p in message_parts]}")
-        session.add_message("agent", parts=message_parts)
-    else:
-        # Fallback to simple text if no parts were collected
-        print(f"[DEBUG] No message parts collected, using full_response: {full_response[:50]}...")
-        session.add_message("agent", content=full_response)
-
-    print(f"[DEBUG] Session now has {len(session.chat_history)} messages")
-
-    # Persist state (title generation is async in background)
-    print(f"[DEBUG] Calling update_session for session {session.session_id}")
-    await store.update_session(db, session, user_id)
-    print("[DEBUG] update_session completed")
-
-    # Send completion signal with updated state
-    # Note: Actions are now streamed in real-time via "custom" stream mode, so we no longer include them here
     yield {
         "event": "done",
-        "data": {
-            "session_id": session.session_id,
-            "actions": [],  # Actions are now streamed in real-time
-            "state": {
-                "current_track": session.current_track.model_dump() if session.current_track else None,
-                "playlist": [t.model_dump() for t in session.playlist],
-                "is_playing": session.is_playing,
-                "playback_position": session.playback_position
-            }
-        }
+        "data": {"message_parts": message_parts, "full_response": full_response}
     }
+
+
+async def run_agent_stream(db, message: str, session_id: str, user_id: str = None):
+    """
+    Run the agent with streaming output using LangGraph with AsyncPGCheckpointer.
+
+    Tools emit MusicKit actions as SSE events (fire-and-forget) — the graph
+    always completes in a single pass without interrupt/resume cycles.
+    """
+    if not user_id:
+        raise ValueError("user_id is required for conversation persistence")
+
+    from apps.backend.state import store
+
+    # Get or create session (should already exist from /session/create)
+    session = await store.get_session(db, session_id, user_id)
+    if session is None:
+        log.warning("Session %s not found, creating now (should be pre-created)", session_id[:8])
+        session = await store.create_session(db, session_id, user_id)
+
+    # Set ContextVars so tools can access session state
+    _session_context.set(session)
+    _db_context.set(db)
+    _user_id_context.set(user_id)
+
+    state_context = session.get_context_summary() if hasattr(session, 'get_context_summary') else "No state available"
+    log.debug("Session state: %s", state_context[:100])
+
+    checkpointer = await get_checkpointer()
+    agent_graph = create_music_agent(state_context, checkpointer=checkpointer)
+    config = {"configurable": {"thread_id": session_id}}
+
+    log.info("Agent processing: %s", message[:80])
+
+    # Persist user message immediately
+    session.add_message("user", content=message)
+    from apps.backend.database import AsyncSessionLocal
+    async with AsyncSessionLocal() as fresh_db:
+        try:
+            await store.update_session(fresh_db, session, user_id)
+        except Exception as e:
+            log.error("Failed to persist user message for session %s: %s", session_id[:8], e)
+
+    # Stream events from the shared processing core.
+    # Tools emit MusicKit actions as SSE events (fire-and-forget, no interrupt).
+    # The graph always completes in a single pass — no resume needed.
+    async for event in _process_astream(
+        agent_graph,
+        {"messages": [{"role": "user", "content": message}]},
+        config,
+    ):
+        event_type = event.get("event")
+
+        if event_type == "done":
+            # Graph completed — persist agent message (user message already saved above)
+            done_meta = event.get("data", {})
+            message_parts = done_meta.get("message_parts", [])
+            full_response = done_meta.get("full_response", "")
+
+            if message_parts:
+                session.add_message("agent", parts=message_parts)
+            else:
+                session.add_message("agent", content=full_response)
+
+            log.info("Persisting session %s (%d messages)", session_id[:8], len(session.chat_history))
+            async with AsyncSessionLocal() as fresh_db:
+                try:
+                    await store.update_session(fresh_db, session, user_id)
+                except Exception as e:
+                    log.error("Failed to persist session %s: %s", session_id[:8], e)
+
+            # Yield the final "done" event for the frontend
+            yield {
+                "event": "done",
+                "data": {
+                    "session_id": session.session_id,
+                    "actions": [],
+                    "state": {
+                        "current_track": session.current_track.model_dump() if session.current_track else None,
+                        "playlist": [t.model_dump() for t in session.playlist],
+                        "is_playing": session.is_playing,
+                        "playback_position": session.playback_position
+                    }
+                }
+            }
+            return
+
+        # All other events (text, thinking, tool_start, tool_end, action) — pass through
+        yield event
 
 

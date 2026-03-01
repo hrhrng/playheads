@@ -74,14 +74,19 @@ class SessionState(BaseModel):
         return "\n".join(lines)
 
 
+import json
+import logging
+from datetime import datetime
+
 from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from .models import Conversation, ConversationState, Profile
 from .database import AsyncSessionLocal
 from .title_generator import generate_conversation_title
-from datetime import datetime
-import json
+
+log = logging.getLogger("playhead.state")
 
 class SessionStore:
     """Database-backed session store with intelligent session lifecycle management."""
@@ -140,7 +145,7 @@ class SessionStore:
 
             return None
         except Exception as e:
-            print(f"Error getting session: {e}")
+            log.error("Error getting session %s: %s", session_id[:8], e)
             return None
 
     async def create_session(self, db: AsyncSession, session_id: str, user_id: str) -> SessionState:
@@ -190,7 +195,7 @@ class SessionStore:
 
         except Exception as e:
             await db.rollback()
-            print(f"Error creating session: {e}")
+            log.error("Error creating session %s: %s", session_id[:8], e)
             # Try to recover by just getting it
             session = await self.get_session(db, session_id, user_id)
             if session:
@@ -236,24 +241,8 @@ class SessionStore:
             state: SessionState to persist
             user_id: User UUID for permission check
         """
-        # from sqlalchemy.dialects.postgresql import insert  <-- Removed local import
-
         session_uuid = uuid.UUID(state.session_id)
-
-        print(f"[DEBUG update_session] Session ID: {state.session_id}")
-        print(f"[DEBUG update_session] Chat history length: {len(state.chat_history)}")
-
-        # Prepare conversation state data
         messages_data = [m.model_dump(mode='json') for m in state.chat_history]
-        print(f"[DEBUG update_session] Serialized {len(messages_data)} messages")
-
-        # Debug: Show last message structure
-        if messages_data:
-            last_msg = messages_data[-1]
-            print(f"[DEBUG update_session] Last message: role={last_msg.get('role')}, has_parts={bool(last_msg.get('parts'))}, has_content={bool(last_msg.get('content'))}")
-            if last_msg.get('parts'):
-                import json
-                print(f"[DEBUG update_session] Last message parts structure: {json.dumps(last_msg.get('parts'), indent=2)[:500]}...")
 
         context = {
             "is_playing": state.is_playing,
@@ -284,8 +273,6 @@ class SessionStore:
 
             last_message_at = last_msg.timestamp
 
-        # Upsert conversation state
-        print(f"[DEBUG update_session] Upserting conversation state...")
         try:
             stmt = insert(ConversationState).values(
                 conversation_id=session_uuid,
@@ -301,9 +288,7 @@ class SessionStore:
                 }
             )
             await db.execute(stmt)
-            print(f"[DEBUG update_session] ConversationState upsert executed")
 
-            # Update Conversation metadata
             update_values = {
                 'message_count': message_count,
                 'last_message_preview': last_message_preview,
@@ -311,23 +296,15 @@ class SessionStore:
                 'updated_at': datetime.now()
             }
 
-            print(f"[DEBUG update_session] Updating Conversation metadata: message_count={message_count}, preview='{last_message_preview[:50] if last_message_preview else None}'")
-
-            # Apply updates to Conversation (without title first)
             conv_update_stmt = (
                 update(Conversation)
                 .where(Conversation.id == session_uuid)
                 .values(**update_values)
             )
             await db.execute(conv_update_stmt)
-            print(f"[DEBUG update_session] Conversation update executed")
-
             await db.commit()
-            print(f"[DEBUG update_session] Database commit successful")
         except Exception as e:
-            print(f"[ERROR update_session] Database operation failed: {e}")
-            import traceback
-            traceback.print_exc()
+            log.error("Failed to update session %s: %s", state.session_id[:8], e, exc_info=True)
             raise
 
         # Generate title asynchronously if needed (don't block)
@@ -346,7 +323,7 @@ class SessionStore:
         try:
             # Generate title
             title = await generate_conversation_title(messages_data)
-            print(f"Generated title asynchronously: {title}")
+            log.info("Generated title: %s", title)
 
             # Update in database with new connection
             async with AsyncSessionLocal() as db:
@@ -359,7 +336,7 @@ class SessionStore:
                 await db.commit()
 
         except Exception as e:
-            print(f"Background title generation failed: {e}")
+            log.warning("Background title generation failed: %s", e)
             # Set default title for first message
             if message_count == 2:
                 try:
@@ -372,7 +349,7 @@ class SessionStore:
                         await db.execute(update_stmt)
                         await db.commit()
                 except Exception as fallback_error:
-                    print(f"Failed to set default title: {fallback_error}")
+                    log.warning("Failed to set default title: %s", fallback_error)
 
 # Initialize store (stateless wrapper now)
 store = SessionStore()
