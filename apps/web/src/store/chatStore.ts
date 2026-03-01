@@ -285,13 +285,20 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       });
     };
 
+    // Line buffer: accumulates partial lines across TCP chunks to handle
+    // fragmentation — a chunk boundary can land mid-line, so we only
+    // process complete lines (terminated by '\n').
+    let lineBuffer = '';
+
     try {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n');
+        lineBuffer += decoder.decode(value, { stream: true });
+        const lines = lineBuffer.split('\n');
+        // The last element may be an incomplete line — keep it in the buffer
+        lineBuffer = lines.pop() ?? '';
 
         for (const line of lines) {
           // Parse SSE format: event: <type>\ndata: <json>
@@ -398,7 +405,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               currentEvent = null;
               currentData = '';
             } catch (e) {
+              // JSON parse failed — likely a corrupted/partial frame, reset SSE state
               console.error('Failed to parse SSE data:', e, currentData);
+              currentEvent = null;
+              currentData = '';
             }
           }
         }

@@ -1,50 +1,105 @@
-.PHONY: dev dev-web dev-backend install install-web install-backend clean help
+.PHONY: dev dev-web dev-backend install install-web install-backend clean help \
+       test test-backend test-web lint lint-web type-check ci
 
-# 默认目标：同时启动前后端
+# =============================================================================
+# Development
+# =============================================================================
+
 dev:
-	@echo "🚀 Starting frontend and backend..."
+	@echo "Starting frontend and backend..."
 	@make -j2 dev-web dev-backend
 
-# 启动前端
 dev-web:
-	@echo "🌐 Starting web frontend..."
-	cd apps/web && rm -rf node_modules/.vite && npm run dev
+	@echo "Starting web frontend..."
+	rm -rf apps/web/node_modules/.vite && npm run dev -w apps/web
 
-# 启动后端
 dev-backend:
-	@echo "🔧 Starting backend..."
+	@echo "Starting backend..."
 	uv run --package backend uvicorn apps.backend.main:app --port 8001 --reload
 
-# 安装所有依赖
+# =============================================================================
+# Install
+# =============================================================================
+
 install: install-web install-backend
-	@echo "✅ All dependencies installed!"
+	@echo "All dependencies installed!"
 
-# 安装前端依赖
 install-web:
-	@echo "📦 Installing web dependencies..."
-	npm install
+	@echo "Installing web dependencies..."
+	npm install -w apps/web
 
-# 安装后端依赖
 install-backend:
-	@echo "📦 Installing backend dependencies..."
-	uv sync
+	@echo "Installing backend dependencies..."
+	uv sync --project apps/backend --extra dev
 
-# 清理缓存
+# =============================================================================
+# Test
+# =============================================================================
+
+test: test-backend test-web
+
+test-backend:
+	uv run --project apps/backend pytest apps/backend/ -v
+
+test-web:
+	npm test -w apps/web
+
+# =============================================================================
+# Lint & Type-check
+# =============================================================================
+
+lint: lint-web
+
+lint-web:
+	npm run lint -w apps/web
+
+type-check:
+	npm run type-check -w apps/web
+
+# =============================================================================
+# CI (mirrors GitHub Actions)
+# =============================================================================
+
+ci: lint type-check test
+
+# =============================================================================
+# Clean
+# =============================================================================
+
 clean:
-	@echo "🧹 Cleaning caches..."
+	@echo "Cleaning caches..."
 	rm -rf apps/web/node_modules/.vite
 	rm -rf apps/web/.next
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
-	@echo "✅ Cleaned!"
+	@echo "Cleaned!"
 
-# 帮助信息
+# =============================================================================
+# Help
+# =============================================================================
+
 help:
 	@echo "Available commands:"
-	@echo "  make dev          - Start both frontend and backend"
-	@echo "  make dev-web      - Start frontend only"
-	@echo "  make dev-backend  - Start backend only"
-	@echo "  make install      - Install all dependencies"
-	@echo "  make install-web  - Install frontend dependencies"
-	@echo "  make install-backend - Install backend dependencies"
-	@echo "  make clean        - Clean caches"
-	@echo "  make help         - Show this help"
+	@echo ""
+	@echo "  Development:"
+	@echo "    make dev            - Start both frontend and backend"
+	@echo "    make dev-web        - Start frontend only"
+	@echo "    make dev-backend    - Start backend only"
+	@echo ""
+	@echo "  Install:"
+	@echo "    make install        - Install all dependencies"
+	@echo "    make install-web    - Install frontend dependencies"
+	@echo "    make install-backend - Install backend dependencies"
+	@echo ""
+	@echo "  Test:"
+	@echo "    make test           - Run all tests (backend + frontend)"
+	@echo "    make test-backend   - Run backend tests only"
+	@echo "    make test-web       - Run frontend tests only"
+	@echo ""
+	@echo "  Quality:"
+	@echo "    make lint           - Lint frontend"
+	@echo "    make type-check     - TypeScript type checking"
+	@echo "    make ci             - Full CI pipeline (lint + type-check + test)"
+	@echo ""
+	@echo "  Other:"
+	@echo "    make clean          - Clean caches"
+	@echo "    make help           - Show this help"

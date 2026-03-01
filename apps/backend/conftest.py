@@ -6,7 +6,7 @@ Pytest configuration — ensure project root is in sys.path so that
 import os
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from dotenv import load_dotenv
@@ -94,3 +94,57 @@ def mock_ddgs():
 
     with patch("apps.backend.agent.DDGS", FakeDDGS):
         yield
+
+
+# =============================================================================
+# API test fixtures — httpx client & mocked SessionStore
+# =============================================================================
+
+@pytest.fixture
+async def api_client():
+    """Async httpx client wired to the FastAPI app via ASGITransport.
+
+    Overrides Depends(get_db) with a lightweight AsyncMock so that
+    endpoint tests never touch a real database.
+    """
+    from httpx import ASGITransport, AsyncClient
+    from apps.backend.main import app
+    from apps.backend.database import get_db
+
+    mock_db = AsyncMock()
+    mock_db.execute = AsyncMock()
+    mock_db.commit = AsyncMock()
+    mock_db.rollback = AsyncMock()
+    mock_db.close = AsyncMock()
+
+    app.dependency_overrides[get_db] = lambda: mock_db
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        # Expose the mock DB on the client for tests that need custom results
+        client.mock_db = mock_db
+        yield client
+
+    app.dependency_overrides.pop(get_db, None)
+
+
+@pytest.fixture
+def mock_store():
+    """Patch the global `store` object in apps.backend.state.
+
+    Provides pre-wired AsyncMock methods for the three core operations:
+      - get_session   → returns None by default
+      - create_session → returns a default SessionState
+      - update_session → no-op
+    Tests can override return values via mock_store.<method>.return_value.
+    """
+    from apps.backend.state import SessionState
+
+    with patch("apps.backend.state.store") as patched:
+        patched.get_session = AsyncMock(return_value=None)
+        patched.create_session = AsyncMock(
+            side_effect=lambda db, sid, uid: SessionState(session_id=sid)
+        )
+        patched.update_session = AsyncMock()
+        yield patched

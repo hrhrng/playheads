@@ -268,42 +268,65 @@ async def get_state(session_id: Optional[str] = None, user_id: Optional[str] = N
 
 @app.post("/state/sync")
 async def sync_state(request: SyncRequest, db: AsyncSession = Depends(get_db)):
-    """Sync frontend state to backend."""
-    from apps.backend.state import store, TrackInfo
-    from datetime import datetime
+    """
+    Sync frontend playback state (context) to backend.
+
+    IMPORTANT: Only updates the `context` and `last_synced_at` columns.
+    Never touches `messages` — messages are persisted exclusively by
+    run_agent_stream via /chat. This prevents a race condition where
+    state/sync could overwrite agent messages written mid-stream.
+    """
+    import uuid as _uuid
+    from sqlalchemy import update as sa_update
+    from apps.backend.models import ConversationState, Conversation
 
     if not request.session_id:
-         return {"error": "Session ID required"}
-
-    # 1. Fetch existing session (use user_id if provided)
-    session = await store.get_session(db, request.session_id, user_id=request.user_id)
-
-    # If no session exists, skip sync silently
-    if not session:
-        return {"status": "no_session", "session_id": request.session_id}
-
-    # 2. Update fields from request
-    if request.current_track:
-        session.current_track = TrackInfo(**request.current_track)
-    if request.playlist is not None:
-        session.playlist = [TrackInfo(**t) for t in request.playlist]
-    if request.is_playing is not None:
-        session.is_playing = request.is_playing
-    if request.playback_position is not None:
-        session.playback_position = request.playback_position
-
-    session.last_sync = datetime.now()
-
-    # 3. Persist (require user_id for permission check)
+        return {"error": "Session ID required"}
     if not request.user_id:
         return {"error": "user_id required for sync"}
 
-    await store.update_session(db, session, request.user_id)
+    try:
+        conv_uuid = _uuid.UUID(request.session_id)
+        user_uuid = _uuid.UUID(request.user_id)
+    except ValueError:
+        raise HTTPException(400, "Invalid ID format")
+
+    # Permission check: verify conversation belongs to this user
+    from sqlalchemy import select
+    ownership = await db.execute(
+        select(Conversation.id).where(
+            Conversation.id == conv_uuid,
+            Conversation.user_id == user_uuid,
+        )
+    )
+    if not ownership.scalar_one_or_none():
+        return {"status": "no_session", "session_id": request.session_id}
+
+    # Build context dict — only include fields the frontend actually sent
+    context_update: dict = {}
+    if request.current_track:
+        context_update["current_track"] = request.current_track
+    if request.playlist is not None:
+        context_update["playlist"] = request.playlist
+    if request.is_playing is not None:
+        context_update["is_playing"] = request.is_playing
+    if request.playback_position is not None:
+        context_update["playback_position"] = request.playback_position
+
+    # Targeted update: only context + last_synced_at, never messages
+    now = datetime.now()
+    stmt = (
+        sa_update(ConversationState)
+        .where(ConversationState.conversation_id == conv_uuid)
+        .values(context=context_update, last_synced_at=now)
+    )
+    await db.execute(stmt)
+    await db.commit()
 
     return {
         "status": "synced",
-        "session_id": session.session_id,
-        "last_sync": session.last_sync.isoformat()
+        "session_id": request.session_id,
+        "last_sync": now.isoformat(),
     }
 
 
