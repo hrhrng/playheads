@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { classifyError, showErrorToast } from '../utils/errorHandling';
 import { ErrorCategory } from '../types/errors';
 import { API_BASE } from '../config/api';
+import type { MusicKitConfig } from '../types/musicKit';
 import type {
   Track,
   PlaybackTime,
@@ -320,8 +321,8 @@ export default function useAppleMusic({
         }
 
         console.log('[MusicKit] Configuring MusicKit...');
-        const configOptions: Record<string, unknown> = {
-          developerToken: developerTokenRef.current,
+        const configOptions: MusicKitConfig & { musicUserToken?: string } = {
+          developerToken: developerTokenRef.current!,
           app: { name: 'Playhead', build: '1.0.0' }
         };
 
@@ -331,7 +332,7 @@ export default function useAppleMusic({
           console.log('[MusicKit] Restoring authorization with stored user token');
         }
 
-        const mk = await window.MusicKit.configure(configOptions) as MusicKitInstance;
+        const mk = await window.MusicKit.configure(configOptions as MusicKitConfig) as MusicKitInstance;
         console.log('[MusicKit] Configured successfully, isAuthorized:', mk.isAuthorized);
 
         setMusicKit(mk);
