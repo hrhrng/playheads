@@ -4,14 +4,15 @@
  */
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import type { Track } from '../types';
+import { useChatStore } from '../store/chatStore';
+import type { Track, FormattedTrack } from '../types';
 
 interface PlaylistSidebarProps {
   /** Currently playing track */
   currentTrack: Track | null;
   /** Whether music is currently playing */
   isPlaying: boolean;
-  /** Queue of tracks to play */
+  /** Queue of tracks to play (live from MusicKit) */
   queue: Track[];
   /** Callback when a track is selected to play */
   onPlayTrack?: (index: number) => void;
@@ -25,9 +26,15 @@ interface PlaylistSidebarProps {
   width: number;
   /** Callback when width changes */
   onWidthChange?: (width: number) => void;
+  /** Static playlist for a non-playing conversation (from backend) */
+  viewedPlaylist?: FormattedTrack[];
+  /** Whether the viewed conversation owns playback */
+  isViewingPlayingConversation?: boolean;
+  /** Callback to start playback from a non-playing conversation's playlist */
+  onStartPlaybackFromConversation?: (index: number) => void;
 }
 
-interface FormattedTrack {
+interface FormattedSidebarTrack {
   id: string;
   title: string;
   artist: string;
@@ -46,8 +53,12 @@ export const PlaylistSidebar = ({
   toggleCollapse,
   showQueue = true,
   width,
-  onWidthChange
+  onWidthChange,
+  viewedPlaylist = [],
+  isViewingPlayingConversation = true,
+  onStartPlaybackFromConversation
 }: PlaylistSidebarProps): React.JSX.Element => {
+  const isLoadingHistory = useChatStore(s => s.isLoadingHistory);
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const startX = useRef(0);
@@ -105,8 +116,12 @@ export const PlaylistSidebar = ({
     return url.replace('{w}', size.toString()).replace('{h}', size.toString());
   };
 
-  const queue: FormattedTrack[] = (propQueue && propQueue.length > 0)
-    ? propQueue.map((item): FormattedTrack => ({
+  // Choose between live MusicKit queue and static viewed playlist
+  // Priority: live queue (if viewing playing conversation AND queue has items) > viewedPlaylist from backend
+  const hasLiveQueue = isViewingPlayingConversation && propQueue && propQueue.length > 0;
+
+  const queue: FormattedSidebarTrack[] = hasLiveQueue
+    ? propQueue.map((item): FormattedSidebarTrack => ({
         id: item.id || Math.random().toString(),
         title: (item as any).title || (item.attributes?.name as string) || 'Unknown Title',
         artist: (item as any).artistName || (item.attributes?.artistName as string) || 'Unknown Artist',
@@ -116,7 +131,25 @@ export const PlaylistSidebar = ({
           (item.attributes?.artwork as any)?.url
         )
       }))
-    : [];
+    : viewedPlaylist.map((item): FormattedSidebarTrack => ({
+        id: item.id,
+        title: item.name || 'Unknown Title',
+        artist: item.artist || 'Unknown Artist',
+        cover: item.artwork_url || 'https://placehold.co/100'
+      }));
+
+  const handleTrackClick = (index: number) => {
+    if (!isViewingPlayingConversation && onStartPlaybackFromConversation) {
+      // Viewing a different conversation — load its playlist into MusicKit
+      onStartPlaybackFromConversation(index);
+    } else if (hasLiveQueue && onPlayTrack) {
+      // Viewing playing conversation with live queue — jump to track
+      onPlayTrack(index);
+    } else if (onStartPlaybackFromConversation) {
+      // Viewing playing conversation but live queue not ready — start from backend playlist
+      onStartPlaybackFromConversation(index);
+    }
+  };
 
   // Use dynamic width instead of fixed Tailwind classes
   const sidebarWidth = collapsed ? 96 : width; // 96px = w-24
@@ -206,22 +239,35 @@ export const PlaylistSidebar = ({
             {showQueue && (
               <div className="flex-1 overflow-y-auto space-y-2 px-4 pb-4">
                 <h3 className="text-[10px] font-medium text-gemini-subtext uppercase tracking-widest mb-2 px-2">Up Next</h3>
-                {queue.map((track, index) => (
-                  <div
-                    key={track.id}
-                    onClick={() => onPlayTrack && onPlayTrack(index)}
-                    className="flex items-center gap-3 p-2 rounded-xl hover:bg-gemini-bg cursor-pointer group transition-colors"
-                  >
-                    <div className="w-10 h-10 rounded-lg bg-gray-200 overflow-hidden relative shrink-0">
-                      <img src={track.cover} alt={track.title} className="w-full h-full object-cover" />
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+                {isLoadingHistory ? (
+                  /* Skeleton placeholders */
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <div key={i} className="flex items-center gap-3 p-2 animate-pulse">
+                      <div className="w-10 h-10 rounded-lg bg-gray-200 shrink-0" />
+                      <div className="flex-1 min-w-0 space-y-2">
+                        <div className="h-3 bg-gray-200 rounded-full w-3/4" />
+                        <div className="h-2.5 bg-gray-100 rounded-full w-1/2" />
+                      </div>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[13px] font-medium text-gemini-text truncate leading-snug">{track.title}</div>
-                      <div className="text-[11px] text-gemini-subtext truncate">{track.artist}</div>
+                  ))
+                ) : (
+                  queue.map((track, index) => (
+                    <div
+                      key={track.id}
+                      onClick={() => handleTrackClick(index)}
+                      className="flex items-center gap-3 p-2 rounded-xl hover:bg-gemini-bg cursor-pointer group transition-colors"
+                    >
+                      <div className="w-10 h-10 rounded-lg bg-gray-200 overflow-hidden relative shrink-0">
+                        <img src={track.cover} alt={track.title} className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[13px] font-medium text-gemini-text truncate leading-snug">{track.title}</div>
+                        <div className="text-[11px] text-gemini-subtext truncate">{track.artist}</div>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             )}
           </div>

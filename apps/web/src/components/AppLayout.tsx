@@ -10,6 +10,8 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { DeleteConfirmDialog } from './DeleteConfirmDialog';
+import { UserSettingsPopover } from './UserSettingsPopover';
+import { SettingsModal } from './SettingsModal';
 import { useNavSidebarState } from '../hooks/useNavSidebarState';
 import { API_BASE } from '../config/api';
 import type { Conversation } from '../types';
@@ -33,6 +35,16 @@ interface AppLayoutProps {
   conversations?: Conversation[];
   /** ID of the currently active conversation */
   activeConversationId?: string | null;
+  /** User email for settings popover */
+  userEmail?: string;
+  /** User display name */
+  userName?: string;
+  /** Logout handler */
+  onLogout?: () => void;
+  /** Apple Music connection handler */
+  onConnectAppleMusic?: () => void;
+  /** Whether Apple Music is linked */
+  isAppleLinked?: boolean;
 }
 
 /**
@@ -48,12 +60,18 @@ export const AppLayout = ({
   onPinConversation,
   onRenameConversation,
   conversations = [],
-  activeConversationId = null
+  activeConversationId = null,
+  userEmail = '',
+  userName = 'User',
+  onLogout,
+  onConnectAppleMusic,
+  isAppleLinked,
 }: AppLayoutProps): React.JSX.Element => {
   // Use persisted state for nav sidebar to survive page navigation
   const { expanded, setExpanded, width, setWidth, COLLAPSED_WIDTH } = useNavSidebarState();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState<boolean>(false);
   const [conversationToDelete, setConversationToDelete] = useState<Conversation | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Rename state
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -328,15 +346,20 @@ export const AppLayout = ({
           )}
         </div>
 
-        {/* Bottom section: User info */}
+        {/* Bottom section: User info with settings popover */}
         <div className="mt-auto flex flex-col gap-2 mb-2 px-4">
           <div className="p-3 flex items-center overflow-hidden whitespace-nowrap">
             <div className="w-6 flex justify-center shrink-0">
-              <div className="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold text-xs shrink-0">XY</div>
+              <UserSettingsPopover
+                userEmail={userEmail}
+                userName={userName}
+                onLogout={onLogout || (() => {})}
+                onOpenSettings={() => setSettingsOpen(true)}
+              />
             </div>
             <div className={`ml-3 flex flex-col text-sm transition-all duration-300 ${expanded ? 'opacity-100 flex-1' : 'opacity-0 w-0 ml-0 overflow-hidden'}`}>
-              <span className="font-medium text-gemini-text">Xiaoyang</span>
-              <span className="text-[10px] text-gemini-subtext">Free Plan</span>
+              <span className="font-medium text-gemini-text">{userName}</span>
+              <span className="text-[10px] text-gemini-subtext truncate">{userEmail}</span>
             </div>
           </div>
         </div>
@@ -360,6 +383,14 @@ export const AppLayout = ({
         onConfirm={handleConfirmDelete}
         onCancel={handleCancelDelete}
         conversationTitle={conversationToDelete?.title}
+      />
+
+      {/* Settings Modal */}
+      <SettingsModal
+        isOpen={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        onConnectAppleMusic={onConnectAppleMusic}
+        isAppleLinked={isAppleLinked}
       />
 
     </div>
