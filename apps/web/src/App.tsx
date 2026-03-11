@@ -556,10 +556,20 @@ function App() {
   // Render
   // ============================================================================
 
-  const isLoggedIn = !!session;
+  // Dev mode: skip auth with ?dev=1
+  const isDev = import.meta.env.DEV && new URLSearchParams(window.location.search).has('dev');
+  const devSession: SupabaseSession = {
+    access_token: 'dev',
+    refresh_token: 'dev',
+    expires_in: 99999,
+    token_type: 'bearer',
+    user: { id: 'dev-user', email: 'dev@playhead.local' },
+  };
+  const effectiveSession = isDev ? devSession : session;
+  const isLoggedIn = !!effectiveSession;
 
   // Loading screen
-  if (isInitializing || (isLoggedIn && checkingLink)) {
+  if (!isDev && (isInitializing || (isLoggedIn && checkingLink))) {
     return <LoadingScreen />;
   }
 
@@ -587,7 +597,7 @@ function App() {
       <Routes>
         <Route path="/" element={
           <HomeRoute
-            session={session}
+            session={effectiveSession}
             conversations={conversations}
             onDeleteConversation={handleDeleteConversation}
             onPinConversation={handlePinConversation}
@@ -602,7 +612,8 @@ function App() {
             executeAgentActions={executeAgentActions}
             fetchConversations={fetchConversations}
             onShowAppleMusicOverlay={handleShowAppleMusicOverlay}
-
+            onLogout={() => supabase.auth.signOut()}
+            isAppleLinked={isAppleLinked}
           />
         } />
 
@@ -625,6 +636,8 @@ function App() {
             executeAgentActions={executeAgentActions}
             fetchConversations={fetchConversations}
             onShowAppleMusicOverlay={handleShowAppleMusicOverlay}
+            onLogout={() => supabase.auth.signOut()}
+            isAppleLinked={isAppleLinked}
             viewedPlaylist={viewedPlaylist}
             isViewingPlayingConversation={isViewingPlayingConversation}
             onStartPlaybackFromConversation={startPlaybackFromConversation}

@@ -36,6 +36,8 @@ interface RouteComponentProps {
   executeAgentActions: (actions: AgentAction[]) => Promise<void>;
   fetchConversations: () => Promise<void>;
   onShowAppleMusicOverlay: () => void;
+  onLogout: () => void;
+  isAppleLinked?: boolean;
   viewedPlaylist?: FormattedTrack[];
   isViewingPlayingConversation?: boolean;
   onStartPlaybackFromConversation?: (index: number) => void;
@@ -60,6 +62,8 @@ export function HomeRoute({
   executeAgentActions,
   fetchConversations,
   onShowAppleMusicOverlay,
+  onLogout,
+  isAppleLinked,
 }: RouteComponentProps) {
   const navigate = useNavigate();
 
@@ -89,6 +93,11 @@ export function HomeRoute({
       conversations={conversations}
       activeConversationId={null}
       rightPanel={null}
+      userEmail={session?.user.email || ''}
+      userName={session?.user.email?.split('@')[0] || 'User'}
+      onLogout={onLogout}
+      onConnectAppleMusic={onShowAppleMusicOverlay}
+      isAppleLinked={isAppleLinked}
     >
       <ChatInterface
         isDJSpeaking={isDJSpeaking}
@@ -131,6 +140,8 @@ export function ChatRoute({
   executeAgentActions,
   fetchConversations,
   onShowAppleMusicOverlay,
+  onLogout,
+  isAppleLinked,
   viewedPlaylist = [],
   isViewingPlayingConversation = true,
   onStartPlaybackFromConversation,
@@ -168,6 +179,11 @@ export function ChatRoute({
       onRenameConversation={onRenameConversation}
       conversations={conversations}
       activeConversationId={id}
+      userEmail={session?.user.email || ''}
+      userName={session?.user.email?.split('@')[0] || 'User'}
+      onLogout={onLogout}
+      onConnectAppleMusic={onShowAppleMusicOverlay}
+      isAppleLinked={isAppleLinked}
       rightPanel={
         <PlaylistSidebar
           currentTrack={appleTrack}
