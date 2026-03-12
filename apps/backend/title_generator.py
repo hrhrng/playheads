@@ -6,7 +6,7 @@ import os
 import asyncio
 
 
-async def generate_conversation_title(messages: list[dict], timeout: int = 5) -> str:
+async def generate_conversation_title(messages: list[dict], timeout: int = 15) -> str:
     """
     Generate a short, descriptive title from conversation messages using LLM.
 
@@ -26,7 +26,7 @@ async def generate_conversation_title(messages: list[dict], timeout: int = 5) ->
             return "New Conversation"
 
         model = ChatOpenAI(
-            model="kimi-k2-turbo-preview",
+            model="gpt-5-nano",
             api_key=api_key,
             base_url=base_url if base_url else None,
             temperature=0.7

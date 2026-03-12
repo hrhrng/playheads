@@ -47,7 +47,7 @@ interface FormattedSidebarTrack {
 export const PlaylistSidebar = ({
   currentTrack,
   isPlaying,
-  queue: propQueue,
+  queue: _propQueue,
   onPlayTrack,
   collapsed,
   toggleCollapse,
@@ -116,38 +116,21 @@ export const PlaylistSidebar = ({
     return url.replace('{w}', size.toString()).replace('{h}', size.toString());
   };
 
-  // Choose between live MusicKit queue and static viewed playlist
-  // Priority: live queue (if viewing playing conversation AND queue has items) > viewedPlaylist from backend
-  const hasLiveQueue = isViewingPlayingConversation && propQueue && propQueue.length > 0;
-
-  const queue: FormattedSidebarTrack[] = hasLiveQueue
-    ? propQueue.map((item): FormattedSidebarTrack => ({
-        id: item.id || Math.random().toString(),
-        title: (item as any).title || (item.attributes?.name as string) || 'Unknown Title',
-        artist: (item as any).artistName || (item.attributes?.artistName as string) || 'Unknown Artist',
-        cover: formatArtwork(
-          (item as any).artworkURL ||
-          (item as any).artwork?.url ||
-          (item.attributes?.artwork as any)?.url
-        )
-      }))
-    : viewedPlaylist.map((item): FormattedSidebarTrack => ({
-        id: item.id,
-        title: item.name || 'Unknown Title',
-        artist: item.artist || 'Unknown Artist',
-        cover: item.artwork_url || 'https://placehold.co/100'
-      }));
+  // Always use viewedPlaylist (our own state), never MusicKit queue
+  const queue: FormattedSidebarTrack[] = viewedPlaylist.map((item): FormattedSidebarTrack => ({
+    id: item.id,
+    title: item.name || 'Unknown Title',
+    artist: item.artist || 'Unknown Artist',
+    cover: formatArtwork(item.artwork_url)
+  }));
 
   const handleTrackClick = (index: number) => {
     if (!isViewingPlayingConversation && onStartPlaybackFromConversation) {
       // Viewing a different conversation — load its playlist into MusicKit
       onStartPlaybackFromConversation(index);
-    } else if (hasLiveQueue && onPlayTrack) {
-      // Viewing playing conversation with live queue — jump to track
+    } else if (onPlayTrack) {
+      // Viewing playing conversation — jump to track
       onPlayTrack(index);
-    } else if (onStartPlaybackFromConversation) {
-      // Viewing playing conversation but live queue not ready — start from backend playlist
-      onStartPlaybackFromConversation(index);
     }
   };
 

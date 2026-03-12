@@ -49,7 +49,7 @@ export type LoadHistoryStatus = 'success' | 'not_found' | 'error';
  * Agent action types
  */
 export interface AgentAction {
-  type: 'play_track' | 'add_to_queue' | 'create_playlist' | 'search_tracks' | 'remove_track';
+  type: 'play_track' | 'add_to_queue' | 'create_playlist' | 'search_tracks' | 'remove_track' | 'skip_next';
   data?: Record<string, unknown>;
 }
 

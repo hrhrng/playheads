@@ -122,10 +122,33 @@ class AgentTestAdapter:
                 self.session.current_track = self.session.playlist[idx]
                 self.session.is_playing = True
 
+        elif action_type == "add_to_queue":
+            track = TrackInfo(
+                id=data.get("track_id", ""),
+                name=data.get("name", "Unknown"),
+                artist=data.get("artist", "Unknown"),
+                album=data.get("album"),
+                artwork_url=data.get("artwork_url"),
+                duration=data.get("duration"),
+            )
+            self.session.playlist.append(track)
+
+        elif action_type == "skip_next":
+            if self.session.current_track and self.session.playlist:
+                current_idx = next(
+                    (i for i, t in enumerate(self.session.playlist) if t.id == self.session.current_track.id),
+                    -1,
+                )
+                next_idx = current_idx + 1
+                if next_idx < len(self.session.playlist):
+                    self.session.current_track = self.session.playlist[next_idx]
+                    self.session.is_playing = True
+
         elif action_type == "remove_track":
-            if self.session.current_track:
-                remaining_ids = {t.id for t in self.session.playlist}
-                if self.session.current_track.id not in remaining_ids:
+            idx = data.get("index", -1)
+            if 0 <= idx < len(self.session.playlist):
+                removed = self.session.playlist.pop(idx)
+                if self.session.current_track and self.session.current_track.id == removed.id:
                     self.session.current_track = None
                     self.session.is_playing = False
 
@@ -312,8 +335,7 @@ class TestMultiTurnDeterministic:
         result = await adapter.chat("下一首")
 
         assert any(
-            e.get("event") == "action" and e["data"]["type"] == "play_track"
-            and e["data"]["data"].get("index") == 1
+            e.get("event") == "action" and e["data"]["type"] == "skip_next"
             for e in result.events
         )
         assert adapter.session.current_track.id == "b"

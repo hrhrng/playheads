@@ -216,6 +216,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       // Refresh conversation list after the turn completes
       if (onMessageSent) {
         onMessageSent();
+        // Re-fetch after a delay to pick up async-generated title
+        setTimeout(onMessageSent, 3000);
       }
     } catch (error) {
       console.error('Chat error:', error);
@@ -296,6 +298,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     // process complete lines (terminated by '\n').
     let lineBuffer = '';
 
+    // Non-blocking action chain: queue MusicKit actions so they execute
+    // sequentially without blocking the SSE reader (each takes 1-2s network).
+    let actionChain = Promise.resolve();
+
     try {
       while (true) {
         const { done, value } = await reader.read();
@@ -331,7 +337,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                 }
 
                 case 'thinking': {
-                  currentParts.push({ type: 'thinking', content: (data as SSEThinkingEvent).content });
+                  const lastThinkingPart = currentParts[currentParts.length - 1];
+                  if (lastThinkingPart && lastThinkingPart.type === 'thinking') {
+                    (lastThinkingPart as { type: 'thinking'; content: string }).content += (data as SSEThinkingEvent).content;
+                  } else {
+                    currentParts.push({ type: 'thinking', content: (data as SSEThinkingEvent).content });
+                  }
                   updateMessage();
                   break;
                 }
@@ -381,17 +392,36 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                 }
 
                 case 'action': {
-                  // Execute MusicKit action immediately — awaited to ensure ordering
                   const actionData = data as SSEActionEvent;
+
+                  // Update viewedPlaylist in real-time before executing MusicKit action
+                  if (actionData.type === 'add_to_queue' && actionData.data?.track_id) {
+                    const d = actionData.data;
+                    set((state) => ({
+                      viewedPlaylist: [...state.viewedPlaylist, {
+                        id: d.track_id as string,
+                        name: (d.name as string) || 'Unknown',
+                        artist: (d.artist as string) || 'Unknown',
+                        album: (d.album as string) || '',
+                        artwork_url: (d.artwork_url as string) || '',
+                        duration: (d.duration as number) || 0,
+                      }]
+                    }));
+                  } else if (actionData.type === 'remove_track' && actionData.data?.index != null) {
+                    const removeIndex = actionData.data.index as number;
+                    set((state) => ({
+                      viewedPlaylist: state.viewedPlaylist.filter((_, i) => i !== removeIndex)
+                    }));
+                  }
+
+                  // Queue MusicKit action without blocking the SSE reader
                   if (onAgentActions) {
-                    try {
-                      await onAgentActions([{
-                        type: actionData.type,
-                        data: actionData.data
-                      }]);
-                    } catch (err) {
+                    const actionItem = { type: actionData.type, data: actionData.data };
+                    actionChain = actionChain.then(() =>
+                      onAgentActions([actionItem])
+                    ).catch(err => {
                       console.error('Error executing real-time action:', err);
-                    }
+                    });
                   }
                   break;
                 }
@@ -433,7 +463,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         }));
       }
     } finally {
+      // Clear loading state immediately so UI unblocks
       set({ isLoading: false });
+
+      // Wait for any queued real-time actions to finish
+      await actionChain;
 
       // Execute batched actions from the "done" event (legacy path)
       if (actions.length > 0 && onAgentActions) {

@@ -279,12 +279,18 @@ class TestCreateMusicAgent:
         assert agent is not None
 
     def test_without_model_requires_api_key(self):
-        """When model=None (default), OPENAI_API_KEY must be set."""
+        """When model=None (default), API key for the configured provider must be set."""
         import os
-        old = os.environ.pop("OPENAI_API_KEY", None)
+        old_anthropic = os.environ.pop("ANTHROPIC_API_KEY", None)
+        old_provider = os.environ.pop("LLM_PROVIDER", None)
         try:
-            with pytest.raises(ValueError, match="OPENAI_API_KEY"):
+            os.environ["LLM_PROVIDER"] = "anthropic"
+            with pytest.raises(ValueError, match="ANTHROPIC_API_KEY"):
                 create_music_agent(state_context="test")
         finally:
-            if old is not None:
-                os.environ["OPENAI_API_KEY"] = old
+            if old_anthropic is not None:
+                os.environ["ANTHROPIC_API_KEY"] = old_anthropic
+            if old_provider is not None:
+                os.environ["LLM_PROVIDER"] = old_provider
+            else:
+                os.environ.pop("LLM_PROVIDER", None)

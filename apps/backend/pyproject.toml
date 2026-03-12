@@ -8,6 +8,7 @@ dependencies = [
     "uvicorn>=0.27.0",
     "langchain>=1.0.0",
     "langchain-openai>=0.3.0",
+    "langchain-anthropic>=0.3.0",
     "langgraph>=0.2.76",
     "langgraph-checkpoint-postgres>=2.0.12",
     "spotipy>=2.23.0",

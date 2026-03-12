@@ -78,7 +78,7 @@ export function useChat({
     // No sessionId = new chat, clear everything
     if (!sessionId) {
       console.log('[useChat] No sessionId, clearing messages');
-      useChatStore.setState({ messages: [], sessionId: null, isLoadingHistory: false });
+      useChatStore.setState({ messages: [], sessionId: null, viewedPlaylist: [], isLoadingHistory: false });
       lastSessionIdRef.current = null;
       return;
     }
@@ -96,7 +96,7 @@ export function useChat({
 
       if (isNewlyCreated && preservedMessages) {
         console.log('[useChat] Using preserved messages:', preservedMessages.length);
-        useChatStore.setState({ messages: preservedMessages, sessionId });
+        useChatStore.setState({ messages: preservedMessages, sessionId, viewedPlaylist: [] });
         return;
       }
 

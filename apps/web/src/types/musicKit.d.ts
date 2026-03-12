@@ -29,6 +29,7 @@ export interface MusicKitConfig {
  */
 export interface MusicKitInstance {
   isAuthorized: boolean;
+  musicUserToken: string | undefined;
   autoplay: boolean;
   nowPlayingItem: MediaItem | null;
   queue: MusicKitQueue;

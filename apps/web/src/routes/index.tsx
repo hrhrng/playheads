@@ -41,6 +41,7 @@ interface RouteComponentProps {
   viewedPlaylist?: FormattedTrack[];
   isViewingPlayingConversation?: boolean;
   onStartPlaybackFromConversation?: (index: number) => void;
+  playingSessionId?: string | null;
 }
 
 /**
@@ -145,6 +146,7 @@ export function ChatRoute({
   viewedPlaylist = [],
   isViewingPlayingConversation = true,
   onStartPlaybackFromConversation,
+  playingSessionId,
 }: RouteComponentProps) {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -214,7 +216,17 @@ export function ChatRoute({
         onMessageSent={fetchConversations}
         onSessionCreated={handleSessionCreated}
         onShowAppleMusicOverlay={onShowAppleMusicOverlay}
-
+        playingSessionId={playingSessionId}
+        playingConversationTitle={
+          playingSessionId
+            ? conversations.find(c => c.id === playingSessionId)?.title || 'Untitled'
+            : null
+        }
+        onNavigateToPlayingConversation={
+          playingSessionId
+            ? () => navigate(`/chat/${playingSessionId}`)
+            : undefined
+        }
       />
     </AppLayout>
   );

@@ -14,6 +14,7 @@ from contextvars import ContextVar
 from typing import Optional, TYPE_CHECKING
 from langchain.agents import create_agent
 from langchain.tools import tool
+from langchain_anthropic import ChatAnthropic
 from langchain_openai import ChatOpenAI
 from duckduckgo_search import DDGS
 from langgraph.config import get_stream_writer
@@ -178,53 +179,21 @@ async def play_track(index: str) -> str:
     Returns:
         Confirmation message
     """
-    # Read from ContextVar — kept in sync by add/remove tools during this run
-    session = _session_context.get()
-
     try:
         idx = int(index)
     except (ValueError, TypeError):
         return "Please provide a valid track number."
 
-    if not session or not session.playlist:
-        return "The playlist is empty. Add some tracks first!"
-
-    if idx < 1 or idx > len(session.playlist):
-        return f"Invalid track number. Please choose between 1 and {len(session.playlist)}."
-
-    track = session.playlist[idx - 1]
-
-    # Emit action and wait for frontend to execute on MusicKit before continuing
     _emit_action("play_track", {"index": idx - 1})
 
-    return f"Playing '{track.name}' by {track.artist}"
+    return f"Playing track {idx}."
 
 
 @tool
 async def skip_next() -> str:
     """Skip to the next track in the playlist."""
-    session = _session_context.get()
-
-    if not session or not session.playlist:
-        return "There's no playlist to skip through."
-
-    # Find current track position
-    current_idx = -1
-    if session.current_track:
-        for i, track in enumerate(session.playlist):
-            if track.id == session.current_track.id:
-                current_idx = i
-                break
-
-    next_idx = current_idx + 1
-    if next_idx >= len(session.playlist):
-        return "You're already at the last track in the playlist."
-
-    next_track = session.playlist[next_idx]
-
-    _emit_action("play_track", {"index": next_idx})
-
-    return f"Requesting to skip to '{next_track.name}' by {next_track.artist}"
+    _emit_action("skip_next", {})
+    return "Skipping to the next track."
 
 
 @tool
@@ -236,10 +205,6 @@ async def add_to_queue(track_id: str) -> str:
     """
     from apps.backend.state import TrackInfo
     from apps.backend.apple_music import _apple_music_get
-
-    session = _session_context.get()
-    if not session:
-        return "Session not available."
 
     try:
         # Fetch full track info by ID from Apple Music catalog
@@ -259,17 +224,17 @@ async def add_to_queue(track_id: str) -> str:
             duration=attrs.get("durationInMillis", 0) / 1000.0,
         )
 
-        # Keep ContextVar in sync so subsequent tools see the new track
-        session.playlist.append(track)
-        position = len(session.playlist)
-
-        # Tell the frontend to enqueue it (fire-and-forget SSE)
         _emit_action("add_to_queue", {
             "query": f"{track.name} {track.artist}",
             "track_id": track.id,
+            "name": track.name,
+            "artist": track.artist,
+            "album": track.album,
+            "artwork_url": track.artwork_url,
+            "duration": track.duration,
         })
 
-        return f"Added '{track.name}' by {track.artist} to queue (position {position})"
+        return f"Added '{track.name}' by {track.artist} to queue."
     except Exception as e:
         return f"Error adding to queue: {str(e)}"
 
@@ -284,26 +249,14 @@ async def remove_from_playlist(index: str) -> str:
     Returns:
         Confirmation message
     """
-    session = _session_context.get()
-
     try:
         idx = int(index)
     except (ValueError, TypeError):
         return "Please provide a valid track number."
 
-    # Validate index
-    if not session or not session.playlist:
-        return "The playlist is empty."
-
-    if idx < 1 or idx > len(session.playlist):
-        return f"Invalid track number. Please choose between 1 and {len(session.playlist)}."
-
-    # Pop from ContextVar to keep subsequent tool calls consistent
-    track_to_remove = session.playlist.pop(idx - 1)
-
     _emit_action("remove_track", {"index": idx - 1})
 
-    return f"Removed '{track_to_remove.name}' by {track_to_remove.artist} from playlist"
+    return f"Removed track {idx} from playlist."
 
 
 @tool
@@ -385,20 +338,43 @@ def create_music_agent(state_context: str, checkpointer=None, model=None):
     system_prompt = SYSTEM_PROMPT_TEMPLATE.format(state_context=state_context)
 
     if model is None:
-        api_key = os.getenv("OPENAI_API_KEY")
-        base_url = os.getenv("OPENAI_BASE_URL")
+        llm_provider = os.getenv("LLM_PROVIDER", "anthropic")
 
-        log.debug("LLM config: model=gpt-5-mini, base_url=%s", base_url or "(default)")
+        if llm_provider == "anthropic":
+            api_key = os.getenv("ANTHROPIC_API_KEY")
+            base_url = os.getenv("ANTHROPIC_BASE_URL")
+            model_name = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")
 
-        if not api_key:
-            raise ValueError("OPENAI_API_KEY environment variable is not set")
+            log.debug("LLM config: provider=anthropic, model=%s, base_url=%s", model_name, base_url or "(default)")
 
-        model = ChatOpenAI(
-            model="gpt-5-mini",
-            api_key=api_key,
-            base_url=base_url if base_url else None,
-            streaming=True,
-        )
+            if not api_key:
+                raise ValueError("ANTHROPIC_API_KEY environment variable is not set")
+
+            thinking_budget = int(os.getenv("ANTHROPIC_THINKING_BUDGET", "0"))
+
+            model = ChatAnthropic(
+                model=model_name,
+                api_key=api_key,
+                base_url=base_url if base_url else None,
+                streaming=True,
+                thinking={"type": "enabled", "budget_tokens": thinking_budget} if thinking_budget > 0 else None,
+            )
+        else:
+            api_key = os.getenv("OPENAI_API_KEY")
+            base_url = os.getenv("OPENAI_BASE_URL")
+            model_name = os.getenv("OPENAI_MODEL", "gpt-5-mini")
+
+            log.debug("LLM config: provider=openai, model=%s, base_url=%s", model_name, base_url or "(default)")
+
+            if not api_key:
+                raise ValueError("OPENAI_API_KEY environment variable is not set")
+
+            model = ChatOpenAI(
+                model=model_name,
+                api_key=api_key,
+                base_url=base_url if base_url else None,
+                streaming=True,
+            )
 
     # create_agent returns a graph object with checkpointer
     agent_graph = create_agent(
@@ -433,9 +409,15 @@ async def _process_astream(agent_graph, stream_input, config):
     # Collect message parts for saving to history
     message_parts = []  # [{type: 'text'|'thinking'|'tool_call', ...}]
     current_text_part = None  # Accumulate text content
+    current_thinking_part = None  # Accumulate thinking content
     tool_calls_map = {}  # {call_id: tool_call_dict}
     tool_call_args_buffer = {}  # {call_id: accumulated_args_string}
     emitted_tool_starts = set()  # tool_ids whose tool_start event has been sent
+    # Map content-block index → tool_call id.  Anthropic's tool_call_chunks
+    # use the content-block index (which counts thinking/text blocks too),
+    # so a raw positional lookup into active_tool_calls fails when thinking
+    # or text blocks precede tool_use blocks.
+    chunk_index_to_id: dict[int, str] = {}
 
     try:
         async for mode, chunk in agent_graph.astream(
@@ -470,7 +452,11 @@ async def _process_astream(agent_graph, stream_input, config):
                 reasoning = ak.get('reasoning_content')
 
             if reasoning:
-                message_parts.append({"type": "thinking", "content": reasoning})
+                if current_thinking_part is None:
+                    current_thinking_part = {"type": "thinking", "content": reasoning}
+                    message_parts.append(current_thinking_part)
+                else:
+                    current_thinking_part["content"] += reasoning
                 yield {"event": "thinking", "data": {"content": reasoning}}
 
             # 1. Extract text content
@@ -504,8 +490,13 @@ async def _process_astream(agent_graph, stream_input, config):
                                     yield {"event": "text", "data": {"content": text_content}}
                             elif part.get("type") == "thinking":
                                 thinking_content = part.get("thinking", "")
-                                if thinking_content:
-                                    message_parts.append({"type": "thinking", "content": thinking_content})
+                                # Skip signature blocks and empty chunks
+                                if thinking_content and "signature" not in part:
+                                    if current_thinking_part is None:
+                                        current_thinking_part = {"type": "thinking", "content": thinking_content}
+                                        message_parts.append(current_thinking_part)
+                                    else:
+                                        current_thinking_part["content"] += thinking_content
                                     yield {"event": "thinking", "data": {"content": thinking_content}}
                 elif isinstance(content, str) and content:
                     full_response += content
@@ -592,10 +583,18 @@ async def _process_astream(agent_graph, stream_input, config):
 
                     # Resolve which tool_id this chunk belongs to:
                     # 1) chunk carries its own id that matches a registered call
-                    # 2) fall back to index-based positional lookup
+                    # 2) use previously recorded index → id mapping
+                    # 3) fall back to positional lookup (works for OpenAI-style
+                    #    indices that are tool-relative, not content-block-relative)
                     tool_id = None
                     if chunk_id and chunk_id in active_tool_calls:
                         tool_id = chunk_id
+                        # Record mapping so subsequent delta chunks (id=None)
+                        # can be resolved via their content-block index.
+                        if chunk_index is not None:
+                            chunk_index_to_id[chunk_index] = chunk_id
+                    elif chunk_index is not None and chunk_index in chunk_index_to_id:
+                        tool_id = chunk_index_to_id[chunk_index]
                     elif chunk_index is not None and active_tool_calls:
                         tool_ids_list = list(active_tool_calls.keys())
                         if chunk_index < len(tool_ids_list):

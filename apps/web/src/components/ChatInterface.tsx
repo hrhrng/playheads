@@ -42,6 +42,12 @@ interface ChatInterfaceProps {
   onSessionCreated?: (newSessionId: string, preservedMessages: Message[], initialMessage: string) => void;
   /** Callback to show Apple Music connection overlay */
   onShowAppleMusicOverlay?: () => void;
+  /** Session ID that currently owns playback */
+  playingSessionId?: string | null;
+  /** Title of the conversation that currently owns playback */
+  playingConversationTitle?: string | null;
+  /** Navigate to the conversation that currently owns playback */
+  onNavigateToPlayingConversation?: () => void;
 }
 
 /**
@@ -67,6 +73,9 @@ export const ChatInterface = ({
   onMessageSent,
   onSessionCreated,
   onShowAppleMusicOverlay,
+  playingSessionId,
+  playingConversationTitle,
+  onNavigateToPlayingConversation,
 }: ChatInterfaceProps) => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -91,27 +100,11 @@ export const ChatInterface = ({
 
   // Note: Removed initial warning toast as connection handling is now done via overlay and actionable toasts
 
-  // Wrap sendMessage to check Apple Music connection before sending
+  // Wrap sendMessage — allow chatting without Apple Music auth;
+  // playback errors are caught at the MusicKit layer with reconnect prompts.
   const handleSendMessage = useCallback(async (text?: string, skipAddingUserMessage?: boolean) => {
-    // Check Apple Music connection before sending
-    if (!isAppleMusicAuthorized) {
-      toast.error('Apple Music connection required', {
-        description: 'Connect your Apple Music account to continue',
-        duration: Infinity,
-        action: {
-          label: 'Connect Now',
-          onClick: () => {
-            sessionStorage.removeItem('apple_link_dismissed');
-            onShowAppleMusicOverlay?.();
-          }
-        }
-      });
-      return;
-    }
-
-    // Pass through skipAddingUserMessage to avoid duplicate messages on navigation
     await sendMessage(text, skipAddingUserMessage);
-  }, [isAppleMusicAuthorized, sendMessage, onShowAppleMusicOverlay]);
+  }, [sendMessage]);
 
   // Auto-send initial message from navigation state
   useInitialMessage(location.state as any, handleSendMessage, isLoading, messages, navigate, location.pathname);
@@ -122,7 +115,7 @@ export const ChatInterface = ({
   }
 
   // Show new chat view for empty new chats (no sessionId = new chat)
-  if (messages.length === 0 && !sessionId) {
+  if (!sessionId) {
     return (
       <NewChatView
         onSend={handleSendMessage}
@@ -135,6 +128,32 @@ export const ChatInterface = ({
   // Main chat interface
   return (
     <div className="flex flex-col h-full relative bg-white rounded-3xl overflow-hidden shadow-sm border border-white">
+      {/* Cross-session banner — top-right corner */}
+      {(() => {
+        const showBanner = !showHistory && !!playingSessionId && !!sessionId && playingSessionId !== sessionId && !!playingConversationTitle;
+        return (
+          <div className={`absolute top-4 right-4 z-40 transition-all duration-300 ${
+            showBanner ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2 pointer-events-none'
+          }`}>
+            <button
+              onClick={onNavigateToPlayingConversation}
+              className="group inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-black/90 hover:bg-black text-white shadow-lg hover:shadow-xl transition-all hover:scale-[1.02]"
+            >
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+              </span>
+              <span className="text-xs">
+                Playing from <span className="font-semibold">{playingConversationTitle}</span>
+              </span>
+              <svg className="w-3.5 h-3.5 text-white/50 group-hover:text-white/80 group-hover:translate-x-0.5 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          </div>
+        );
+      })()}
+
       {/* Hero Stage */}
       <div className="flex-1 flex flex-col items-center justify-center relative pb-48">
         {/* Visualizer Background */}
@@ -155,6 +174,7 @@ export const ChatInterface = ({
               onSeek={onSeek}
             />
           </div>
+
         </div>
 
         {/* Transcript Overlay */}
@@ -167,26 +187,49 @@ export const ChatInterface = ({
 
       {/* Command Console - Fixed at Bottom */}
       <div className="absolute bottom-0 left-0 right-0 px-6 pb-5 pt-10 z-30 bg-gradient-to-t from-white via-white/95 to-transparent">
-        {/* Toggle History Button */}
+        {/* Toggle Button — album art (vinyl spin when playing), fallback to icon */}
         <div className="max-w-xl mx-auto mb-2 flex justify-start">
           <button
             onClick={toggleHistory}
-            className={`p-2 rounded-full border transition-all ${
-              showHistory
-                ? 'bg-gray-800 text-white border-gray-800'
-                : 'bg-white text-gray-400 border-gray-200 hover:text-gray-600 hover:border-gray-300'
-            }`}
+            className="relative w-8 h-8 rounded-full flex items-center justify-center"
             title={showHistory ? 'Back to Player' : 'View Transcript'}
           >
-            {showHistory ? (
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19V6l12-3v13M9 10l12-3" />
-              </svg>
-            ) : (
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-            )}
+            {(() => {
+              const attr = currentTrack ? (currentTrack.attributes || currentTrack) : null;
+              const artUrl = attr
+                ? ((attr as any).artwork?.url || (currentTrack as any).artworkURL || '')
+                    .replace('{w}', '64').replace('{h}', '64')
+                : '';
+              const hasArt = !!currentTrack && !!artUrl;
+
+              if (hasArt && showHistory) {
+                // showHistory: album art visible — spinning when playing, static when paused
+                return (
+                  <div className="w-8 h-8 rounded-full overflow-hidden ring-2 ring-gray-200">
+                    <img src={artUrl} alt="" className="w-full h-full object-cover" />
+                  </div>
+                );
+              }
+
+              // No track or not showHistory — icon button
+              return (
+                <div className={`w-8 h-8 rounded-full border flex items-center justify-center transition-colors duration-200 ${
+                  showHistory
+                    ? 'bg-gray-800 text-white border-gray-800'
+                    : 'bg-white text-gray-400 border-gray-200 hover:text-gray-600 hover:border-gray-300'
+                }`}>
+                  {showHistory ? (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19V6l12-3v13M9 10l12-3" />
+                    </svg>
+                  ) : (
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  )}
+                </div>
+              );
+            })()}
           </button>
         </div>
 

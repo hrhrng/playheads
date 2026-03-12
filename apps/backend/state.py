@@ -234,7 +234,7 @@ class SessionStore:
     async def update_session(self, db: AsyncSession, state: SessionState, user_id: str):
         """
         Update session state in DB and automatically update Conversation metadata.
-        Triggers title generation on first message or every 5 messages.
+        Triggers title generation on first message or every 10 messages.
 
         Args:
             db: Database session
@@ -307,12 +307,11 @@ class SessionStore:
             log.error("Failed to update session %s: %s", state.session_id[:8], e, exc_info=True)
             raise
 
-        # Generate title asynchronously if needed (don't block)
+        # Generate title asynchronously if needed
         should_generate_title = (message_count == 2 or message_count % 10 == 0)  # 2 because we have user + agent
 
         if should_generate_title:
             import asyncio
-            # Create background task for title generation (fire and forget)
             asyncio.create_task(self._generate_and_update_title(session_uuid, messages_data, message_count))
 
     async def _generate_and_update_title(self, session_uuid: uuid.UUID, messages_data: list, message_count: int):
