@@ -50,7 +50,12 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          BRANCH_SLUG: ${{ steps.branch.outputs.slug }}
         run: |
-          # Override the service binding to point to the branch-specific web worker
-          sed 's/service = "playheads-web"/service = "playheads-web-${{ steps.branch.outputs.slug }}"/' wrangler.preview.toml > wrangler.branch.toml
-          npx wrangler deploy --config wrangler.branch.toml --name "playheads-gateway-${{ steps.branch.outputs.slug }}"
+          # Generate a branch-specific wrangler config:
+          # - worker name: so container app name (name-classname) is unique per branch
+          # - service binding: point to the branch-specific web worker
+          sed -e "s/name = \"playheads-gateway\"/name = \"playheads-gw-${BRANCH_SLUG}\"/" \
+              -e "s/service = \"playheads-web\"/service = \"playheads-web-${BRANCH_SLUG}\"/" \
+              wrangler.preview.toml > wrangler.branch.toml
+          npx wrangler deploy --config wrangler.branch.toml
