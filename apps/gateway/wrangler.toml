@@ -12,8 +12,6 @@ service = "playheads-web"
 class_name = "BackendContainer"
 image = "../../Dockerfile"
 max_instances = 3
-vcpu = 0.5
-memory = "512MiB"
 
 [[durable_objects.bindings]]
 name = "BACKEND"

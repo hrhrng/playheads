@@ -10,6 +10,9 @@ interface Env {
   // Secrets
   DATABASE_URL: string;
   ANTHROPIC_API_KEY: string;
+  ANTHROPIC_BASE_URL: string;
+  ANTHROPIC_MODEL: string;
+  ANTHROPIC_THINKING_BUDGET: string;
   OPENAI_API_KEY: string;
   OPENAI_BASE_URL: string;
   APPLE_MUSIC_TEAM_ID: string;
@@ -28,6 +31,9 @@ export class BackendContainer extends Container<Env> {
     this.envVars = {
       DATABASE_URL: env.DATABASE_URL,
       ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
+      ANTHROPIC_BASE_URL: env.ANTHROPIC_BASE_URL,
+      ANTHROPIC_MODEL: env.ANTHROPIC_MODEL,
+      ANTHROPIC_THINKING_BUDGET: env.ANTHROPIC_THINKING_BUDGET,
       OPENAI_API_KEY: env.OPENAI_API_KEY,
       OPENAI_BASE_URL: env.OPENAI_BASE_URL,
       LLM_PROVIDER: env.LLM_PROVIDER,
