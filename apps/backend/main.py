@@ -1,6 +1,7 @@
 """
 Music Agent API
 """
+import json
 import logging
 import os
 from datetime import datetime
@@ -16,12 +17,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 # Load environment variables FIRST (override=True to override system env vars)
 load_dotenv(os.path.join(os.path.dirname(__file__), '.env'), override=True)
 
-# Configure logging with structured format
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    datefmt="%H:%M:%S",
-)
+
+# JSON structured logging for Cloudflare container log collection
+class JSONFormatter(logging.Formatter):
+    def format(self, record):
+        return json.dumps({
+            "ts": self.formatTime(record),
+            "level": record.levelname,
+            "logger": record.name,
+            "msg": record.getMessage(),
+            **({"exc": self.formatException(record.exc_info)} if record.exc_info else {}),
+        })
+
+
+handler = logging.StreamHandler()
+handler.setFormatter(JSONFormatter())
+logging.basicConfig(level=logging.INFO, handlers=[handler])
 log = logging.getLogger("playhead")
 
 # Then import database which depends on env vars
