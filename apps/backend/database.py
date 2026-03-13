@@ -32,6 +32,7 @@ engine = create_async_engine(
     future=True,
     connect_args={
         "ssl": "require",
+        "statement_cache_size": 0,
     },
 )
 
