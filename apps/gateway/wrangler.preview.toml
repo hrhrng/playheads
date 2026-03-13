@@ -6,14 +6,6 @@ compatibility_date = "2024-12-01"
 binding = "WEB"
 service = "playheads-web"
 
-[[migrations]]
-tag = "v1"
-new_sqlite_classes = ["BackendContainer"]
-
-[[migrations]]
-tag = "v2"
-deleted_classes = ["BackendContainer"]
-
 [observability]
 enabled = true
 
