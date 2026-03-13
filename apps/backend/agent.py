@@ -54,9 +54,10 @@ async def get_checkpointer():
         _checkpointer = AsyncPostgresSaver(pool)
 
     if not _checkpointer_setup_done:
-        await _checkpointer.setup()
+        # Skip setup() — tables created manually via direct connection.
+        # pgbouncer transaction mode doesn't support CREATE INDEX CONCURRENTLY.
         _checkpointer_setup_done = True
-        log.info("Checkpointer tables initialized")
+        log.info("Checkpointer ready (tables pre-created)")
 
     return _checkpointer
 
