@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, ForeignKey, DateTime, Text, Boolean, Integer, Index, JSON
+from sqlalchemy import Column, String, DateTime, Text, Boolean, Integer, Index, JSON
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
@@ -28,7 +28,7 @@ class Conversation(Base):
 
     # Use UUID type for PostgreSQL
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(UUID(as_uuid=True), nullable=False)
     title = Column(Text, nullable=True)
 
     # Metadata fields
@@ -55,7 +55,7 @@ class ConversationState(Base):
 
     # Use UUID type for PostgreSQL
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    conversation_id = Column(UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), unique=True, nullable=False)
+    conversation_id = Column(UUID(as_uuid=True), unique=True, nullable=False)
     messages = Column(JSON, default=list)
     context = Column(JSON, default=dict)
     last_synced_at = Column(DateTime(timezone=True), server_default=func.now())
