@@ -22,6 +22,21 @@ export class BackendContainer extends Container<Env> {
   sleepAfter = "5m";
   enableInternet = true;
 
+  override getEnv(env: Env): Record<string, string> {
+    return {
+      DATABASE_URL: env.DATABASE_URL,
+      ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
+      OPENAI_API_KEY: env.OPENAI_API_KEY,
+      OPENAI_BASE_URL: env.OPENAI_BASE_URL,
+      LLM_PROVIDER: env.LLM_PROVIDER,
+      APPLE_MUSIC_TEAM_ID: env.APPLE_MUSIC_TEAM_ID,
+      APPLE_MUSIC_KEY_ID: env.APPLE_MUSIC_KEY_ID,
+      APPLE_MUSIC_PRIVATE_KEY: env.APPLE_MUSIC_PRIVATE_KEY,
+      APPLE_MUSIC_TOKEN_TTL_SECONDS: env.APPLE_MUSIC_TOKEN_TTL_SECONDS,
+      MINIMAX_API_KEY: env.MINIMAX_API_KEY,
+    };
+  }
+
   override onStart() {
     console.log("BackendContainer started on port 8001");
   }
