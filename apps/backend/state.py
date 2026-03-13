@@ -164,34 +164,29 @@ class SessionStore:
             session_uuid = uuid.UUID(session_id)
             user_uuid = uuid.UUID(user_id)
 
-            # 1. Ensure Conversation exists (ignore conflict if already exists)
-            stmt = insert(Conversation).values(
-                id=session_uuid,
-                user_id=user_uuid,
-                title=None,
-                message_count=0
-            ).on_conflict_do_nothing(index_elements=['id'])
-
-            await db.execute(stmt)
+            # Insert Conversation + ConversationState in a single commit
+            await db.execute(
+                insert(Conversation).values(
+                    id=session_uuid,
+                    user_id=user_uuid,
+                    title=None,
+                    message_count=0
+                ).on_conflict_do_nothing(index_elements=['id'])
+            )
+            await db.execute(
+                insert(ConversationState).values(
+                    conversation_id=session_uuid,
+                    messages=[],
+                    context={}
+                ).on_conflict_do_nothing(index_elements=['conversation_id'])
+            )
             await db.commit()
 
-            # 2. Ensure ConversationState exists (ignore conflict if already exists)
-            state_stmt = insert(ConversationState).values(
-                conversation_id=session_uuid,
-                messages=[],
-                context={}
-            ).on_conflict_do_nothing(index_elements=['conversation_id'])
-
-            await db.execute(state_stmt)
-            await db.commit()
-
-            # 3. Retrieve the session (now guaranteed to exist)
-            session = await self.get_session(db, session_id, user_id)
-            if not session:
-                # Should not happen unless deleted immediately
-                raise ValueError("Failed to retrieve created session")
-
-            return session
+            # Return an empty SessionState directly — no need to SELECT back
+            return SessionState(
+                session_id=session_id,
+                last_sync=datetime.now(),
+            )
 
         except Exception as e:
             await db.rollback()
