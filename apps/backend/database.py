@@ -17,7 +17,15 @@ if "sslmode" not in DATABASE_URL_PSYCOPG:
     DATABASE_URL_PSYCOPG = f"{DATABASE_URL_PSYCOPG}{separator}sslmode=require"
 
 # SQLAlchemy needs the asyncpg driver prefix
+# Also strip ?pgbouncer=true — asyncpg doesn't understand it
+from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+
 DATABASE_URL = DATABASE_URL_RAW
+_parsed = urlparse(DATABASE_URL)
+_params = parse_qs(_parsed.query)
+_params.pop("pgbouncer", None)
+DATABASE_URL = urlunparse(_parsed._replace(query=urlencode(_params, doseq=True)))
+
 if DATABASE_URL.startswith("postgresql://"):
     DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
 
