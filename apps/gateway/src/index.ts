@@ -1,8 +1,8 @@
-import { Container } from "@cloudflare/containers";
+import { Container, getContainer } from "@cloudflare/containers";
 
 interface Env {
   WEB: Fetcher;
-  BACKEND: DurableObjectNamespace;
+  BACKEND: DurableObjectNamespace<BackendContainer>;
   // Non-sensitive vars
   LLM_PROVIDER: string;
   APPLE_MUSIC_TOKEN_TTL_SECONDS: string;
@@ -58,9 +58,8 @@ export default {
 async function handleHealthCheck(env: Env, start: number): Promise<Response> {
   let containerStatus = "unknown";
   try {
-    const id = env.BACKEND.idFromName("backend");
-    const stub = env.BACKEND.get(id);
-    const resp = await stub.fetch(new Request("http://container/health"));
+    const container = getContainer(env.BACKEND);
+    const resp = await container.fetch(new Request("http://container/health"));
     if (resp.ok) {
       const data = (await resp.json()) as Record<string, unknown>;
       containerStatus = (data.status as string) || "healthy";
@@ -88,8 +87,7 @@ async function proxyToContainer(
   const backendPath = url.pathname.replace(/^\/api/, "") || "/";
   const backendUrl = new URL(backendPath + url.search, "http://container");
 
-  const id = env.BACKEND.idFromName("backend");
-  const stub = env.BACKEND.get(id);
+  const container = getContainer(env.BACKEND);
 
   const proxyRequest = new Request(backendUrl.toString(), {
     method: request.method,
@@ -97,7 +95,7 @@ async function proxyToContainer(
     body: request.body,
   });
 
-  const response = await stub.fetch(proxyRequest);
+  const response = await container.fetch(proxyRequest);
   const latency = Date.now() - start;
 
   console.log(
