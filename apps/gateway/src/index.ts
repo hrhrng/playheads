@@ -20,6 +20,7 @@ interface Env {
 export class BackendContainer extends Container {
   defaultPort = 8001;
   sleepAfter = "5m";
+  enableInternet = true;
 
   override getEnv(env: Env): Record<string, string> {
     return {
@@ -34,6 +35,18 @@ export class BackendContainer extends Container {
       APPLE_MUSIC_TOKEN_TTL_SECONDS: env.APPLE_MUSIC_TOKEN_TTL_SECONDS,
       MINIMAX_API_KEY: env.MINIMAX_API_KEY,
     };
+  }
+
+  override onStart() {
+    console.log("BackendContainer started");
+  }
+
+  override onStop() {
+    console.log("BackendContainer stopped");
+  }
+
+  override onError(error: unknown) {
+    console.error("BackendContainer error:", error);
   }
 }
 
