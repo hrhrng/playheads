@@ -35,7 +35,7 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
-          VITE_SPOTIFY_REDIRECT_URI: https://playheads-gateway-${{ steps.branch.outputs.slug }}.${{ vars.CF_WORKERS_SUBDOMAIN }}.workers.dev/callback
+          VITE_SPOTIFY_REDIRECT_URI: https://playheads-gw-${{ steps.branch.outputs.slug }}.${{ vars.CF_WORKERS_SUBDOMAIN }}.workers.dev/callback
         run: pnpm --filter web build
 
       - name: Deploy web worker
@@ -59,3 +59,30 @@ jobs:
               -e "s/service = \"playheads-web\"/service = \"playheads-web-${BRANCH_SLUG}\"/" \
               wrangler.preview.toml > wrangler.branch.toml
           npx wrangler deploy --config wrangler.branch.toml
+
+      - name: Sync secrets to preview gateway
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          WORKER="playheads-gw-${{ steps.branch.outputs.slug }}"
+          declare -A SECRETS=(
+            [DATABASE_URL]="${{ secrets.DATABASE_URL }}"
+            [ANTHROPIC_API_KEY]="${{ secrets.ANTHROPIC_API_KEY }}"
+            [ANTHROPIC_BASE_URL]="${{ secrets.ANTHROPIC_BASE_URL }}"
+            [ANTHROPIC_MODEL]="${{ secrets.ANTHROPIC_MODEL }}"
+            [ANTHROPIC_THINKING_BUDGET]="${{ secrets.ANTHROPIC_THINKING_BUDGET }}"
+            [OPENAI_API_KEY]="${{ secrets.OPENAI_API_KEY }}"
+            [OPENAI_BASE_URL]="${{ secrets.OPENAI_BASE_URL }}"
+            [APPLE_MUSIC_TEAM_ID]="${{ secrets.APPLE_MUSIC_TEAM_ID }}"
+            [APPLE_MUSIC_KEY_ID]="${{ secrets.APPLE_MUSIC_KEY_ID }}"
+            [APPLE_MUSIC_PRIVATE_KEY]="${{ secrets.APPLE_MUSIC_PRIVATE_KEY }}"
+            [MINIMAX_API_KEY]="${{ secrets.MINIMAX_API_KEY }}"
+          )
+          for KEY in "${!SECRETS[@]}"; do
+            VAL="${SECRETS[$KEY]}"
+            if [ -n "$VAL" ]; then
+              echo "$VAL" | npx wrangler secret put "$KEY" --name "$WORKER" 2>/dev/null
+              echo "✓ $KEY"
+            fi
+          done
