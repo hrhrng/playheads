@@ -123,7 +123,7 @@ class SessionStore:
 
                 stmt = (
                     select(ConversationState)
-                    .join(Conversation)
+                    .join(Conversation, Conversation.id == ConversationState.conversation_id)
                     .where(
                         Conversation.id == session_uuid,
                         Conversation.user_id == user_uuid
@@ -133,7 +133,7 @@ class SessionStore:
                 # No user_id - query without permission check (for sync endpoint)
                 stmt = (
                     select(ConversationState)
-                    .join(Conversation)
+                    .join(Conversation, Conversation.id == ConversationState.conversation_id)
                     .where(Conversation.id == session_uuid)
                 )
 
