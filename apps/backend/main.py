@@ -302,7 +302,9 @@ async def sync_state(request: SyncRequest, db: AsyncSession = Depends(get_db)):
     if not ownership.scalar_one_or_none():
         return {"status": "no_session", "session_id": request.session_id}
 
-    # Build context dict — only include fields the frontend actually sent
+    # Build a partial context dict from the fields the frontend actually sent.
+    # syncPlaylistToBackend sends only `playlist`; syncMusicKitState sends
+    # playlist + current_track + is_playing + playback_position.
     context_update: dict = {}
     if request.current_track:
         context_update["current_track"] = request.current_track
@@ -313,12 +315,21 @@ async def sync_state(request: SyncRequest, db: AsyncSession = Depends(get_db)):
     if request.playback_position is not None:
         context_update["playback_position"] = request.playback_position
 
-    # Targeted update: only context + last_synced_at, never messages
+    # Merge into existing context instead of replacing it.
+    # This prevents a playlist-only sync from clobbering current_track (and
+    # vice-versa).  Uses read-merge-write because the column type is JSON,
+    # not JSONB (which would support the atomic || operator).
     now = datetime.now()
+    existing = await db.execute(
+        select(ConversationState.context).where(ConversationState.conversation_id == conv_uuid)
+    )
+    existing_context = existing.scalar_one_or_none() or {}
+    merged_context = {**existing_context, **context_update}
+
     stmt = (
         sa_update(ConversationState)
         .where(ConversationState.conversation_id == conv_uuid)
-        .values(context=context_update, last_synced_at=now)
+        .values(context=merged_context, last_synced_at=now)
     )
     await db.execute(stmt)
     await db.commit()

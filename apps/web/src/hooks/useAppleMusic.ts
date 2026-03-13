@@ -54,6 +54,8 @@ interface UseAppleMusicReturn {
   executeAgentActions: (actions: AgentAction[]) => Promise<void>;
   /** Sync real MusicKit playback state to backend DB (reads from MusicKit, not React) */
   syncMusicKitState: () => Promise<void>;
+  /** Sync just the playlist to backend (no MusicKit auth required) */
+  syncPlaylistToBackend: (playlist: FormattedTrack[]) => Promise<void>;
   /** Restore MusicKit queue from backend checkpoint. Returns the state data from backend. */
   restoreStateFromBackend: (targetSessionId?: string) => Promise<{ playlist?: FormattedTrack[]; current_track?: FormattedTrack | null; is_playing?: boolean; playback_position?: number } | null>;
   /** Update the playing session's playlist snapshot and session ID atomically */
@@ -173,27 +175,45 @@ export default function useAppleMusic({
     }
   }, [musicKit, sessionId, syncSessionId, userId, formatTrackForSync]);
 
+  // ==========================================================================
+  // Playlist-only sync (no MusicKit auth required)
+  //
+  // Why: syncMusicKitState gates on musicKit.isAuthorized — if the user hasn't
+  // connected Apple Music, playlist changes from SSE actions (add_to_queue,
+  // remove_track) are never persisted, and a page refresh loses everything.
+  //
+  // This function only sends the playlist array to /state/sync, decoupling
+  // playlist persistence from MusicKit auth. Called by the debounced
+  // viewedPlaylist watcher in App.tsx.
+  // ==========================================================================
+  const syncPlaylistToBackend = useCallback(async (playlist: FormattedTrack[]): Promise<void> => {
+    const sid = playingSessionIdRef.current || syncSessionId || sessionId;
+    if (!sid || !userId) return;
+
+    try {
+      await fetch(`${API_BASE}/state/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: sid,
+          user_id: userId,
+          playlist: playlist.map(t => ({
+            id: t.id,
+            name: t.name,
+            artist: t.artist,
+            album: t.album || '',
+            artwork_url: t.artwork_url || '',
+            duration: t.duration || 0,
+          })),
+        }),
+      });
+    } catch (e) {
+      console.error('[SyncPlaylist] Error:', e);
+    }
+  }, [sessionId, syncSessionId, userId]);
+
   // Keep ref in sync for event listener access
   syncMusicKitStateRef.current = syncMusicKitState;
-
-  // ==========================================================================
-  // Helper: show auth-required toast with a Connect button
-  // ==========================================================================
-  const showAuthRequiredToast = useCallback(() => {
-    toast.error('Apple Music not connected', {
-      description: 'Connect your Apple Music account to continue',
-      action: {
-        label: 'Connect',
-        onClick: () => {
-          if (musicKit) {
-            musicKit.authorize().then(() => {
-              setIsAuthorized(musicKit.isAuthorized);
-            });
-          }
-        }
-      }
-    });
-  }, [musicKit]);
 
   // ==========================================================================
   // Handle authentication loss
@@ -217,14 +237,6 @@ export default function useAppleMusic({
   // ==========================================================================
   const executeAgentActions = useCallback(async (actions: AgentAction[]): Promise<void> => {
     if (!musicKit || !actions || actions.length === 0) return;
-    // Read auth directly from MusicKit instance to avoid stale closure over React state.
-    // Also check musicUserToken — MusicKit may report isAuthorized=true from cached/expired tokens
-    // but fail with an internal error dialog when making API calls.
-    if (!musicKit.isAuthorized || !musicKit.musicUserToken) {
-      console.warn('[Agent] executeAgentActions blocked: not authorized or no user token');
-      showAuthRequiredToast();
-      return;
-    }
 
     for (const action of actions) {
       switch (action.type) {
@@ -420,6 +432,7 @@ export default function useAppleMusic({
         mk.addEventListener('playbackStateDidChange', (event: any) => {
           const state = event.state;
           const isPlayingNow = state === 'playing' || state === 2;
+          const isPausedNow = state === 'paused' || state === 3;
           setIsPlaying(isPlayingNow);
           if (mk.nowPlayingItem) {
             setCurrentTrack(mk.nowPlayingItem);
@@ -427,6 +440,13 @@ export default function useAppleMusic({
             if (isPlayingNow) {
               lastPlayingTrackIdRef.current = mk.nowPlayingItem.id;
             }
+          }
+
+          // Sync on play/pause so the backend checkpoint reflects real playback state.
+          // Without this, pausing then refreshing would resume as "playing" (stale).
+          // Skip during restore to avoid writing back the state we just loaded.
+          if ((isPlayingNow || isPausedNow) && !isRestoringRef.current) {
+            syncMusicKitStateRef.current();
           }
 
           // Auto-advance: when a song ends, play the next track from our playlist
@@ -498,16 +518,18 @@ export default function useAppleMusic({
   }, []);
 
   // ==========================================================================
-  // Restore music state from backend checkpoint
-  // Frontend (MusicKit) is the ground-truth.
-  // Backend is checkpoint for:
-  // - Restoring frontend after page refresh
-  // - Agent reading current state
-  // - Saving/loading state when switching sessions
+  // Restore state from backend checkpoint
+  //
+  // Two-phase restore:
+  //  1. Fetch checkpoint data from /state (always works, no auth needed)
+  //  2. Restore MusicKit queue from checkpoint (only if MusicKit is authorized)
+  //
+  // Phase 1 is always performed so that callers can use the returned playlist
+  // data regardless of Apple Music auth status. Phase 2 is best-effort.
   // ==========================================================================
   const restoreStateFromBackend = useCallback(async (targetSessionId?: string): Promise<{ playlist?: FormattedTrack[]; current_track?: FormattedTrack | null; is_playing?: boolean; playback_position?: number } | null> => {
     const restoreId = targetSessionId || sessionId;
-    if (!musicKit || !musicKit.isAuthorized || !restoreId) return null;
+    if (!restoreId) return null;
 
     // Skip for anonymous sessions
     if (restoreId === internalSessionId) {
@@ -516,6 +538,7 @@ export default function useAppleMusic({
     }
 
     try {
+      // Phase 1: Fetch checkpoint data (no MusicKit auth required)
       const url = userId
         ? `${API_BASE}/state?session_id=${restoreId}&user_id=${userId}`
         : `${API_BASE}/state?session_id=${restoreId}`;
@@ -535,7 +558,14 @@ export default function useAppleMusic({
       const data = await res.json();
       const { playlist, current_track, is_playing, playback_position } = data;
 
-      // Skip MusicKit restore if no saved playlist, but still return data
+      // Phase 2: Restore MusicKit queue (requires auth)
+      // If MusicKit isn't authorized, still return the data so callers can
+      // use the playlist for display — just skip the playback restore.
+      if (!musicKit || !musicKit.isAuthorized) {
+        console.log('[Restore] MusicKit not authorized, skipping playback restore (data still returned)');
+        return data;
+      }
+
       if (!playlist || playlist.length === 0) {
         console.log('[Restore] Empty playlist in checkpoint');
         return data;
@@ -553,9 +583,8 @@ export default function useAppleMusic({
 
       console.log(`[Restore] Restoring from checkpoint (${validTrackIds.length} tracks in playlist)`);
 
-      // Only restore current track as single-song playback
-      // viewedPlaylist is restored by chatStore.loadHistory, not MusicKit queue
-      // Suppress sync during restore to avoid overwriting backend with stale viewedPlaylist
+      // Only restore current track as single-song playback.
+      // Suppress sync during restore to avoid overwriting backend with stale data.
       if (current_track?.id) {
         isRestoringRef.current = true;
         try {
@@ -633,10 +662,6 @@ export default function useAppleMusic({
   // ==========================================================================
   const play = useCallback(async (): Promise<void> => {
     if (!musicKit) return;
-    if (!musicKit.isAuthorized) {
-      showAuthRequiredToast();
-      return;
-    }
     try {
       await musicKit.play();
       await syncMusicKitState();
@@ -652,10 +677,6 @@ export default function useAppleMusic({
 
   const pause = useCallback(async (): Promise<void> => {
     if (!musicKit) return;
-    if (!musicKit.isAuthorized) {
-      showAuthRequiredToast();
-      return;
-    }
     try {
       await musicKit.pause();
       await syncMusicKitState();
@@ -671,10 +692,6 @@ export default function useAppleMusic({
 
   const togglePlay = useCallback(async (): Promise<void> => {
     if (!musicKit) return;
-    if (!musicKit.isAuthorized) {
-      showAuthRequiredToast();
-      return;
-    }
     try {
       isPlaying ? await musicKit.pause() : await musicKit.play();
       await syncMusicKitState();
@@ -693,10 +710,6 @@ export default function useAppleMusic({
     startPlaying = true
   ): Promise<void> => {
     if (!musicKit) return;
-    if (!musicKit.isAuthorized) {
-      showAuthRequiredToast();
-      return;
-    }
     try {
       await musicKit.setQueue({ items: items as any });
       if (items.length > 0) setCurrentTrack(items[0] as Track);
@@ -716,10 +729,6 @@ export default function useAppleMusic({
 
   const playTrack = useCallback(async (index: number): Promise<void> => {
     if (!musicKit) return;
-    if (!musicKit.isAuthorized) {
-      showAuthRequiredToast();
-      return;
-    }
     try {
       const targetTrack = playingPlaylistRef.current[index];
 
@@ -761,10 +770,6 @@ export default function useAppleMusic({
 
   const seekTo = useCallback((time: number): void => {
     if (!musicKit) return;
-    if (!musicKit.isAuthorized) {
-      showAuthRequiredToast();
-      return;
-    }
     try {
       musicKit.seekToTime(time);
       syncMusicKitState();
@@ -780,10 +785,6 @@ export default function useAppleMusic({
 
   const skipNext = useCallback(async (): Promise<void> => {
     if (!musicKit) return;
-    if (!musicKit.isAuthorized) {
-      showAuthRequiredToast();
-      return;
-    }
     try {
       const playlist = playingPlaylistRef.current;
       const currentId = musicKit.nowPlayingItem?.id;
@@ -807,10 +808,6 @@ export default function useAppleMusic({
 
   const skipPrev = useCallback(async (): Promise<void> => {
     if (!musicKit) return;
-    if (!musicKit.isAuthorized) {
-      showAuthRequiredToast();
-      return;
-    }
     try {
       const playlist = playingPlaylistRef.current;
       const currentId = musicKit.nowPlayingItem?.id;
@@ -863,6 +860,7 @@ export default function useAppleMusic({
     isInitializing,
     executeAgentActions,
     syncMusicKitState,
+    syncPlaylistToBackend,
     restoreStateFromBackend,
     updatePlayingPlaylist
   };

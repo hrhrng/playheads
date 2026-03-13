@@ -40,8 +40,8 @@ interface ChatInterfaceProps {
   onMessageSent?: () => void;
   /** Callback when new session is created */
   onSessionCreated?: (newSessionId: string, preservedMessages: Message[], initialMessage: string) => void;
-  /** Callback to show Apple Music connection overlay */
-  onShowAppleMusicOverlay?: () => void;
+  /** Callback to link Apple Music account */
+  onLinkApple?: () => Promise<void>;
   /** Session ID that currently owns playback */
   playingSessionId?: string | null;
   /** Title of the conversation that currently owns playback */
@@ -72,7 +72,7 @@ export const ChatInterface = ({
   onAgentActions,
   onMessageSent,
   onSessionCreated,
-  onShowAppleMusicOverlay,
+  onLinkApple,
   playingSessionId,
   playingConversationTitle,
   onNavigateToPlayingConversation,
@@ -172,6 +172,8 @@ export const ChatInterface = ({
               togglePlay={togglePlay}
               playbackTime={playbackTime}
               onSeek={onSeek}
+              isAppleMusicAuthorized={isAppleMusicAuthorized}
+              onLinkApple={onLinkApple}
             />
           </div>
 

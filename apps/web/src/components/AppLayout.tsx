@@ -13,7 +13,6 @@ import { DeleteConfirmDialog } from './DeleteConfirmDialog';
 import { UserSettingsPopover } from './UserSettingsPopover';
 import { SettingsModal } from './SettingsModal';
 import { useNavSidebarState } from '../hooks/useNavSidebarState';
-import { API_BASE } from '../config/api';
 import type { Conversation } from '../types';
 
 interface AppLayoutProps {
@@ -41,10 +40,6 @@ interface AppLayoutProps {
   userName?: string;
   /** Logout handler */
   onLogout?: () => void;
-  /** Apple Music connection handler */
-  onConnectAppleMusic?: () => void;
-  /** Whether Apple Music is linked */
-  isAppleLinked?: boolean;
 }
 
 /**
@@ -64,8 +59,6 @@ export const AppLayout = ({
   userEmail = '',
   userName = 'User',
   onLogout,
-  onConnectAppleMusic,
-  isAppleLinked,
 }: AppLayoutProps): React.JSX.Element => {
   // Use persisted state for nav sidebar to survive page navigation
   const { expanded, setExpanded, width, setWidth, COLLAPSED_WIDTH } = useNavSidebarState();
@@ -142,31 +135,15 @@ export const AppLayout = ({
     setDeleteDialogOpen(true);
   };
 
-  // Handle actual deletion after confirmation - optimistic update
-  const handleConfirmDelete = async (): Promise<void> => {
+  // Handle actual deletion after confirmation — delegate to parent
+  const handleConfirmDelete = (): void => {
     if (!conversationToDelete) return;
 
     const convId = conversationToDelete.id;
 
-    // Immediately close dialog and update UI (optimistic)
     setDeleteDialogOpen(false);
-    onDeleteConversation?.(convId);
     setConversationToDelete(null);
-
-    // Then send delete request to backend
-    try {
-      const res = await fetch(`${API_BASE}/conversations/${convId}`, {
-        method: 'DELETE'
-      });
-
-      if (!res.ok) {
-        throw new Error('Delete failed');
-      }
-    } catch (err) {
-      // If backend fails, show error but keep UI updated
-      console.error('Failed to delete conversation:', err);
-      // Optionally: could implement rollback here if needed
-    }
+    onDeleteConversation?.(convId);
   };
 
   // Handle dialog cancel
@@ -389,8 +366,6 @@ export const AppLayout = ({
       <SettingsModal
         isOpen={settingsOpen}
         onClose={() => setSettingsOpen(false)}
-        onConnectAppleMusic={onConnectAppleMusic}
-        isAppleLinked={isAppleLinked}
       />
 
     </div>

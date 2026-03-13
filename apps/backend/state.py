@@ -233,23 +233,22 @@ class SessionStore:
 
     async def update_session(self, db: AsyncSession, state: SessionState, user_id: str):
         """
-        Update session state in DB and automatically update Conversation metadata.
-        Triggers title generation on first message or every 10 messages.
+        Persist chat messages and conversation metadata to DB.
 
-        Args:
-            db: Database session
-            state: SessionState to persist
-            user_id: User UUID for permission check
+        Context ownership
+        -----------------
+        This method intentionally does NOT write the ``context`` column
+        (playlist, current_track, is_playing, playback_position).
+
+        Context is owned by the frontend and persisted exclusively via the
+        ``/state/sync`` endpoint.  Previously ``update_session`` wrote context
+        too, which caused a race condition: the agent loads session state at the
+        start of a turn (playlist=[]), streams add_to_queue actions to the
+        frontend, and then ``update_session`` at the end overwrites the context
+        the frontend just synced — wiping the playlist on every turn.
         """
         session_uuid = uuid.UUID(state.session_id)
         messages_data = [m.model_dump(mode='json') for m in state.chat_history]
-
-        context = {
-            "is_playing": state.is_playing,
-            "playback_position": state.playback_position,
-            "current_track": state.current_track.model_dump(mode='json') if state.current_track else None,
-            "playlist": [t.model_dump(mode='json') for t in state.playlist]
-        }
 
         # Calculate metadata
         message_count = len(state.chat_history)
@@ -274,16 +273,19 @@ class SessionStore:
             last_message_at = last_msg.timestamp
 
         try:
+            # Upsert messages only. The on_conflict_do_update deliberately omits
+            # `context` so we never clobber playlist/playback state synced by
+            # the frontend.  The INSERT branch uses context={} as a safe default
+            # for brand-new rows (create_session normally pre-creates the row).
             stmt = insert(ConversationState).values(
                 conversation_id=session_uuid,
                 messages=messages_data,
-                context=context,
+                context={},
                 last_synced_at=datetime.now()
             ).on_conflict_do_update(
                 index_elements=['conversation_id'],
                 set_={
                     'messages': messages_data,
-                    'context': context,
                     'last_synced_at': datetime.now()
                 }
             )

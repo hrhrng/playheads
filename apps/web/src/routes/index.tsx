@@ -35,9 +35,8 @@ interface RouteComponentProps {
   playAppleTrack?: (index: number) => Promise<void>;
   executeAgentActions: (actions: AgentAction[]) => Promise<void>;
   fetchConversations: () => Promise<void>;
-  onShowAppleMusicOverlay: () => void;
   onLogout: () => void;
-  isAppleLinked?: boolean;
+  onLinkApple?: () => Promise<void>;
   viewedPlaylist?: FormattedTrack[];
   isViewingPlayingConversation?: boolean;
   onStartPlaybackFromConversation?: (index: number) => void;
@@ -62,9 +61,8 @@ export function HomeRoute({
   seekTo,
   executeAgentActions,
   fetchConversations,
-  onShowAppleMusicOverlay,
   onLogout,
-  isAppleLinked,
+  onLinkApple,
 }: RouteComponentProps) {
   const navigate = useNavigate();
 
@@ -97,8 +95,6 @@ export function HomeRoute({
       userEmail={session?.user.email || ''}
       userName={session?.user.email?.split('@')[0] || 'User'}
       onLogout={onLogout}
-      onConnectAppleMusic={onShowAppleMusicOverlay}
-      isAppleLinked={isAppleLinked}
     >
       <ChatInterface
         isDJSpeaking={isDJSpeaking}
@@ -113,8 +109,7 @@ export function HomeRoute({
         onAgentActions={executeAgentActions}
         onMessageSent={fetchConversations}
         onSessionCreated={handleSessionCreated}
-        onShowAppleMusicOverlay={onShowAppleMusicOverlay}
-
+        onLinkApple={onLinkApple}
       />
     </AppLayout>
   );
@@ -140,9 +135,8 @@ export function ChatRoute({
   playAppleTrack,
   executeAgentActions,
   fetchConversations,
-  onShowAppleMusicOverlay,
   onLogout,
-  isAppleLinked,
+  onLinkApple,
   viewedPlaylist = [],
   isViewingPlayingConversation = true,
   onStartPlaybackFromConversation,
@@ -184,8 +178,6 @@ export function ChatRoute({
       userEmail={session?.user.email || ''}
       userName={session?.user.email?.split('@')[0] || 'User'}
       onLogout={onLogout}
-      onConnectAppleMusic={onShowAppleMusicOverlay}
-      isAppleLinked={isAppleLinked}
       rightPanel={
         <PlaylistSidebar
           currentTrack={appleTrack}
@@ -215,7 +207,7 @@ export function ChatRoute({
         onAgentActions={executeAgentActions}
         onMessageSent={fetchConversations}
         onSessionCreated={handleSessionCreated}
-        onShowAppleMusicOverlay={onShowAppleMusicOverlay}
+        onLinkApple={onLinkApple}
         playingSessionId={playingSessionId}
         playingConversationTitle={
           playingSessionId
