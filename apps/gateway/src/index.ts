@@ -1,4 +1,5 @@
 import { Container, getContainer } from "@cloudflare/containers";
+import { DurableObject } from "cloudflare:workers";
 
 interface Env {
   WEB: Fetcher;
@@ -22,8 +23,9 @@ export class BackendContainer extends Container<Env> {
   sleepAfter = "5m";
   enableInternet = true;
 
-  override getEnv(env: Env): Record<string, string> {
-    return {
+  constructor(ctx: DurableObject["ctx"], env: Env) {
+    super(ctx, env);
+    this.envVars = {
       DATABASE_URL: env.DATABASE_URL,
       ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
       OPENAI_API_KEY: env.OPENAI_API_KEY,
