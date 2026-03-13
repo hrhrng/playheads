@@ -9,6 +9,7 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { ConversationList } from './ConversationList';
 import { DeleteConfirmDialog } from './DeleteConfirmDialog';
 import { UserSettingsPopover } from './UserSettingsPopover';
 import { SettingsModal } from './SettingsModal';
@@ -75,18 +76,6 @@ export const AppLayout = ({
   const [conversationToDelete, setConversationToDelete] = useState<Conversation | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  // Rename state
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editTitle, setEditTitle] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  // Focus input when editing starts
-  useEffect(() => {
-    if (editingId && inputRef.current) {
-      inputRef.current.focus();
-    }
-  }, [editingId]);
-
   // Resize state
   const [isResizing, setIsResizing] = useState(false);
   const navRef = useRef<HTMLElement>(null);
@@ -131,17 +120,13 @@ export const AppLayout = ({
     };
   }, [isResizing, setWidth]);
 
-  // Handle pin click
-  const handlePin = (conv: Conversation, e: React.MouseEvent): void => {
-    e.stopPropagation();
-    onPinConversation?.(conv.id, !conv.is_pinned);
-  };
-
-  // Handle delete button click - open dialog
-  const handleDelete = (conv: Conversation, e: React.MouseEvent): void => {
-    e.stopPropagation(); // Prevent conversation selection
-    setConversationToDelete(conv);
-    setDeleteDialogOpen(true);
+  // Handle delete via ConversationList — open confirmation dialog
+  const handleDeleteRequest = (conversationId: string): void => {
+    const conv = conversations.find(c => c.id === conversationId);
+    if (conv) {
+      setConversationToDelete(conv);
+      setDeleteDialogOpen(true);
+    }
   };
 
   // Handle actual deletion after confirmation — delegate to parent
@@ -159,35 +144,6 @@ export const AppLayout = ({
   const handleCancelDelete = (): void => {
     setDeleteDialogOpen(false);
     setConversationToDelete(null);
-  };
-
-  // Rename handlers
-  const handleRenameStart = (conv: Conversation, e: React.MouseEvent) => {
-    e.stopPropagation();
-    e.preventDefault();
-    setEditingId(conv.id);
-    setEditTitle(conv.title || '');
-  };
-
-  const handleRenameSave = () => {
-    if (editingId && editTitle.trim()) {
-      onRenameConversation?.(editingId, editTitle.trim());
-    }
-    setEditingId(null);
-  };
-
-  const handleRenameKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      e.stopPropagation();
-      handleRenameSave();
-    } else if (e.key === 'Escape') {
-      e.stopPropagation();
-      setEditingId(null);
-    }
-  };
-
-  const handleRenameClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
   };
 
   return (
@@ -236,100 +192,16 @@ export const AppLayout = ({
           {/* Divider */}
           <div className="mx-4 border-t border-gray-300" />
 
-          {/* Conversation List - Empty state or actual conversations */}
-          {conversations.length === 0 ? (
-            <div className={`mx-2 p-3 text-gemini-subtext text-sm text-center ${expanded ? '' : 'hidden'}`}>
-              No conversations yet
-            </div>
-          ) : (
-            conversations.map((conv, idx) => (
-              <div key={conv.id || idx} className="group relative mx-2">
-                <button
-                  onClick={() => onSelectConversation && onSelectConversation(conv.id)}
-                  className={`
-                    w-full p-3 rounded-xl transition-colors flex items-center
-                    overflow-hidden
-                    ${conv.id === activeConversationId
-                      ? 'bg-white text-gemini-text font-medium'
-                      : 'text-gemini-subtext hover:bg-white'
-                    }
-                  `}
-                >
-                  {/* Icon - fixed width column */}
-                  <div className="w-6 flex justify-center shrink-0">
-                    <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                      <polyline points="14 2 14 8 20 8" />
-                      <line x1="16" y1="13" x2="8" y2="13" />
-                      <line x1="16" y1="17" x2="8" y2="17" />
-                    </svg>
-                  </div>
-                  {/* Title only - left aligned */}
-                  {editingId === conv.id ? (
-                    <input
-                      ref={inputRef}
-                      type="text"
-                      value={editTitle}
-                      onChange={(e) => setEditTitle(e.target.value)}
-                      onKeyDown={handleRenameKeyDown}
-                      onBlur={handleRenameSave}
-                      onClick={handleRenameClick}
-                      className="ml-3 flex-1 bg-transparent border-none outline-none text-sm font-medium text-gemini-text p-0 min-w-0"
-                    />
-                  ) : (
-                    <span className={`ml-3 truncate text-sm font-medium text-left transition-all duration-300 ${expanded ? 'opacity-100 flex-1' : 'opacity-0 w-0 ml-0 overflow-hidden'}`}>
-                      {conv.title || 'New Conversation'}
-                    </span>
-                  )}
-                </button>
-
-                {/* Hover Actions: Pin, Rename, Delete */}
-                {expanded && editingId !== conv.id && (
-                  <div className={`
-                    absolute right-0 top-1 bottom-1 flex items-center pr-2 pl-8 gap-0.5
-                    bg-gradient-to-l from-white via-white to-transparent
-                    ${conv.is_pinned ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}
-                    transition-opacity duration-200
-                  `}>
-                    <button
-                      onClick={(e) => handlePin(conv, e)}
-                      className={`p-1.5 rounded-lg transition-colors
-                        ${conv.is_pinned
-                          ? 'text-gemini-primary bg-gemini-primary/10'
-                          : 'text-gemini-subtext hover:bg-gemini-hover hover:text-gemini-text'
-                        }`}
-                      title={conv.is_pinned ? "Unpin conversation" : "Pin conversation"}
-                    >
-                      <svg className="w-4 h-4" fill={conv.is_pinned ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
-                      </svg>
-                    </button>
-
-                    <button
-                      onClick={(e) => handleRenameStart(conv, e)}
-                      className="p-1.5 rounded-lg hover:bg-gemini-hover text-gemini-subtext hover:text-gemini-text transition-colors"
-                      title="Rename conversation"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                      </svg>
-                    </button>
-
-                    <button
-                      onClick={(e) => handleDelete(conv, e)}
-                      className="p-1.5 rounded-lg hover:bg-red-50 text-gemini-subtext hover:text-red-600 transition-colors"
-                      title="Delete conversation"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
-                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                      </svg>
-                    </button>
-                  </div>
-                )}
-              </div>
-            ))
-          )}
+          {/* Conversation List */}
+          <ConversationList
+            conversations={conversations}
+            expanded={expanded}
+            activeConversationId={activeConversationId}
+            onSelectConversation={onSelectConversation}
+            onPinConversation={onPinConversation}
+            onRenameConversation={onRenameConversation}
+            onDeleteConversation={handleDeleteRequest}
+          />
         </div>
 
         {/* Bottom section: User info with settings popover */}
