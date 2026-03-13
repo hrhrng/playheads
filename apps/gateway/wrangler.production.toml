@@ -1,14 +1,14 @@
-name = "playheads-gateway"
+name = "playheads-gateway-production"
 main = "src/index.ts"
 compatibility_date = "2024-12-01"
 
 [[services]]
 binding = "WEB"
-service = "playheads-web"
+service = "playheads-web-production"
 
 [[services]]
 binding = "BACKEND_WORKER"
-service = "playheads-backend"
+service = "playheads-backend-production"
 
 [observability]
 enabled = true

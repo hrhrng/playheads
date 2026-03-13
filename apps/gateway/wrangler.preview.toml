@@ -2,24 +2,9 @@ name = "playheads-gateway"
 main = "src/index.ts"
 compatibility_date = "2024-12-01"
 
-# Route frontend to web worker via Service Binding
 [[services]]
 binding = "WEB"
 service = "playheads-web"
-
-# Backend container
-[[containers]]
-class_name = "BackendContainer"
-image = "../../Dockerfile"
-max_instances = 3
-
-[[durable_objects.bindings]]
-name = "BACKEND"
-class_name = "BackendContainer"
-
-[[migrations]]
-tag = "v1"
-new_sqlite_classes = ["BackendContainer"]
 
 [observability]
 enabled = true
@@ -28,7 +13,3 @@ enabled = true
 enabled = true
 invocation_logs = true
 head_sampling_rate = 1
-
-[vars]
-LLM_PROVIDER = "anthropic"
-APPLE_MUSIC_TOKEN_TTL_SECONDS = "3600"
