@@ -10,6 +10,14 @@ service = "playheads-web-production"
 binding = "BACKEND_WORKER"
 service = "playheads-backend-production"
 
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["BackendContainer"]
+
+[[migrations]]
+tag = "v2"
+deleted_classes = ["BackendContainer"]
+
 [observability]
 enabled = true
 
