@@ -49,6 +49,7 @@ async def get_checkpointer():
             conninfo=DATABASE_URL_PSYCOPG,
             max_size=5,
             open=False,
+            kwargs={"prepare_threshold": None},
         )
         await pool.open()
         _checkpointer = AsyncPostgresSaver(pool)
