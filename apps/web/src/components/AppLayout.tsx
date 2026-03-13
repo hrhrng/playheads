@@ -40,6 +40,12 @@ interface AppLayoutProps {
   userName?: string;
   /** Logout handler */
   onLogout?: () => void;
+  /** Apple Music authorization state */
+  isAppleMusicAuthorized?: boolean;
+  /** Connect Apple Music */
+  onConnectAppleMusic?: () => void;
+  /** Disconnect Apple Music */
+  onDisconnectAppleMusic?: () => void;
 }
 
 /**
@@ -59,6 +65,9 @@ export const AppLayout = ({
   userEmail = '',
   userName = 'User',
   onLogout,
+  isAppleMusicAuthorized,
+  onConnectAppleMusic,
+  onDisconnectAppleMusic,
 }: AppLayoutProps): React.JSX.Element => {
   // Use persisted state for nav sidebar to survive page navigation
   const { expanded, setExpanded, width, setWidth, COLLAPSED_WIDTH } = useNavSidebarState();
@@ -366,6 +375,9 @@ export const AppLayout = ({
       <SettingsModal
         isOpen={settingsOpen}
         onClose={() => setSettingsOpen(false)}
+        isAppleMusicAuthorized={isAppleMusicAuthorized}
+        onConnectAppleMusic={onConnectAppleMusic}
+        onDisconnectAppleMusic={onDisconnectAppleMusic}
       />
 
     </div>

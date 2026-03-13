@@ -164,6 +164,7 @@ function App() {
     isInitializing,
     playbackTime,
     seekTo,
+    logout: appleMusicLogout,
     executeAgentActions: rawExecuteAgentActions,
     syncMusicKitState,
     syncPlaylistToBackend,
@@ -202,25 +203,40 @@ function App() {
     await playAppleTrack(index);
   }, [activeSessionId, playAppleTrack, updatePlayingPlaylist]);
 
-  // Initial restore: when Apple Music first authorizes, restore MusicKit from backend
-  // This only runs once (initialRestoreDone ref guard)
+  // Initial restore: when Apple Music first authorizes, restore MusicKit from backend.
+  // Runs once (initialRestoreDone ref guard).
+  //
+  // Corner case: user may connect Apple Music while viewing conversation B,
+  // but playback was started from conversation A. In that case we must restore
+  // A's playlist into MusicKit (so playback continues), keep playingSessionId
+  // pointing to A, and NOT touch viewedPlaylist (which shows B's tracks).
   useEffect(() => {
     if (!isAppleMusicAuthorized || isInitializing || initialRestoreDone.current) return;
     if (!activeSessionId) return;
 
     initialRestoreDone.current = true;
 
+    // If playback is already owned by a different session, restore from THAT
+    // session so MusicKit picks up where it left off. Don't touch
+    // viewedPlaylist or playingSessionId — they're already correct.
+    const alreadyPlayingElsewhere = playingSessionId && playingSessionId !== activeSessionId;
+    const restoreSessionId = alreadyPlayingElsewhere ? playingSessionId : activeSessionId;
+
     let cancelled = false;
     (async () => {
-      const data = await restoreStateFromBackend(activeSessionId);
+      const data = await restoreStateFromBackend(restoreSessionId);
       if (!cancelled && data) {
-        setViewedPlaylist(data.playlist || []);
-        setPlayingSessionId(activeSessionId);
-        updatePlayingPlaylist(activeSessionId, data.playlist || []);
+        updatePlayingPlaylist(restoreSessionId, data.playlist || []);
+
+        if (!alreadyPlayingElsewhere) {
+          // No cross-session playback — normal restore for the viewed session
+          setViewedPlaylist(data.playlist || []);
+          setPlayingSessionId(activeSessionId);
+        }
       }
     })();
     return () => { cancelled = true; };
-  }, [isAppleMusicAuthorized, isInitializing, activeSessionId, restoreStateFromBackend, updatePlayingPlaylist]);
+  }, [isAppleMusicAuthorized, isInitializing, activeSessionId, playingSessionId, restoreStateFromBackend, updatePlayingPlaylist]);
 
   // ============================================================================
   // Debounced playlist sync to backend
@@ -493,6 +509,7 @@ function App() {
             fetchConversations={fetchConversations}
             onLogout={() => supabase.auth.signOut()}
             onLinkApple={linkApple}
+            onDisconnectApple={appleMusicLogout}
           />
         } />
 
@@ -516,6 +533,7 @@ function App() {
             fetchConversations={fetchConversations}
             onLogout={() => supabase.auth.signOut()}
             onLinkApple={linkApple}
+            onDisconnectApple={appleMusicLogout}
             viewedPlaylist={viewedPlaylist}
             isViewingPlayingConversation={isViewingPlayingConversation}
             onStartPlaybackFromConversation={startPlaybackFromConversation}

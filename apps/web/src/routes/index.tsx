@@ -37,6 +37,7 @@ interface RouteComponentProps {
   fetchConversations: () => Promise<void>;
   onLogout: () => void;
   onLinkApple?: () => Promise<void>;
+  onDisconnectApple?: () => Promise<void>;
   viewedPlaylist?: FormattedTrack[];
   isViewingPlayingConversation?: boolean;
   onStartPlaybackFromConversation?: (index: number) => void;
@@ -63,6 +64,7 @@ export function HomeRoute({
   fetchConversations,
   onLogout,
   onLinkApple,
+  onDisconnectApple,
 }: RouteComponentProps) {
   const navigate = useNavigate();
 
@@ -95,6 +97,9 @@ export function HomeRoute({
       userEmail={session?.user.email || ''}
       userName={session?.user.email?.split('@')[0] || 'User'}
       onLogout={onLogout}
+      isAppleMusicAuthorized={isAppleMusicAuthorized}
+      onConnectAppleMusic={onLinkApple}
+      onDisconnectAppleMusic={onDisconnectApple}
     >
       <ChatInterface
         isDJSpeaking={isDJSpeaking}
@@ -137,6 +142,7 @@ export function ChatRoute({
   fetchConversations,
   onLogout,
   onLinkApple,
+  onDisconnectApple,
   viewedPlaylist = [],
   isViewingPlayingConversation = true,
   onStartPlaybackFromConversation,
@@ -178,6 +184,9 @@ export function ChatRoute({
       userEmail={session?.user.email || ''}
       userName={session?.user.email?.split('@')[0] || 'User'}
       onLogout={onLogout}
+      isAppleMusicAuthorized={isAppleMusicAuthorized}
+      onConnectAppleMusic={onLinkApple}
+      onDisconnectAppleMusic={onDisconnectApple}
       rightPanel={
         <PlaylistSidebar
           currentTrack={appleTrack}

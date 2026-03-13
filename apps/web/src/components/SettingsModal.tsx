@@ -3,6 +3,9 @@ import { useState, useEffect } from 'react';
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
+  isAppleMusicAuthorized?: boolean;
+  onConnectAppleMusic?: () => void;
+  onDisconnectAppleMusic?: () => void;
 }
 
 type Tab = 'general' | 'integrations';
@@ -60,26 +63,51 @@ function GeneralTab() {
   );
 }
 
-function IntegrationsTab() {
+function IntegrationsTab({
+  isAppleMusicAuthorized,
+  onConnect,
+  onDisconnect,
+}: {
+  isAppleMusicAuthorized?: boolean;
+  onConnect?: () => void;
+  onDisconnect?: () => void;
+}) {
   return (
     <div>
       <h2 className="text-lg font-semibold text-gemini-text mb-6">Integrations</h2>
       <div className="space-y-0 divide-y divide-gemini-border">
         {/* Apple Music */}
-        <div className="flex items-center gap-3 py-4">
-          <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-pink-500 to-red-500 flex items-center justify-center shrink-0">
-            <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 18V5l12-2v13" />
-              <circle cx="6" cy="18" r="3" />
-              <circle cx="18" cy="16" r="3" />
-            </svg>
+        <div className="flex items-center justify-between py-4">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-pink-500 to-red-500 flex items-center justify-center shrink-0">
+              <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 18V5l12-2v13" />
+                <circle cx="6" cy="18" r="3" />
+                <circle cx="18" cy="16" r="3" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gemini-text">Apple Music</p>
+              <p className="text-xs text-gemini-subtext">
+                {isAppleMusicAuthorized ? 'Connected' : 'Enable full playback and recommendations'}
+              </p>
+            </div>
           </div>
-          <div>
-            <p className="text-sm font-medium text-gemini-text">Apple Music</p>
-            <p className="text-xs text-gemini-subtext">
-              Connection is managed automatically on page load.
-            </p>
-          </div>
+          {isAppleMusicAuthorized ? (
+            <button
+              onClick={onDisconnect}
+              className="text-sm px-4 py-1.5 rounded-lg border border-gemini-border text-gemini-subtext hover:border-red-300 hover:text-red-600 transition-colors"
+            >
+              Disconnect
+            </button>
+          ) : (
+            <button
+              onClick={onConnect}
+              className="text-sm px-4 py-1.5 rounded-lg border border-gemini-primary text-gemini-primary hover:bg-gemini-primary hover:text-white transition-colors"
+            >
+              Connect
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -89,6 +117,9 @@ function IntegrationsTab() {
 export function SettingsModal({
   isOpen,
   onClose,
+  isAppleMusicAuthorized,
+  onConnectAppleMusic,
+  onDisconnectAppleMusic,
 }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<Tab>('general');
 
@@ -152,7 +183,13 @@ export function SettingsModal({
         {/* Right content */}
         <div className="flex-1 p-8 overflow-y-auto">
           {activeTab === 'general' && <GeneralTab />}
-          {activeTab === 'integrations' && <IntegrationsTab />}
+          {activeTab === 'integrations' && (
+            <IntegrationsTab
+              isAppleMusicAuthorized={isAppleMusicAuthorized}
+              onConnect={onConnectAppleMusic}
+              onDisconnect={onDisconnectAppleMusic}
+            />
+          )}
         </div>
       </div>
     </div>
