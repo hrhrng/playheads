@@ -1,5 +1,6 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.pool import NullPool
 import os
 from typing import AsyncGenerator
 
@@ -20,19 +21,15 @@ DATABASE_URL = DATABASE_URL_RAW
 if DATABASE_URL.startswith("postgresql://"):
     DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
 
-# Create Async Engine with PostgreSQL settings
+# Create Async Engine — use NullPool since Supabase Supavisor handles pooling
 engine = create_async_engine(
     DATABASE_URL,
     echo=False,
-    pool_size=5,
-    max_overflow=10,
-    pool_timeout=30,
-    pool_recycle=1800,
-    pool_pre_ping=True,
-    future=True,
+    poolclass=NullPool,
     connect_args={
         "ssl": "require",
         "statement_cache_size": 0,
+        "prepared_statement_cache_size": 0,
     },
 )
 
