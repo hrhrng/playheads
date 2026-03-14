@@ -65,7 +65,11 @@ export default function useAppleMusicLink(userId: string | null): UseAppleMusicL
 
   // On page load: check link status and validate token
   useEffect(() => {
-    if (!userId || checkedRef.current) return;
+    if (!userId) {
+      setIsTokenChecked(true);
+      return;
+    }
+    if (checkedRef.current) return;
     checkedRef.current = true;
 
     (async () => {
