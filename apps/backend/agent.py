@@ -487,6 +487,12 @@ async def _process_astream(agent_graph, stream_input, config):
                 if isinstance(content, list):
                     for part in content:
                         if isinstance(part, dict):
+                            part_type = part.get("type", "")
+                            if part_type not in ("text", "thinking"):
+                                log.info("content_block: %s", json.dumps(
+                                    {k: v for k, v in part.items() if k != "encrypted_content"},
+                                    default=str,
+                                )[:500])
                             if part.get("type") == "text":
                                 text_content = part.get("text", "")
                                 if text_content:
