@@ -37,7 +37,7 @@ logging.basicConfig(level=logging.INFO, handlers=[handler])
 log = logging.getLogger("playhead")
 
 # Then import database which depends on env vars
-from apps.backend.database import get_db, DATABASE_URL_RAW
+from apps.backend.database import get_db, DATABASE_URL_RAW, warmup_pool
 
 app = FastAPI(title="Playhead Music Agent API", version="2.0.0")
 
@@ -74,7 +74,7 @@ app.include_router(apple_music_router)
 
 @app.on_event("startup")
 async def startup_event():
-    """Log configuration summary on startup for quick diagnostics."""
+    """Log configuration summary on startup and warm up DB pool."""
     db_host = DATABASE_URL_RAW.split("@")[-1].split("/")[0] if "@" in DATABASE_URL_RAW else "unknown"
     openai_key = os.getenv("OPENAI_API_KEY", "")
     openai_base = os.getenv("OPENAI_BASE_URL", "(default)")
@@ -86,6 +86,12 @@ async def startup_event():
     log.info("OPENAI_API_KEY: %s", f"{openai_key[:8]}...{openai_key[-4:]}" if len(openai_key) > 12 else ("SET" if openai_key else "NOT SET"))
     log.info("OPENAI_BASE   : %s", openai_base)
     log.info("=" * 60)
+
+    # Warm up DB connection pool — pay TCP+SSL cost at startup, not on first request
+    try:
+        await warmup_pool()
+    except Exception as e:
+        log.warning("DB pool warmup failed (will connect on first request): %s", e)
 
 
 # =============================================================================

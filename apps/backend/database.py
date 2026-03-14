@@ -56,6 +56,19 @@ AsyncSessionLocal = async_sessionmaker(
 class Base(DeclarativeBase):
     pass
 
+
+async def warmup_pool():
+    """Pre-create DB connections so the first user request doesn't pay TCP+SSL cost."""
+    import logging
+    import time
+    from sqlalchemy import text
+    log = logging.getLogger("playhead")
+    t0 = time.perf_counter()
+    async with engine.connect() as conn:
+        await conn.execute(text("SELECT 1"))
+    log.info("⏱ DB pool warmup: %.0fms", (time.perf_counter() - t0) * 1000)
+
+
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with AsyncSessionLocal() as session:
         try:
