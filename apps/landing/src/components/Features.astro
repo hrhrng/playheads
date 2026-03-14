@@ -1,0 +1,31 @@
+---
+const features = [
+  {
+    title: 'AI Music Agent',
+    description: 'Chat with an intelligent agent that understands music. Get recommendations, discover new artists, and explore genres through natural conversation.',
+    icon: '🎵',
+  },
+  {
+    title: 'Seamless Playback',
+    description: 'Connect your Apple Music account and play songs directly. Your agent finds the music, you just listen.',
+    icon: '▶️',
+  },
+  {
+    title: 'Personal & Private',
+    description: 'Your music taste, your conversations, your data. Everything stays private and syncs across your sessions.',
+    icon: '🔒',
+  },
+];
+---
+
+<section id="features" class="scroll-mt-16 px-6 py-20 max-w-5xl mx-auto">
+  <div class="grid md:grid-cols-3 gap-6">
+    {features.map((feature) => (
+      <div class="bg-white rounded-2xl p-8 border border-air-100">
+        <div class="text-2xl mb-4">{feature.icon}</div>
+        <h3 class="font-semibold text-sm mb-2">{feature.title}</h3>
+        <p class="text-air-500 text-sm leading-relaxed">{feature.description}</p>
+      </div>
+    ))}
+  </div>
+</section>

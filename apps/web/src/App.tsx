@@ -14,6 +14,8 @@ import { useConversations } from './hooks/useConversations';
 import { ToastProvider } from './components/ToastProvider';
 import { LoadingScreen } from './components/LoadingScreen';
 import { LoginScreen } from './components/LoginScreen';
+import { WaitlistGate } from './components/WaitlistGate';
+import { useWaitlistGate } from './hooks/useWaitlistGate';
 import { useChatStore } from './store/chatStore';
 
 function App() {
@@ -33,6 +35,9 @@ function App() {
     handleLogin,
     logout,
   } = useAuth();
+
+  // Waitlist gate (reads user_metadata from session, no external dependency)
+  const waitlistStatus = useWaitlistGate(effectiveSession);
 
   // Conversations CRUD
   const {
@@ -207,6 +212,10 @@ function App() {
         onLogin={handleLogin}
       />
     );
+  }
+
+  if (!isDev && waitlistStatus !== 'approved') {
+    return <WaitlistGate email={effectiveSession?.user?.email} onLogout={logout} />;
   }
 
   return (

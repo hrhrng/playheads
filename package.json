@@ -3,9 +3,9 @@
     "private": true,
     "scripts": {
         "dev:web": "pnpm --filter web dev",
-        "dev:web-new": "pnpm --filter web-new dev",
+        "dev:landing": "pnpm --filter landing dev",
         "build:web": "pnpm --filter web build",
-        "build:web-new": "pnpm --filter web-new build",
+        "build:landing": "pnpm --filter landing build",
         "install:all": "pnpm install",
         "clean": "rm -rf node_modules apps/*/node_modules"
     },

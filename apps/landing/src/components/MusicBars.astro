@@ -1,0 +1,13 @@
+---
+interface Props {
+  class?: string;
+}
+
+const { class: className = '' } = Astro.props;
+---
+
+<div class:list={['flex items-end gap-[3px] h-5', className]}>
+  <div class="w-[3px] bg-air-400 rounded-full animate-music-bar-1" style="height: 20%"></div>
+  <div class="w-[3px] bg-air-400 rounded-full animate-music-bar-2" style="height: 20%"></div>
+  <div class="w-[3px] bg-air-400 rounded-full animate-music-bar-3" style="height: 20%"></div>
+</div>

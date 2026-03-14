@@ -1,5 +1,6 @@
-.PHONY: dev dev-web dev-backend install install-web install-backend clean help \
-       test test-backend test-web lint lint-web type-check ci
+.PHONY: dev dev-web dev-backend dev-landing install install-web install-backend \
+       install-landing clean help test test-backend test-web lint lint-web \
+       type-check ci build-landing deploy-landing
 
 # =============================================================================
 # Development
@@ -17,16 +18,24 @@ dev-backend:
 	@echo "Starting backend..."
 	uv run --package backend uvicorn apps.backend.main:app --port 8001 --reload
 
+dev-landing:
+	@echo "Starting landing page..."
+	pnpm --filter landing dev
+
 # =============================================================================
 # Install
 # =============================================================================
 
-install: install-web install-backend
+install: install-web install-landing install-backend
 	@echo "All dependencies installed!"
 
 install-web:
 	@echo "Installing web dependencies..."
 	pnpm install --filter web
+
+install-landing:
+	@echo "Installing landing dependencies..."
+	pnpm install --filter landing
 
 install-backend:
 	@echo "Installing backend dependencies..."
@@ -66,6 +75,16 @@ ci: lint type-check test
 # Clean
 # =============================================================================
 
+build-landing:
+	pnpm --filter landing build
+
+deploy-landing:
+	pnpm --filter landing run deploy
+
+# =============================================================================
+# Clean
+# =============================================================================
+
 clean:
 	@echo "Cleaning caches..."
 	rm -rf apps/web/node_modules/.vite
@@ -84,10 +103,12 @@ help:
 	@echo "    make dev            - Start both frontend and backend"
 	@echo "    make dev-web        - Start frontend only"
 	@echo "    make dev-backend    - Start backend only"
+	@echo "    make dev-landing    - Start landing page only"
 	@echo ""
 	@echo "  Install:"
 	@echo "    make install        - Install all dependencies"
 	@echo "    make install-web    - Install frontend dependencies"
+	@echo "    make install-landing - Install landing dependencies"
 	@echo "    make install-backend - Install backend dependencies"
 	@echo ""
 	@echo "  Test:"
@@ -99,6 +120,10 @@ help:
 	@echo "    make lint           - Lint frontend"
 	@echo "    make type-check     - TypeScript type checking"
 	@echo "    make ci             - Full CI pipeline (lint + type-check + test)"
+	@echo ""
+	@echo "  Landing:"
+	@echo "    make build-landing  - Build landing page"
+	@echo "    make deploy-landing - Deploy landing to Cloudflare"
 	@echo ""
 	@echo "  Other:"
 	@echo "    make clean          - Clean caches"
