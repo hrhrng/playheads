@@ -87,17 +87,17 @@ export const ToolCall = ({
       {isExpanded && (
         <div className="border-t px-3 pb-3 pt-2 bg-white/50">
           <div className="space-y-2">
-            {/* Arguments — hide if empty (e.g. server-side tools like web_search) */}
-            {args && Object.keys(args).length > 0 && (
+            {/* Arguments */}
             <div>
               <div className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-1">
                 INPUT
               </div>
               <pre className="bg-white border border-gray-200 p-2 rounded text-[11px] overflow-x-auto font-mono text-gray-700">
-                {JSON.stringify(args, null, 2)}
+                {args && Object.keys(args).length > 0
+                  ? JSON.stringify(args, null, 2)
+                  : status === 'pending' ? 'Searching...' : 'N/A'}
               </pre>
             </div>
-            )}
 
             {/* Result */}
             <div>

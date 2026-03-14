@@ -526,12 +526,12 @@ async def _process_astream(agent_graph, stream_input, config):
                                     idx = part.get("index")
                                     if idx is not None:
                                         chunk_index_to_id[idx] = tool_id
-                                    if tool_input and tool_input != {}:
-                                        emitted_tool_starts.add(tool_id)
-                                        yield {"event": "tool_start", "data": {
-                                            "id": tool_id, "tool_name": tool_name,
-                                            "args": tool_input,
-                                        }}
+                                    # Emit immediately — frontend handles empty args gracefully
+                                    emitted_tool_starts.add(tool_id)
+                                    yield {"event": "tool_start", "data": {
+                                        "id": tool_id, "tool_name": tool_name,
+                                        "args": tool_input,
+                                    }}
                             elif part.get("type") == "input_json_delta":
                                 # Streaming input for server_tool_use (query arrives in chunks)
                                 idx = part.get("index")
@@ -545,13 +545,12 @@ async def _process_astream(agent_graph, stream_input, config):
                                         parsed = json.loads(tool_call_args_buffer[tool_id])
                                         if tool_id in tool_calls_map:
                                             tool_calls_map[tool_id]["args"] = parsed
-                                        if tool_id not in emitted_tool_starts:
-                                            emitted_tool_starts.add(tool_id)
-                                            yield {"event": "tool_start", "data": {
-                                                "id": tool_id,
-                                                "tool_name": active_tool_calls.get(tool_id, "web_search"),
-                                                "args": parsed,
-                                            }}
+                                        # Send updated tool_start with populated args
+                                        yield {"event": "tool_start", "data": {
+                                            "id": tool_id,
+                                            "tool_name": active_tool_calls.get(tool_id, "web_search"),
+                                            "args": parsed,
+                                        }}
                                     except json.JSONDecodeError:
                                         pass
                             elif part.get("type") in (
