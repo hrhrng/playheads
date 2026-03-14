@@ -53,6 +53,7 @@ function App() {
   const viewedPlaylist = useChatStore(s => s.viewedPlaylist);
   const setViewedPlaylist = useChatStore(s => s.setViewedPlaylist);
   const initialRestoreDone = useRef(false);
+  const playlistSyncReady = useRef(false);
 
   // Extract active session ID from URL
   const pathParts = location.pathname.split('/');
@@ -127,10 +128,17 @@ function App() {
         updatePlayingPlaylist(restoreSessionId, data.playlist || []);
 
         if (!alreadyPlayingElsewhere) {
-          setViewedPlaylist(data.playlist || []);
+          // Only overwrite local playlist if backend has actual data;
+          // otherwise keep the locally-created playlist (e.g. from SSE actions
+          // before Apple Music was connected).
+          const backendPlaylist = data.playlist || [];
+          if (backendPlaylist.length > 0 || viewedPlaylist.length === 0) {
+            setViewedPlaylist(backendPlaylist);
+          }
           setPlayingSessionId(activeSessionId);
         }
       }
+      playlistSyncReady.current = true;
     })();
     return () => { cancelled = true; };
   }, [isAppleMusicAuthorized, isInitializing, activeSessionId, playingSessionId, restoreStateFromBackend, updatePlayingPlaylist]);
@@ -143,7 +151,22 @@ function App() {
   const lastSyncedSessionRef = useRef<string | null>(null);
   const isLoadingHistory = useChatStore(s => s.isLoadingHistory);
 
+  // Mark playlist sync as ready after first history load completes.
+  // This decouples playlist persistence from Apple Music auth — playlists
+  // created before connecting Apple Music will be synced to backend.
+  const historyLoadedOnce = useRef(false);
   useEffect(() => {
+    if (isLoadingHistory) {
+      historyLoadedOnce.current = true;
+    } else if (historyLoadedOnce.current) {
+      playlistSyncReady.current = true;
+    }
+  }, [isLoadingHistory]);
+
+  useEffect(() => {
+    // Don't sync until history has loaded at least once — otherwise the empty
+    // default viewedPlaylist overwrites the real playlist in the backend.
+    if (!playlistSyncReady.current) return;
     if (isLoadingHistory) return;
 
     if (activeSessionId !== lastSyncedSessionRef.current) {

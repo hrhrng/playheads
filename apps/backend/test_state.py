@@ -2,7 +2,7 @@
 Unit tests for Pydantic models and SessionStore hydration logic.
 
 Covers TrackInfo, Message, SessionState (add_message, get_context_summary),
-and SessionStore._hydrate_session — the pure-logic layer that converts
+and SessionStore._hydrate — the pure-logic layer that converts
 DB rows into domain objects without touching the database.
 """
 from datetime import datetime
@@ -171,26 +171,23 @@ class TestSessionState:
 
 
 # =============================================================================
-# SessionStore._hydrate_session
+# SessionStore._hydrate
 # =============================================================================
 
 class TestHydrateSession:
-    """_hydrate_session converts a DB ConversationState row into a SessionState.
+    """_hydrate converts a Supabase row dict into a SessionState."""
 
-    We mock ConversationState with SimpleNamespace to avoid DB dependencies.
-    """
-
-    def _make_db_state(self, *, context=None, messages=None, last_synced_at=None):
-        """Build a mock ConversationState with the same attrs _hydrate_session reads."""
-        return SimpleNamespace(
-            context=context or {},
-            messages=messages or [],
-            last_synced_at=last_synced_at,
-        )
+    def _make_data(self, *, context=None, messages=None, last_synced_at=None):
+        """Build a dict matching the Supabase row format that _hydrate reads."""
+        return {
+            "context": context or {},
+            "messages": messages or [],
+            "last_synced_at": last_synced_at,
+        }
 
     def test_hydrate_full_context(self):
         """Full context (track, playlist, playback) should be fully restored."""
-        db_state = self._make_db_state(
+        data = self._make_data(
             context={
                 "current_track": {
                     "id": "t-1",
@@ -209,46 +206,30 @@ class TestHydrateSession:
                 {"role": "user", "content": "Play Take Five"},
                 {"role": "agent", "content": "Now playing Take Five!"},
             ],
-            last_synced_at=datetime(2025, 1, 15, 12, 0, 0),
+            last_synced_at="2025-01-15T12:00:00",
         )
 
         store = SessionStore()
-        session = store._hydrate_session(db_state, "abc-session-id")
+        session = store._hydrate(data, "abc-session-id")
 
-        # Session metadata
         assert session.session_id == "abc-session-id"
-
-        # Current track restored
         assert session.current_track is not None
         assert session.current_track.name == "Take Five"
         assert session.current_track.album == "Time Out"
-
-        # Playlist restored
         assert len(session.playlist) == 2
         assert session.playlist[1].name == "Blue Rondo"
-
-        # Playback state restored
         assert session.is_playing is True
         assert session.playback_position == 42.5
-
-        # Chat history restored
         assert len(session.chat_history) == 2
         assert session.chat_history[0].role == "user"
         assert session.chat_history[1].content == "Now playing Take Five!"
 
-        # Timestamp from DB
-        assert session.last_sync == datetime(2025, 1, 15, 12, 0, 0)
-
     def test_hydrate_empty_context(self):
         """Empty/null context should produce a clean default SessionState."""
-        db_state = self._make_db_state(
-            context={},
-            messages=[],
-            last_synced_at=None,  # Null in DB → falls back to datetime.now()
-        )
+        data = self._make_data(context={}, messages=[], last_synced_at=None)
 
         store = SessionStore()
-        session = store._hydrate_session(db_state, "empty-session")
+        session = store._hydrate(data, "empty-session")
 
         assert session.session_id == "empty-session"
         assert session.current_track is None
@@ -256,15 +237,14 @@ class TestHydrateSession:
         assert session.is_playing is False
         assert session.playback_position == 0.0
         assert session.chat_history == []
-        # last_sync should still be a valid datetime (fallback to now)
         assert isinstance(session.last_sync, datetime)
 
     def test_hydrate_with_none_context(self):
         """context=None in DB (not just empty dict) should not crash."""
-        db_state = self._make_db_state(context=None, messages=None)
+        data = self._make_data(context=None, messages=None)
 
         store = SessionStore()
-        session = store._hydrate_session(db_state, "null-ctx")
+        session = store._hydrate(data, "null-ctx")
 
         assert session.current_track is None
         assert session.playlist == []

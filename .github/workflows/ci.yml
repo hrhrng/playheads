@@ -28,7 +28,6 @@ jobs:
       - name: Run tests
         env:
           DATABASE_URL: postgresql://test:test@localhost:5432/testdb
-          OPENAI_API_KEY: sk-test-dummy-key-for-ci
         run: uv run --project apps/backend pytest apps/backend/ -v
 
   frontend:
