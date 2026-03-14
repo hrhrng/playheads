@@ -9,9 +9,15 @@ Requires real API keys in .env (ANTHROPIC_API_KEY or OPENAI_API_KEY).
 from __future__ import annotations
 
 import json
+import os
 import uuid
 
 import pytest
+
+pytestmark = pytest.mark.skipif(
+    not os.getenv("ANTHROPIC_API_KEY") and not os.getenv("OPENAI_API_KEY"),
+    reason="Live tests require API keys"
+)
 from langgraph.checkpoint.memory import MemorySaver
 
 from apps.backend.agent import create_music_agent, _process_astream

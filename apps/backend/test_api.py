@@ -235,80 +235,62 @@ class TestConversationsCRUD:
             app.dependency_overrides.pop(get_db, None)
 
     async def test_list_conversations(self):
-        """GET /conversations should return a list (mocking DB execute)."""
+        """GET /conversations should return a list (mocking Supabase)."""
         user_id = str(uuid.uuid4())
-        mock_db = _mock_db()
+        conv_id = str(uuid.uuid4())
 
-        # Mock the DB result: scalars().all() returns a list of Conversation-like objects
-        mock_conv = MagicMock()
-        mock_conv.id = uuid.uuid4()
-        mock_conv.title = "Jazz Chat"
-        mock_conv.message_count = 5
-        mock_conv.last_message_preview = "Play some jazz"
-        mock_conv.last_message_at = datetime(2025, 6, 1)
-        mock_conv.is_pinned = False
-        mock_conv.updated_at = datetime(2025, 6, 1)
+        # Mock Supabase chain: sb.table().select().eq().eq().order().order().limit().execute()
+        mock_execute = AsyncMock(return_value=MagicMock(data=[{
+            "id": conv_id,
+            "title": "Jazz Chat",
+            "message_count": 5,
+            "last_message_preview": "Play some jazz",
+            "last_message_at": "2025-06-01T00:00:00",
+            "is_pinned": False,
+            "updated_at": "2025-06-01T00:00:00",
+        }]))
+        mock_sb = MagicMock()
+        mock_sb.table.return_value.select.return_value.eq.return_value.eq.return_value.order.return_value.order.return_value.limit.return_value.execute = mock_execute
 
-        # Chain: db.execute() → result; result.scalars() → scalars; scalars.all() → [conv]
-        mock_result = MagicMock()
-        mock_scalars = MagicMock()
-        mock_scalars.all.return_value = [mock_conv]
-        mock_result.scalars.return_value = mock_scalars
-        mock_db.execute = AsyncMock(return_value=mock_result)
-
-        app.dependency_overrides[get_db] = lambda: mock_db
-
-        try:
+        with patch("apps.backend.main.get_supabase", new_callable=AsyncMock, return_value=mock_sb):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 resp = await client.get("/conversations", params={"user_id": user_id})
 
-            assert resp.status_code == 200
-            body = resp.json()
-            assert len(body["conversations"]) == 1
-            assert body["conversations"][0]["title"] == "Jazz Chat"
-        finally:
-            app.dependency_overrides.pop(get_db, None)
+        assert resp.status_code == 200
+        body = resp.json()
+        assert len(body["conversations"]) == 1
+        assert body["conversations"][0]["title"] == "Jazz Chat"
 
     async def test_delete_conversation_not_found(self):
         """DELETE non-existent conversation → 404."""
         conv_id = str(uuid.uuid4())
         user_id = str(uuid.uuid4())
-        mock_db = _mock_db()
 
-        # scalar_one_or_none returns None → not found
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = None
-        mock_db.execute = AsyncMock(return_value=mock_result)
+        # Mock Supabase: ownership check returns no data
+        mock_execute = AsyncMock(return_value=MagicMock(data=None))
+        mock_sb = MagicMock()
+        mock_sb.table.return_value.select.return_value.eq.return_value.eq.return_value.maybe_single.return_value.execute = mock_execute
 
-        app.dependency_overrides[get_db] = lambda: mock_db
-
-        try:
+        with patch("apps.backend.main.get_supabase", new_callable=AsyncMock, return_value=mock_sb):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 resp = await client.delete(f"/conversations/{conv_id}", params={"user_id": user_id})
 
-            assert resp.status_code == 404
-        finally:
-            app.dependency_overrides.pop(get_db, None)
+        assert resp.status_code == 404
 
     async def test_patch_conversation_pin(self):
         """PATCH /conversations/:id should update is_pinned and return success."""
         conv_id = str(uuid.uuid4())
         user_id = str(uuid.uuid4())
-        mock_db = _mock_db()
 
-        # First execute: ownership check → return a truthy Conversation mock
-        # Second execute: the update statement
-        mock_conv = MagicMock()
-        mock_result_found = MagicMock()
-        mock_result_found.scalar_one_or_none.return_value = mock_conv
+        # Mock Supabase: ownership check returns data, update succeeds
+        mock_ownership = AsyncMock(return_value=MagicMock(data={"id": conv_id}))
+        mock_update = AsyncMock(return_value=MagicMock(data=[]))
 
-        mock_result_update = MagicMock()
+        mock_sb = MagicMock()
+        mock_sb.table.return_value.select.return_value.eq.return_value.eq.return_value.maybe_single.return_value.execute = mock_ownership
+        mock_sb.table.return_value.update.return_value.eq.return_value.execute = mock_update
 
-        mock_db.execute = AsyncMock(side_effect=[mock_result_found, mock_result_update])
-
-        app.dependency_overrides[get_db] = lambda: mock_db
-
-        try:
+        with patch("apps.backend.main.get_supabase", new_callable=AsyncMock, return_value=mock_sb):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 resp = await client.patch(
                     f"/conversations/{conv_id}",
@@ -316,26 +298,21 @@ class TestConversationsCRUD:
                     json={"is_pinned": True},
                 )
 
-            assert resp.status_code == 200
-            body = resp.json()
-            assert body["success"] is True
-            assert "is_pinned" in body["fields"]
-        finally:
-            app.dependency_overrides.pop(get_db, None)
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["success"] is True
+        assert "is_pinned" in body["fields"]
 
     async def test_patch_conversation_not_found(self):
         """PATCH on non-existent conversation → 404."""
         conv_id = str(uuid.uuid4())
         user_id = str(uuid.uuid4())
-        mock_db = _mock_db()
 
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = None
-        mock_db.execute = AsyncMock(return_value=mock_result)
+        mock_execute = AsyncMock(return_value=MagicMock(data=None))
+        mock_sb = MagicMock()
+        mock_sb.table.return_value.select.return_value.eq.return_value.eq.return_value.maybe_single.return_value.execute = mock_execute
 
-        app.dependency_overrides[get_db] = lambda: mock_db
-
-        try:
+        with patch("apps.backend.main.get_supabase", new_callable=AsyncMock, return_value=mock_sb):
             async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 resp = await client.patch(
                     f"/conversations/{conv_id}",
@@ -343,6 +320,4 @@ class TestConversationsCRUD:
                     json={"title": "New Title"},
                 )
 
-            assert resp.status_code == 404
-        finally:
-            app.dependency_overrides.pop(get_db, None)
+        assert resp.status_code == 404

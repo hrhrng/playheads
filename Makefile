@@ -1,5 +1,9 @@
 .PHONY: dev dev-web dev-backend install install-web install-backend clean help \
-       test test-backend test-web lint lint-web type-check ci
+       test test-backend test-web lint lint-web type-check ci \
+       deploy deploy-preview deploy-production build-web \
+       deploy-preview-web deploy-preview-gateway \
+       deploy-production-web deploy-production-gateway \
+       deploy-secrets-preview deploy-secrets-production
 
 # =============================================================================
 # Development
@@ -74,6 +78,58 @@ clean:
 	@echo "Cleaned!"
 
 # =============================================================================
+# Deploy (Cloudflare)
+# =============================================================================
+
+deploy: deploy-preview
+
+deploy-preview: build-web deploy-preview-web deploy-preview-gateway
+
+deploy-production: build-web deploy-production-web deploy-production-gateway
+
+build-web:
+	@echo "Building web frontend..."
+	pnpm --filter web build
+
+deploy-preview-web:
+	@echo "Deploying web worker (preview)..."
+	cd apps/web && npx wrangler deploy --config wrangler.preview.toml
+
+deploy-preview-gateway:
+	@echo "Deploying gateway worker (preview)..."
+	cd apps/gateway && npx wrangler deploy --config wrangler.preview.toml
+
+deploy-production-web:
+	@echo "Deploying web worker (production)..."
+	cd apps/web && npx wrangler deploy --config wrangler.production.toml
+
+deploy-production-gateway:
+	@echo "Deploying gateway worker (production)..."
+	cd apps/gateway && npx wrangler deploy --config wrangler.production.toml
+
+deploy-secrets-preview:
+	@echo "Setting Cloudflare secrets for preview..."
+	cd apps/gateway && npx wrangler secret put DATABASE_URL --config wrangler.preview.toml
+	cd apps/gateway && npx wrangler secret put ANTHROPIC_API_KEY --config wrangler.preview.toml
+	cd apps/gateway && npx wrangler secret put OPENAI_API_KEY --config wrangler.preview.toml
+	cd apps/gateway && npx wrangler secret put OPENAI_BASE_URL --config wrangler.preview.toml
+	cd apps/gateway && npx wrangler secret put APPLE_MUSIC_TEAM_ID --config wrangler.preview.toml
+	cd apps/gateway && npx wrangler secret put APPLE_MUSIC_KEY_ID --config wrangler.preview.toml
+	cd apps/gateway && npx wrangler secret put APPLE_MUSIC_PRIVATE_KEY --config wrangler.preview.toml
+	cd apps/gateway && npx wrangler secret put MINIMAX_API_KEY --config wrangler.preview.toml
+
+deploy-secrets-production:
+	@echo "Setting Cloudflare secrets for production..."
+	cd apps/gateway && npx wrangler secret put DATABASE_URL --config wrangler.production.toml
+	cd apps/gateway && npx wrangler secret put ANTHROPIC_API_KEY --config wrangler.production.toml
+	cd apps/gateway && npx wrangler secret put OPENAI_API_KEY --config wrangler.production.toml
+	cd apps/gateway && npx wrangler secret put OPENAI_BASE_URL --config wrangler.production.toml
+	cd apps/gateway && npx wrangler secret put APPLE_MUSIC_TEAM_ID --config wrangler.production.toml
+	cd apps/gateway && npx wrangler secret put APPLE_MUSIC_KEY_ID --config wrangler.production.toml
+	cd apps/gateway && npx wrangler secret put APPLE_MUSIC_PRIVATE_KEY --config wrangler.production.toml
+	cd apps/gateway && npx wrangler secret put MINIMAX_API_KEY --config wrangler.production.toml
+
+# =============================================================================
 # Help
 # =============================================================================
 
@@ -99,6 +155,14 @@ help:
 	@echo "    make lint           - Lint frontend"
 	@echo "    make type-check     - TypeScript type checking"
 	@echo "    make ci             - Full CI pipeline (lint + type-check + test)"
+	@echo ""
+	@echo "  Deploy:"
+	@echo "    make deploy              - Build + deploy to preview (default)"
+	@echo "    make deploy-preview      - Build + deploy to preview"
+	@echo "    make deploy-production   - Build + deploy to production"
+	@echo "    make build-web           - Build frontend"
+	@echo "    make deploy-secrets-preview    - Set secrets for preview"
+	@echo "    make deploy-secrets-production - Set secrets for production"
 	@echo ""
 	@echo "  Other:"
 	@echo "    make clean          - Clean caches"
