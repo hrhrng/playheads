@@ -244,19 +244,31 @@ let loginMsg = '';
 let loginMsgType = '';
 let authLoading = true;
 
-// Listen for magic link callback (hash fragment with access_token)
-sb.auth.onAuthStateChange((event, session) => {
+// Init: check existing session, then listen for changes
+async function initAuth() {
+  const { data: { session } } = await sb.auth.getSession();
   if (session?.access_token) {
     token = session.access_token;
     authLoading = false;
-    // Clean URL hash
     if (window.location.hash) history.replaceState(null, '', window.location.pathname);
     fetchData();
   } else {
     authLoading = false;
     render();
   }
-});
+  // Listen for sign-in (magic link) and sign-out
+  sb.auth.onAuthStateChange((event, session) => {
+    if (event === 'SIGNED_IN' && session?.access_token) {
+      token = session.access_token;
+      if (window.location.hash) history.replaceState(null, '', window.location.pathname);
+      fetchData();
+    } else if (event === 'SIGNED_OUT') {
+      token = null;
+      render();
+    }
+  });
+}
+initAuth();
 
 function render() {
   if (authLoading) {
@@ -367,7 +379,7 @@ async function fetchData() {
   const params = new URLSearchParams({ page: String(page) });
   if (filter) params.set('status', filter);
   const res = await fetch('/api/waitlist?' + params, { headers: { Authorization: 'Bearer ' + token } });
-  if (res.status === 401) { token = null; render(); return; }
+  if (res.status === 401) { token = null; loginMsg = 'Access denied. Not an admin or secrets not configured.'; loginMsgType = 'error'; render(); return; }
   const json = await res.json();
   entries = json.data || [];
   stats = json.stats || stats;
