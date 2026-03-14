@@ -1,9 +1,21 @@
+import { useEffect } from 'react';
+
 interface WaitlistGateProps {
   email?: string;
   onLogout: () => void;
 }
 
 export function WaitlistGate({ email, onLogout }: WaitlistGateProps) {
+  // Auto-add logged-in user to waitlist if not already there
+  useEffect(() => {
+    if (!email) return;
+    fetch('/api/waitlist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    }).catch(() => {});
+  }, [email]);
+
   return (
     <div className="min-h-screen w-full bg-air-50 flex flex-col items-center justify-center p-6">
       <div className="flex flex-col items-center space-y-8 max-w-sm w-full animate-fade-in">
