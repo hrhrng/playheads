@@ -37,77 +37,23 @@ export function useAuth() {
     return () => subscription.unsubscribe();
   }, []);
 
-  const [password, setPassword] = useState('');
-  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
-
   const handleLogin = useCallback(async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
     setAuthMessage(null);
 
-    if (password) {
-      // Email + Password auth
-      const fn = authMode === 'signup'
-        ? supabase.auth.signUp({ email, password })
-        : supabase.auth.signInWithPassword({ email, password });
-
-      const { error } = await fn;
-      if (error) {
-        setAuthMessage({ type: 'error', text: error.message });
-      } else if (authMode === 'signup') {
-        setAuthMessage({ type: 'success', text: 'Account created! Check your email to confirm.' });
-      }
-    } else {
-      // Magic Link (no password)
-      const { error } = await supabase.auth.signInWithOtp({
-        email,
-        options: { emailRedirectTo: window.location.origin },
-      });
-
-      if (error) {
-        setAuthMessage({ type: 'error', text: error.message });
-      } else {
-        setAuthMessage({ type: 'success', text: 'Check your email for the login link!' });
-      }
-    }
-    setLoading(false);
-  }, [email, password, authMode]);
-
-  const handleResetPassword = useCallback(async () => {
-    if (!email) {
-      setAuthMessage({ type: 'error', text: 'Please enter your email first' });
-      return;
-    }
-    setLoading(true);
-    setAuthMessage(null);
-
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: window.location.origin },
     });
 
     if (error) {
       setAuthMessage({ type: 'error', text: error.message });
     } else {
-      setAuthMessage({ type: 'success', text: 'Check your email for the password reset link!' });
+      setAuthMessage({ type: 'success', text: 'Check your email for the login link!' });
     }
     setLoading(false);
   }, [email]);
-
-  const handleGoogleLogin = useCallback(async () => {
-    setLoading(true);
-    setAuthMessage(null);
-
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: window.location.origin },
-    });
-
-    if (error) {
-      setAuthMessage({ type: 'error', text: error.message });
-      setLoading(false);
-    }
-    // On success, browser redirects to Google — no need to setLoading(false)
-  }, []);
 
   const logout = useCallback(() => {
     supabase.auth.signOut();
@@ -120,15 +66,9 @@ export function useAuth() {
     isDev,
     email,
     setEmail,
-    password,
-    setPassword,
-    authMode,
-    setAuthMode,
     loading,
     authMessage,
     handleLogin,
-    handleResetPassword,
-    handleGoogleLogin,
     logout,
   };
 }

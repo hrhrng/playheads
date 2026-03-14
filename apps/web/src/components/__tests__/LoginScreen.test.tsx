@@ -7,10 +7,6 @@ describe('LoginScreen', () => {
   const defaultProps = {
     email: '',
     setEmail: vi.fn(),
-    password: '',
-    setPassword: vi.fn(),
-    authMode: 'login' as const,
-    setAuthMode: vi.fn(),
     loading: false,
     message: null,
     onLogin: vi.fn((e: React.FormEvent) => { e.preventDefault(); return Promise.resolve(); }),
@@ -19,17 +15,12 @@ describe('LoginScreen', () => {
   it('renders email input and submit button', () => {
     render(<LoginScreen {...defaultProps} />);
     expect(screen.getByPlaceholderText('Your email')).toBeInTheDocument();
-    expect(screen.getByText('Send Magic Link')).toBeInTheDocument();
+    expect(screen.getByText('Sign In with Email')).toBeInTheDocument();
   });
 
   it('shows loading text when loading', () => {
     render(<LoginScreen {...defaultProps} loading={true} />);
     expect(screen.getByText('Sending Magic Link...')).toBeInTheDocument();
-  });
-
-  it('shows Sign In button when password is entered', () => {
-    render(<LoginScreen {...defaultProps} password="test123" />);
-    expect(screen.getByText('Sign In')).toBeInTheDocument();
   });
 
   it('displays error message', () => {
@@ -52,7 +43,7 @@ describe('LoginScreen', () => {
   it('calls onLogin on form submit', async () => {
     const onLogin = vi.fn((e: React.FormEvent) => { e.preventDefault(); return Promise.resolve(); });
     render(<LoginScreen {...defaultProps} email="test@test.com" onLogin={onLogin} />);
-    await userEvent.click(screen.getByText('Send Magic Link'));
+    await userEvent.click(screen.getByText('Sign In with Email'));
     expect(onLogin).toHaveBeenCalled();
   });
 });
