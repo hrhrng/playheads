@@ -3,6 +3,7 @@
        type-check ci build-landing deploy-landing \
        deploy deploy-preview deploy-production build-web \
        deploy-preview-web deploy-preview-gateway \
+       deploy-preview-landing deploy-production-landing \
        deploy-production-web deploy-production-gateway \
        deploy-secrets-preview deploy-secrets-production
 
@@ -82,9 +83,6 @@ ci: lint type-check test
 build-landing:
 	pnpm --filter landing build
 
-deploy-landing:
-	pnpm --filter landing run deploy
-
 # =============================================================================
 # Clean
 # =============================================================================
@@ -102,13 +100,17 @@ clean:
 
 deploy: deploy-preview
 
-deploy-preview: build-web deploy-preview-web deploy-preview-gateway
+deploy-preview: build-web build-landing deploy-preview-landing deploy-preview-web deploy-preview-gateway
 
-deploy-production: build-web deploy-production-web deploy-production-gateway
+deploy-production: build-web build-landing deploy-production-landing deploy-production-web deploy-production-gateway
 
 build-web:
 	@echo "Building web frontend..."
 	pnpm --filter web build
+
+deploy-preview-landing:
+	@echo "Deploying landing worker (preview)..."
+	cd apps/landing && npx wrangler deploy --config wrangler.preview.toml
 
 deploy-preview-web:
 	@echo "Deploying web worker (preview)..."
@@ -117,6 +119,10 @@ deploy-preview-web:
 deploy-preview-gateway:
 	@echo "Deploying gateway worker (preview)..."
 	cd apps/gateway && npx wrangler deploy --config wrangler.preview.toml
+
+deploy-production-landing:
+	@echo "Deploying landing worker (production)..."
+	cd apps/landing && npx wrangler deploy --config wrangler.production.toml
 
 deploy-production-web:
 	@echo "Deploying web worker (production)..."
@@ -178,8 +184,9 @@ help:
 	@echo "    make ci             - Full CI pipeline (lint + type-check + test)"
 	@echo ""
 	@echo "  Landing:"
-	@echo "    make build-landing  - Build landing page"
-	@echo "    make deploy-landing - Deploy landing to Cloudflare"
+	@echo "    make build-landing            - Build landing page"
+	@echo "    make deploy-preview-landing   - Deploy landing worker (preview)"
+	@echo "    make deploy-production-landing - Deploy landing worker (production)"
 	@echo ""
 	@echo "  Deploy:"
 	@echo "    make deploy              - Build + deploy to preview (default)"

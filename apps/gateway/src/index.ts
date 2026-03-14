@@ -3,10 +3,12 @@ import { DurableObject } from "cloudflare:workers";
 
 interface Env {
   WEB: Fetcher;
+  LANDING: Fetcher;
   BACKEND: DurableObjectNamespace<BackendContainer>;
   // Non-sensitive vars
   LLM_PROVIDER: string;
   APPLE_MUSIC_TOKEN_TTL_SECONDS: string;
+  APP_HOSTNAME: string;
   // Secrets
   SUPABASE_URL: string;
   SUPABASE_KEY: string;
@@ -75,10 +77,35 @@ export default {
       return proxyToContainer(request, env, url, start);
     }
 
-    // Everything else → web worker (static assets + SPA)
-    return env.WEB.fetch(request);
+    // /app/* → web worker (strip /app prefix)
+    if (url.pathname.startsWith("/app")) {
+      const webUrl = new URL(request.url);
+      webUrl.pathname = url.pathname.replace(/^\/app/, "") || "/";
+      return env.WEB.fetch(new Request(webUrl.toString(), request));
+    }
+
+    // Production: app.playheads.com → web worker directly
+    if (env.APP_HOSTNAME && url.hostname === env.APP_HOSTNAME) {
+      return env.WEB.fetch(request);
+    }
+
+    // Logged-in users → redirect to app
+    if (hasSessionCookie(request)) {
+      if (env.APP_HOSTNAME) {
+        return Response.redirect(`https://${env.APP_HOSTNAME}/`, 302);
+      }
+      return Response.redirect(`${url.origin}/app/`, 302);
+    }
+
+    // No session → landing page
+    return env.LANDING.fetch(request);
   },
 };
+
+function hasSessionCookie(request: Request): boolean {
+  const cookie = request.headers.get("cookie") || "";
+  return /sb-[^-]+-auth-token/.test(cookie);
+}
 
 async function handleHealthCheck(env: Env, start: number): Promise<Response> {
   let containerStatus = "unknown";
