@@ -26,6 +26,8 @@ interface UseAppleMusicParams {
   syncSessionId?: string | null;
   /** Stored Apple Music user token from backend, used to restore authorization */
   storedMusicUserToken?: string | null;
+  /** Whether the token check has completed (from useAppleMusicLink) */
+  isTokenChecked?: boolean;
 }
 
 interface UseAppleMusicReturn {
@@ -73,7 +75,8 @@ export default function useAppleMusic({
   userId,
   activeSessionId,
   syncSessionId,
-  storedMusicUserToken
+  storedMusicUserToken,
+  isTokenChecked = false
 }: UseAppleMusicParams): UseAppleMusicReturn {
   const [musicKit, setMusicKit] = useState<MusicKitInstance | null>(null);
   const [isAuthorized, setIsAuthorized] = useState<boolean>(false);
@@ -336,9 +339,17 @@ export default function useAppleMusic({
   }, [musicKit, syncMusicKitState, handleAuthLost]);
 
   // ==========================================================================
-  // Initialize MusicKit
+  // Initialize MusicKit — waits for token check to complete so that
+  // storedMusicUserToken is available when MusicKit.configure() runs.
+  // This prevents auth loss after deployment (new developer token +
+  // missing user token = MusicKit can't restore the session).
   // ==========================================================================
   useEffect(() => {
+    // Don't initialize until token check is done — otherwise
+    // storedMusicUserToken will be undefined and MusicKit.configure()
+    // won't receive it, causing auth loss when the developer token changes.
+    if (!isTokenChecked) return;
+
     const initMusicKit = async (): Promise<void> => {
       try {
         if (!window.MusicKit) {
@@ -515,7 +526,7 @@ export default function useAppleMusic({
     return () => {
       document.removeEventListener('musickitloaded', initMusicKit);
     };
-  }, []);
+  }, [isTokenChecked, storedMusicUserToken]);
 
   // ==========================================================================
   // Restore state from backend checkpoint

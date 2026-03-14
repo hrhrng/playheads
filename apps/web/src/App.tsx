@@ -57,6 +57,7 @@ function App() {
   // Apple Music account linking
   const {
     storedMusicUserToken,
+    isTokenChecked,
     linkApple,
   } = useAppleMusicLink(effectiveSession?.user.id || null);
 
@@ -82,6 +83,7 @@ function App() {
     activeSessionId,
     syncSessionId: playingSessionId,
     storedMusicUserToken,
+    isTokenChecked,
   });
 
   // ============================================================================
