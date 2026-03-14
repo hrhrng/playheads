@@ -1,6 +1,5 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
-from sqlalchemy.pool import NullPool
 import os
 from typing import AsyncGenerator
 
@@ -29,11 +28,17 @@ DATABASE_URL = urlunparse(_parsed._replace(query=urlencode(_params, doseq=True))
 if DATABASE_URL.startswith("postgresql://"):
     DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)
 
-# Create Async Engine — use NullPool since Supabase Supavisor handles pooling
+# Create Async Engine — use a small client-side pool to reuse TCP+SSL connections.
+# Supabase Supavisor handles server-side pooling, but NullPool was causing every
+# request to open a new TCP+SSL connection (~2-4s overhead each time).
 engine = create_async_engine(
     DATABASE_URL,
     echo=False,
-    poolclass=NullPool,
+    pool_size=3,
+    max_overflow=2,
+    pool_timeout=10,
+    pool_recycle=300,       # Recycle connections every 5 min to avoid stale conns
+    pool_pre_ping=True,     # Verify connection is alive before using it
     connect_args={
         "ssl": "require",
         "statement_cache_size": 0,
