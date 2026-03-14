@@ -13,6 +13,7 @@ interface LoginScreenProps {
   loading: boolean;
   message: AuthMessage | null;
   onLogin: (e: React.FormEvent<HTMLFormElement>) => Promise<void>;
+  onResetPassword?: () => Promise<void>;
   onGoogleLogin?: () => Promise<void>;
 }
 
@@ -21,7 +22,7 @@ export function LoginScreen({
   password, setPassword,
   authMode, setAuthMode,
   loading, message,
-  onLogin, onGoogleLogin,
+  onLogin, onResetPassword, onGoogleLogin,
 }: LoginScreenProps) {
   return (
     <div className="min-h-screen w-full bg-air-50 flex flex-col items-center justify-center p-6 relative">
@@ -75,13 +76,24 @@ export function LoginScreen({
           </button>
 
           {password && (
-            <button
-              type="button"
-              onClick={() => setAuthMode(authMode === 'login' ? 'signup' : 'login')}
-              className="w-full text-center text-sm text-air-400 hover:text-air-600 transition-colors"
-            >
-              {authMode === 'login' ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
-            </button>
+            <div className="flex flex-col items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setAuthMode(authMode === 'login' ? 'signup' : 'login')}
+                className="text-sm text-air-400 hover:text-air-600 transition-colors"
+              >
+                {authMode === 'login' ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
+              </button>
+              {authMode === 'login' && onResetPassword && (
+                <button
+                  type="button"
+                  onClick={onResetPassword}
+                  className="text-sm text-air-400 hover:text-air-600 transition-colors"
+                >
+                  Forgot password?
+                </button>
+              )}
+            </div>
           )}
         </form>
 

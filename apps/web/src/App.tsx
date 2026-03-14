@@ -15,6 +15,7 @@ import { ToastProvider } from './components/ToastProvider';
 import { LoadingScreen } from './components/LoadingScreen';
 import { LoginScreen } from './components/LoginScreen';
 import { useChatStore } from './store/chatStore';
+import { ResetPassword } from './components/ResetPassword';
 
 function App() {
   const location = useLocation();
@@ -31,6 +32,7 @@ function App() {
     loading,
     authMessage,
     handleLogin,
+    handleResetPassword,
     handleGoogleLogin,
     password,
     setPassword,
@@ -239,6 +241,7 @@ function App() {
         loading={loading}
         message={authMessage}
         onLogin={handleLogin}
+        onResetPassword={handleResetPassword}
         onGoogleLogin={handleGoogleLogin}
       />
     );
@@ -298,6 +301,7 @@ function App() {
             playingSessionId={playingSessionId}
           />
         } />
+        <Route path="/reset-password" element={<ResetPassword />} />
       </Routes>
     </>
   );

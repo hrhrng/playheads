@@ -73,6 +73,26 @@ export function useAuth() {
     setLoading(false);
   }, [email, password, authMode]);
 
+  const handleResetPassword = useCallback(async () => {
+    if (!email) {
+      setAuthMessage({ type: 'error', text: 'Please enter your email first' });
+      return;
+    }
+    setLoading(true);
+    setAuthMessage(null);
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+
+    if (error) {
+      setAuthMessage({ type: 'error', text: error.message });
+    } else {
+      setAuthMessage({ type: 'success', text: 'Check your email for the password reset link!' });
+    }
+    setLoading(false);
+  }, [email]);
+
   const handleGoogleLogin = useCallback(async () => {
     setLoading(true);
     setAuthMessage(null);
@@ -107,6 +127,7 @@ export function useAuth() {
     loading,
     authMessage,
     handleLogin,
+    handleResetPassword,
     handleGoogleLogin,
     logout,
   };
