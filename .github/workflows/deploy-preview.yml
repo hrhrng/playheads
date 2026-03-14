@@ -35,7 +35,7 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
-          VITE_SPOTIFY_REDIRECT_URI: https://playheads-gw-${{ steps.branch.outputs.slug }}.${{ vars.CF_WORKERS_SUBDOMAIN }}.workers.dev/callback
+          VITE_SPOTIFY_REDIRECT_URI: https://playheads-gateway-${{ steps.branch.outputs.slug }}.${{ vars.CF_WORKERS_SUBDOMAIN }}.workers.dev/callback
         run: pnpm --filter web build
 
       - name: Deploy web worker
@@ -52,7 +52,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           BRANCH_SLUG: ${{ steps.branch.outputs.slug }}
         run: |
-          sed -e "s/name = \"playheads-gateway\"/name = \"playheads-gw-${BRANCH_SLUG}\"/" \
+          sed -e "s/name = \"playheads-gateway\"/name = \"playheads-gateway-${BRANCH_SLUG}\"/" \
               -e "s/service = \"playheads-web\"/service = \"playheads-web-${BRANCH_SLUG}\"/" \
               wrangler.preview.toml > wrangler.branch.toml
           npx wrangler deploy --config wrangler.branch.toml
@@ -62,7 +62,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          WORKER="playheads-gw-${{ steps.branch.outputs.slug }}"
+          WORKER="playheads-gateway-${{ steps.branch.outputs.slug }}"
           declare -A SECRETS=(
             [DATABASE_URL]="${{ secrets.DATABASE_URL }}"
             [ANTHROPIC_API_KEY]="${{ secrets.ANTHROPIC_API_KEY }}"

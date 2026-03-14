@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 from contextvars import ContextVar
 from typing import Optional, TYPE_CHECKING
 from langchain.agents import create_agent
@@ -105,10 +106,12 @@ async def search_music(query: str) -> str:
         from apps.backend.apple_music import _apple_music_get
 
         # Directly call Apple Music API to search
+        t0 = time.perf_counter()
         result = await _apple_music_get(
             "v1/catalog/us/search",
             params={"term": query, "types": "songs", "limit": 5}
         )
+        log.info("⏱ search_music API call: %.0fms", (time.perf_counter() - t0) * 1000)
 
         songs = result.get("results", {}).get("songs", {}).get("data", [])
 
@@ -210,7 +213,9 @@ async def add_to_queue(track_id: str) -> str:
 
     try:
         # Fetch full track info by ID from Apple Music catalog
+        t0 = time.perf_counter()
         result = await _apple_music_get(f"v1/catalog/us/songs/{track_id}")
+        log.info("⏱ add_to_queue API call: %.0fms", (time.perf_counter() - t0) * 1000)
         songs = result.get("data", [])
         if not songs:
             return f"No track found for ID '{track_id}'."
@@ -663,11 +668,13 @@ async def _process_astream(agent_graph, stream_input, config):
     # -------------------------------------------------------------------------
     # After astream ends: check if graph paused (interrupt) or completed (done)
     # -------------------------------------------------------------------------
+    t_aget = time.perf_counter()
     try:
         graph_state = await agent_graph.aget_state(config)
     except Exception as e:
         log.error("Failed to read graph state: %s", e)
         graph_state = None
+    log.info("⏱ aget_state: %.0fms", (time.perf_counter() - t_aget) * 1000)
 
     if graph_state and graph_state.tasks and graph_state.tasks[0].interrupts:
         # Unexpected interrupt — tools should no longer call interrupt().
@@ -702,12 +709,18 @@ async def run_agent_stream(db, message: str, session_id: str, user_id: str = Non
         raise ValueError("user_id is required for conversation persistence")
 
     from apps.backend.state import store
+    t_start = time.perf_counter()
+
+    def _elapsed():
+        return (time.perf_counter() - t_start) * 1000
 
     # Get or create session (should already exist from /session/create)
+    t0 = time.perf_counter()
     session = await store.get_session(db, session_id, user_id)
     if session is None:
         log.warning("Session %s not found, creating now (should be pre-created)", session_id[:8])
         session = await store.create_session(db, session_id, user_id)
+    log.info("⏱ [+%.0fms] get_session", _elapsed())
 
     # Set ContextVars so tools can access session state
     _session_context.set(session)
@@ -717,13 +730,16 @@ async def run_agent_stream(db, message: str, session_id: str, user_id: str = Non
     state_context = session.get_context_summary() if hasattr(session, 'get_context_summary') else "No state available"
     log.debug("Session state: %s", state_context[:100])
 
+    t0 = time.perf_counter()
     checkpointer = await get_checkpointer()
     agent_graph = create_music_agent(state_context, checkpointer=checkpointer)
     config = {"configurable": {"thread_id": session_id}}
+    log.info("⏱ [+%.0fms] get_checkpointer + create_agent", _elapsed())
 
     log.info("Agent processing: %s", message[:80])
 
     # Persist user message immediately
+    t0 = time.perf_counter()
     session.add_message("user", content=message)
     from apps.backend.database import AsyncSessionLocal
     async with AsyncSessionLocal() as fresh_db:
@@ -731,10 +747,13 @@ async def run_agent_stream(db, message: str, session_id: str, user_id: str = Non
             await store.update_session(fresh_db, session, user_id)
         except Exception as e:
             log.error("Failed to persist user message for session %s: %s", session_id[:8], e)
+    log.info("⏱ [+%.0fms] persist_user_message", _elapsed())
 
     # Stream events from the shared processing core.
     # Tools emit MusicKit actions as SSE events (fire-and-forget, no interrupt).
     # The graph always completes in a single pass — no resume needed.
+    t_first_token = None
+    t_last_token = None
     async for event in _process_astream(
         agent_graph,
         {"messages": [{"role": "user", "content": message}]},
@@ -742,7 +761,18 @@ async def run_agent_stream(db, message: str, session_id: str, user_id: str = Non
     ):
         event_type = event.get("event")
 
+        if event_type == "text" and t_first_token is None:
+            t_first_token = time.perf_counter()
+            log.info("⏱ [+%.0fms] first_token (TTFT)", _elapsed())
+
+        if event_type == "text":
+            t_last_token = time.perf_counter()
+
         if event_type == "done":
+            if t_last_token:
+                log.info("⏱ [+%.0fms] last_token → done (post-stream overhead: %.0fms)",
+                         _elapsed(), (time.perf_counter() - t_last_token) * 1000)
+
             # Graph completed — persist agent message (user message already saved above)
             done_meta = event.get("data", {})
             message_parts = done_meta.get("message_parts", [])
@@ -753,12 +783,16 @@ async def run_agent_stream(db, message: str, session_id: str, user_id: str = Non
             else:
                 session.add_message("agent", content=full_response)
 
+            t0 = time.perf_counter()
             log.info("Persisting session %s (%d messages)", session_id[:8], len(session.chat_history))
             async with AsyncSessionLocal() as fresh_db:
                 try:
                     await store.update_session(fresh_db, session, user_id)
                 except Exception as e:
                     log.error("Failed to persist session %s: %s", session_id[:8], e)
+            log.info("⏱ [+%.0fms] persist_agent_message (%.0fms)", _elapsed(), (time.perf_counter() - t0) * 1000)
+
+            log.info("⏱ [+%.0fms] TOTAL run_agent_stream", _elapsed())
 
             # Yield the final "done" event for the frontend
             yield {

@@ -4,11 +4,12 @@ Music Agent API
 import json
 import logging
 import os
+import time
 from datetime import datetime
 from typing import Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Depends, HTTPException, Header
+from fastapi import FastAPI, Depends, HTTPException, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -47,6 +48,20 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def timing_middleware(request: Request, call_next):
+    """Log total request duration for every endpoint."""
+    t0 = time.perf_counter()
+    response = await call_next(request)
+    elapsed_ms = (time.perf_counter() - t0) * 1000
+    path = request.url.path
+    # Skip noisy health checks
+    if path not in ("/health", "/"):
+        log.info("⏱ %s %s → %d  %.0fms", request.method, path, response.status_code, elapsed_ms)
+    return response
+
 
 from apps.backend.apple_music import router as apple_music_router
 

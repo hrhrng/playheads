@@ -76,6 +76,7 @@ class SessionState(BaseModel):
 
 import json
 import logging
+import time
 from datetime import datetime
 
 from sqlalchemy import select, update
@@ -107,6 +108,7 @@ class SessionStore:
         Returns:
             SessionState if found, None otherwise
         """
+        t0 = time.perf_counter()
         try:
             # Validate session_id is a valid UUID
             try:
@@ -139,13 +141,14 @@ class SessionStore:
 
             result = await db.execute(stmt)
             db_state = result.scalar_one_or_none()
+            log.info("⏱ get_session query: %.0fms (found=%s)", (time.perf_counter() - t0) * 1000, db_state is not None)
 
             if db_state:
                 return self._hydrate_session(db_state, session_id)
 
             return None
         except Exception as e:
-            log.error("Error getting session %s: %s", session_id[:8], e)
+            log.error("Error getting session %s: %s (%.0fms)", session_id[:8], e, (time.perf_counter() - t0) * 1000)
             return None
 
     async def create_session(self, db: AsyncSession, session_id: str, user_id: str) -> SessionState:
@@ -160,6 +163,7 @@ class SessionStore:
         Returns:
             SessionState (new or existing)
         """
+        t0 = time.perf_counter()
         try:
             session_uuid = uuid.UUID(session_id)
             user_uuid = uuid.UUID(user_id)
@@ -181,6 +185,7 @@ class SessionStore:
                 ).on_conflict_do_nothing(index_elements=['conversation_id'])
             )
             await db.commit()
+            log.info("⏱ create_session: %.0fms", (time.perf_counter() - t0) * 1000)
 
             # Return an empty SessionState directly — no need to SELECT back
             return SessionState(
@@ -190,7 +195,7 @@ class SessionStore:
 
         except Exception as e:
             await db.rollback()
-            log.error("Error creating session %s: %s", session_id[:8], e)
+            log.error("Error creating session %s: %s (%.0fms)", session_id[:8], e, (time.perf_counter() - t0) * 1000)
             # Try to recover by just getting it
             session = await self.get_session(db, session_id, user_id)
             if session:
@@ -242,6 +247,7 @@ class SessionStore:
         frontend, and then ``update_session`` at the end overwrites the context
         the frontend just synced — wiping the playlist on every turn.
         """
+        t0 = time.perf_counter()
         session_uuid = uuid.UUID(state.session_id)
         messages_data = [m.model_dump(mode='json') for m in state.chat_history]
 
@@ -300,8 +306,9 @@ class SessionStore:
             )
             await db.execute(conv_update_stmt)
             await db.commit()
+            log.info("⏱ update_session: %.0fms (%d msgs)", (time.perf_counter() - t0) * 1000, len(messages_data))
         except Exception as e:
-            log.error("Failed to update session %s: %s", state.session_id[:8], e, exc_info=True)
+            log.error("Failed to update session %s: %s (%.0fms)", state.session_id[:8], e, (time.perf_counter() - t0) * 1000, exc_info=True)
             raise
 
         # Generate title asynchronously if needed
