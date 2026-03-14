@@ -161,7 +161,7 @@ export default function useAppleMusic({
           artwork_url: t.artwork_url || '',
           duration: t.duration || 0,
         })),
-        is_playing: musicKit.playbackState === ('playing' as any),
+        is_playing: (musicKit.playbackState as any) === 2 || (musicKit.playbackState as any) === 'playing',
         playback_position: musicKit.currentPlaybackTime ?? 0,
       };
 
