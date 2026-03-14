@@ -49,9 +49,17 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          npx wrangler deploy --config wrangler.preview.toml \
-            --name "playheads-landing-${{ steps.branch.outputs.slug }}" \
-            --route "landing-${{ steps.branch.outputs.slug }}.pw.${{ vars.PRODUCTION_DOMAIN }}/*"
+          SLUG="${{ steps.branch.outputs.slug }}"
+          DOMAIN="${{ vars.PRODUCTION_DOMAIN }}"
+          cp wrangler.preview.toml wrangler.branch.toml
+          cat >> wrangler.branch.toml <<TOML
+
+          [[routes]]
+          pattern = "landing-${SLUG}.pw.${DOMAIN}"
+          custom_domain = true
+          TOML
+          npx wrangler deploy --config wrangler.branch.toml \
+            --name "playheads-landing-${SLUG}"
 
       - name: Deploy web worker
         working-directory: apps/web
@@ -59,9 +67,17 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          npx wrangler deploy --config wrangler.preview.toml \
-            --name "playheads-web-${{ steps.branch.outputs.slug }}" \
-            --route "web-${{ steps.branch.outputs.slug }}.pw.${{ vars.PRODUCTION_DOMAIN }}/*"
+          SLUG="${{ steps.branch.outputs.slug }}"
+          DOMAIN="${{ vars.PRODUCTION_DOMAIN }}"
+          cp wrangler.preview.toml wrangler.branch.toml
+          cat >> wrangler.branch.toml <<TOML
+
+          [[routes]]
+          pattern = "web-${SLUG}.pw.${DOMAIN}"
+          custom_domain = true
+          TOML
+          npx wrangler deploy --config wrangler.branch.toml \
+            --name "playheads-web-${SLUG}"
 
       - name: Deploy backend worker
         working-directory: apps/backend-worker
@@ -69,9 +85,17 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          npx wrangler deploy \
-            --name "playheads-backend-${{ steps.branch.outputs.slug }}" \
-            --route "backend-${{ steps.branch.outputs.slug }}.pw.${{ vars.PRODUCTION_DOMAIN }}/*"
+          SLUG="${{ steps.branch.outputs.slug }}"
+          DOMAIN="${{ vars.PRODUCTION_DOMAIN }}"
+          cp wrangler.toml wrangler.branch.toml
+          cat >> wrangler.branch.toml <<TOML
+
+          [[routes]]
+          pattern = "backend-${SLUG}.pw.${DOMAIN}"
+          custom_domain = true
+          TOML
+          npx wrangler deploy --config wrangler.branch.toml \
+            --name "playheads-backend-${SLUG}"
 
       - name: Deploy preview gateway
         working-directory: apps/gateway
@@ -80,16 +104,25 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           BRANCH_SLUG: ${{ steps.branch.outputs.slug }}
         run: |
+          DOMAIN="${{ vars.PRODUCTION_DOMAIN }}"
           sed -e "s/service = \"playheads-web\"/service = \"playheads-web-${BRANCH_SLUG}\"/" \
               -e "s/service = \"playheads-landing\"/service = \"playheads-landing-${BRANCH_SLUG}\"/" \
               -e "s/service = \"playheads-backend\"/service = \"playheads-backend-${BRANCH_SLUG}\"/" \
               wrangler.preview.toml > wrangler.branch.toml
+          cat >> wrangler.branch.toml <<TOML
+
+          [[routes]]
+          pattern = "preview.${DOMAIN}"
+          custom_domain = true
+
+          [[routes]]
+          pattern = "preview.app.${DOMAIN}"
+          custom_domain = true
+          TOML
           npx wrangler deploy --config wrangler.branch.toml \
             --name "playheads-gateway-preview" \
-            --route "preview.${{ vars.PRODUCTION_DOMAIN }}/*" \
-            --route "preview.app.${{ vars.PRODUCTION_DOMAIN }}/*" \
-            --var APP_HOSTNAME:preview.app.${{ vars.PRODUCTION_DOMAIN }} \
-            --var PREVIEW_DOMAIN:pw.${{ vars.PRODUCTION_DOMAIN }}
+            --var APP_HOSTNAME:preview.app.${DOMAIN} \
+            --var PREVIEW_DOMAIN:pw.${DOMAIN}
 
       - name: Deploy admin worker
         working-directory: apps/admin
