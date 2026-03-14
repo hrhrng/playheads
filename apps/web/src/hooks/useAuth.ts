@@ -55,6 +55,22 @@ export function useAuth() {
     setLoading(false);
   }, [email]);
 
+  const handleGoogleLogin = useCallback(async () => {
+    setLoading(true);
+    setAuthMessage(null);
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.origin },
+    });
+
+    if (error) {
+      setAuthMessage({ type: 'error', text: error.message });
+      setLoading(false);
+    }
+    // On success, browser redirects to Google — no need to setLoading(false)
+  }, []);
+
   const logout = useCallback(() => {
     supabase.auth.signOut();
   }, []);
@@ -69,6 +85,7 @@ export function useAuth() {
     loading,
     authMessage,
     handleLogin,
+    handleGoogleLogin,
     logout,
   };
 }

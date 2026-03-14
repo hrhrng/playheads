@@ -31,6 +31,7 @@ function App() {
     loading,
     authMessage,
     handleLogin,
+    handleGoogleLogin,
     logout,
   } = useAuth();
 
@@ -230,6 +231,7 @@ function App() {
         loading={loading}
         message={authMessage}
         onLogin={handleLogin}
+        onGoogleLogin={handleGoogleLogin}
       />
     );
   }
