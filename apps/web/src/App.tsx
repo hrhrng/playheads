@@ -139,6 +139,9 @@ function App() {
   const isLoadingHistory = useChatStore(s => s.isLoadingHistory);
 
   useEffect(() => {
+    // Don't sync until initial restore is done — otherwise the empty default
+    // viewedPlaylist overwrites the real playlist in the backend on page refresh.
+    if (!initialRestoreDone.current) return;
     if (isLoadingHistory) return;
 
     if (activeSessionId !== lastSyncedSessionRef.current) {
