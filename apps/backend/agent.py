@@ -487,12 +487,6 @@ async def _process_astream(agent_graph, stream_input, config):
                 if isinstance(content, list):
                     for part in content:
                         if isinstance(part, dict):
-                            part_type = part.get("type", "")
-                            if part_type not in ("text", "thinking"):
-                                log.info("content_block: %s", json.dumps(
-                                    {k: v for k, v in part.items() if k != "encrypted_content"},
-                                    default=str,
-                                )[:500])
                             if part.get("type") == "text":
                                 text_content = part.get("text", "")
                                 if text_content:
@@ -519,7 +513,6 @@ async def _process_astream(agent_graph, stream_input, config):
                                 tool_name = part.get("name", "")
                                 tool_input = part.get("input", {})
                                 if tool_name and tool_id not in active_tool_calls:
-                                    # First encounter — register but defer tool_start if input is empty
                                     current_text_part = None
                                     tool_call_part = {
                                         "type": "tool_call", "id": tool_id,
@@ -529,21 +522,38 @@ async def _process_astream(agent_graph, stream_input, config):
                                     message_parts.append(tool_call_part)
                                     active_tool_calls[tool_id] = tool_name
                                     tool_calls_map[tool_id] = tool_call_part
+                                    # Track index for input_json_delta accumulation
+                                    idx = part.get("index")
+                                    if idx is not None:
+                                        chunk_index_to_id[idx] = tool_id
                                     if tool_input and tool_input != {}:
                                         emitted_tool_starts.add(tool_id)
                                         yield {"event": "tool_start", "data": {
                                             "id": tool_id, "tool_name": tool_name,
                                             "args": tool_input,
                                         }}
-                                elif tool_name and tool_id in active_tool_calls:
-                                    # Subsequent chunk — input may now be populated
-                                    if tool_input and tool_input != {} and tool_id not in emitted_tool_starts:
-                                        tool_calls_map[tool_id]["args"] = tool_input
-                                        emitted_tool_starts.add(tool_id)
-                                        yield {"event": "tool_start", "data": {
-                                            "id": tool_id, "tool_name": tool_name,
-                                            "args": tool_input,
-                                        }}
+                            elif part.get("type") == "input_json_delta":
+                                # Streaming input for server_tool_use (query arrives in chunks)
+                                idx = part.get("index")
+                                delta = part.get("partial_json", "")
+                                tool_id = chunk_index_to_id.get(idx) if idx is not None else None
+                                if tool_id and delta:
+                                    if tool_id not in tool_call_args_buffer:
+                                        tool_call_args_buffer[tool_id] = ""
+                                    tool_call_args_buffer[tool_id] += delta
+                                    try:
+                                        parsed = json.loads(tool_call_args_buffer[tool_id])
+                                        if tool_id in tool_calls_map:
+                                            tool_calls_map[tool_id]["args"] = parsed
+                                        if tool_id not in emitted_tool_starts:
+                                            emitted_tool_starts.add(tool_id)
+                                            yield {"event": "tool_start", "data": {
+                                                "id": tool_id,
+                                                "tool_name": active_tool_calls.get(tool_id, "web_search"),
+                                                "args": parsed,
+                                            }}
+                                    except json.JSONDecodeError:
+                                        pass
                             elif part.get("type") in (
                                 "web_search_tool_result", "web_fetch_tool_result",
                                 "code_execution_tool_result",
