@@ -1,6 +1,61 @@
+import { Container, getContainer } from "@cloudflare/containers";
+import { DurableObject } from "cloudflare:workers";
+
 interface Env {
   WEB: Fetcher;
-  BACKEND_WORKER: Fetcher; // service binding (both production and preview)
+  BACKEND: DurableObjectNamespace<BackendContainer>;
+  // Non-sensitive vars
+  LLM_PROVIDER: string;
+  APPLE_MUSIC_TOKEN_TTL_SECONDS: string;
+  // Secrets
+  DATABASE_URL: string;
+  ANTHROPIC_API_KEY: string;
+  ANTHROPIC_BASE_URL: string;
+  ANTHROPIC_MODEL: string;
+  ANTHROPIC_THINKING_BUDGET: string;
+  OPENAI_API_KEY: string;
+  OPENAI_BASE_URL: string;
+  APPLE_MUSIC_TEAM_ID: string;
+  APPLE_MUSIC_KEY_ID: string;
+  APPLE_MUSIC_PRIVATE_KEY: string;
+  MINIMAX_API_KEY: string;
+}
+
+export class BackendContainer extends Container<Env> {
+  defaultPort = 8001;
+  sleepAfter = "5m";
+  enableInternet = true;
+
+  constructor(ctx: DurableObject["ctx"], env: Env) {
+    super(ctx, env);
+    this.envVars = {
+      DATABASE_URL: env.DATABASE_URL,
+      ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
+      ANTHROPIC_BASE_URL: env.ANTHROPIC_BASE_URL,
+      ANTHROPIC_MODEL: env.ANTHROPIC_MODEL,
+      ANTHROPIC_THINKING_BUDGET: env.ANTHROPIC_THINKING_BUDGET,
+      OPENAI_API_KEY: env.OPENAI_API_KEY,
+      OPENAI_BASE_URL: env.OPENAI_BASE_URL,
+      LLM_PROVIDER: env.LLM_PROVIDER,
+      APPLE_MUSIC_TEAM_ID: env.APPLE_MUSIC_TEAM_ID,
+      APPLE_MUSIC_KEY_ID: env.APPLE_MUSIC_KEY_ID,
+      APPLE_MUSIC_PRIVATE_KEY: env.APPLE_MUSIC_PRIVATE_KEY,
+      APPLE_MUSIC_TOKEN_TTL_SECONDS: env.APPLE_MUSIC_TOKEN_TTL_SECONDS,
+      MINIMAX_API_KEY: env.MINIMAX_API_KEY,
+    };
+  }
+
+  override onStart() {
+    console.log("BackendContainer started on port 8001");
+  }
+
+  override onStop() {
+    console.log("BackendContainer stopped");
+  }
+
+  override onError(error: unknown) {
+    console.error("BackendContainer error:", error);
+  }
 }
 
 export default {
@@ -8,12 +63,12 @@ export default {
     const url = new URL(request.url);
     const start = Date.now();
 
-    // /api/* → backend worker
+    // /api/* → backend container
     if (url.pathname.startsWith("/api/")) {
       if (url.pathname === "/api/health") {
-        return handleHealthCheck(env, url, start);
+        return handleHealthCheck(env, start);
       }
-      return proxyToBackend(request, env, url, start);
+      return proxyToContainer(request, env, url, start);
     }
 
     // Everything else → web worker (static assets + SPA)
@@ -21,42 +76,47 @@ export default {
   },
 };
 
-async function handleHealthCheck(
-  env: Env,
-  url: URL,
-  start: number
-): Promise<Response> {
+async function handleHealthCheck(env: Env, start: number): Promise<Response> {
+  let containerStatus = "unknown";
   try {
-    const resp = await fetchBackend(env, "/health", "GET");
+    const container = getContainer(env.BACKEND);
+    const resp = await container.fetch(new Request("http://container/health"));
     if (resp.ok) {
       const data = (await resp.json()) as Record<string, unknown>;
-      return Response.json({
-        status: "healthy",
-        container: data.status || "healthy",
-        latency_ms: Date.now() - start,
-      });
+      containerStatus = (data.status as string) || "healthy";
+    } else {
+      containerStatus = "unhealthy";
     }
-    return Response.json(
-      { status: "unhealthy", latency_ms: Date.now() - start },
-      { status: 503 }
-    );
   } catch {
-    return Response.json(
-      { status: "unreachable", latency_ms: Date.now() - start },
-      { status: 503 }
-    );
+    containerStatus = "unreachable";
   }
+
+  return Response.json({
+    status: containerStatus === "healthy" ? "healthy" : "degraded",
+    worker: "healthy",
+    container: containerStatus,
+    latency_ms: Date.now() - start,
+  });
 }
 
-async function proxyToBackend(
+async function proxyToContainer(
   request: Request,
   env: Env,
   url: URL,
   start: number
 ): Promise<Response> {
   const backendPath = url.pathname.replace(/^\/api/, "") || "/";
+  const backendUrl = new URL(backendPath + url.search, "http://container");
 
-  const response = await fetchBackend(env, backendPath + url.search, request.method, request.headers, request.body);
+  const container = getContainer(env.BACKEND);
+
+  const proxyRequest = new Request(backendUrl.toString(), {
+    method: request.method,
+    headers: request.headers,
+    body: request.body,
+  });
+
+  const response = await container.fetch(proxyRequest);
   const latency = Date.now() - start;
 
   console.log(
@@ -70,19 +130,4 @@ async function proxyToBackend(
   );
 
   return response;
-}
-
-async function fetchBackend(
-  env: Env,
-  path: string,
-  method: string,
-  headers?: Headers,
-  body?: ReadableStream<Uint8Array> | null
-): Promise<Response> {
-  const req = new Request(new URL(path, "http://backend").toString(), {
-    method,
-    headers,
-    body,
-  });
-  return env.BACKEND_WORKER.fetch(req);
 }

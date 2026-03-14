@@ -31,24 +31,38 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # 1. Deploy backend-worker per branch (has Durable Object, can't use preview URLs)
-      - name: Deploy backend worker
-        working-directory: apps/backend-worker
+      - name: Build frontend
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
+          VITE_SPOTIFY_REDIRECT_URI: https://playheads-gw-${{ steps.branch.outputs.slug }}.${{ vars.CF_WORKERS_SUBDOMAIN }}.workers.dev/callback
+        run: pnpm --filter web build
+
+      - name: Deploy web worker
+        working-directory: apps/web
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy --config wrangler.preview.toml --name "playheads-web-${{ steps.branch.outputs.slug }}"
+
+      - name: Deploy gateway worker
+        working-directory: apps/gateway
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           BRANCH_SLUG: ${{ steps.branch.outputs.slug }}
         run: |
-          sed "s/name = \"playheads-backend\"/name = \"playheads-backend-${BRANCH_SLUG}\"/" \
+          sed -e "s/name = \"playheads-gateway\"/name = \"playheads-gw-${BRANCH_SLUG}\"/" \
+              -e "s/service = \"playheads-web\"/service = \"playheads-web-${BRANCH_SLUG}\"/" \
               wrangler.preview.toml > wrangler.branch.toml
           npx wrangler deploy --config wrangler.branch.toml
 
-      - name: Sync secrets to backend worker
+      - name: Sync secrets to gateway worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          WORKER="playheads-backend-${{ steps.branch.outputs.slug }}"
+          WORKER="playheads-gw-${{ steps.branch.outputs.slug }}"
           declare -A SECRETS=(
             [DATABASE_URL]="${{ secrets.DATABASE_URL }}"
             [ANTHROPIC_API_KEY]="${{ secrets.ANTHROPIC_API_KEY }}"
@@ -69,32 +83,3 @@ jobs:
               echo "✓ $KEY"
             fi
           done
-
-      # 2. Build frontend
-      - name: Build frontend
-        env:
-          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
-          VITE_SPOTIFY_REDIRECT_URI: https://playheads-gw-${{ steps.branch.outputs.slug }}.${{ vars.CF_WORKERS_SUBDOMAIN }}.workers.dev/callback
-        run: pnpm --filter web build
-
-      # 3. Deploy web worker (preview URL via versions upload)
-      - name: Deploy web worker (preview)
-        working-directory: apps/web
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx wrangler versions upload --config wrangler.preview.toml --preview-alias "${{ steps.branch.outputs.slug }}"
-
-      # 4. Deploy gateway worker per branch (needs dynamic service binding to branch backend)
-      - name: Deploy gateway worker (preview)
-        working-directory: apps/gateway
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          BRANCH_SLUG: ${{ steps.branch.outputs.slug }}
-        run: |
-          sed -e "s/name = \"playheads-gateway\"/name = \"playheads-gw-${BRANCH_SLUG}\"/" \
-              -e "s/service = \"playheads-backend\"/service = \"playheads-backend-${BRANCH_SLUG}\"/" \
-              wrangler.preview.toml > wrangler.branch.toml
-          npx wrangler deploy --config wrangler.branch.toml
