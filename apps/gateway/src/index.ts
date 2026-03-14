@@ -3,10 +3,12 @@ import { DurableObject } from "cloudflare:workers";
 
 interface Env {
   WEB: Fetcher;
+  LANDING: Fetcher;
   BACKEND: DurableObjectNamespace<BackendContainer>;
   // Non-sensitive vars
   LLM_PROVIDER: string;
   APPLE_MUSIC_TOKEN_TTL_SECONDS: string;
+  APP_HOSTNAME: string;
   // Secrets
   SUPABASE_URL: string;
   SUPABASE_KEY: string;
@@ -75,10 +77,39 @@ export default {
       return proxyToContainer(request, env, url, start);
     }
 
-    // Everything else → web worker (static assets + SPA)
+    // Production: app.playheads.com → web worker directly
+    if (env.APP_HOSTNAME && url.hostname === env.APP_HOSTNAME) {
+      return env.WEB.fetch(request);
+    }
+
+    // /app/* → web worker (strip /app prefix)
+    if (url.pathname.startsWith("/app")) {
+      const webUrl = new URL(request.url);
+      webUrl.pathname = url.pathname.replace(/^\/app/, "") || "/";
+      return env.WEB.fetch(new Request(webUrl.toString(), request));
+    }
+
+    // Landing page: root path + landing-specific assets (/_astro/*)
+    if (url.pathname === "/" || url.pathname.startsWith("/_astro/")) {
+      // Logged-in users at root → redirect to app
+      if (url.pathname === "/" && hasSessionCookie(request)) {
+        if (env.APP_HOSTNAME) {
+          return Response.redirect(`https://${env.APP_HOSTNAME}/`, 302);
+        }
+        return Response.redirect(`${url.origin}/app/`, 302);
+      }
+      return env.LANDING.fetch(request);
+    }
+
+    // Everything else → web worker (static assets, SPA routes)
     return env.WEB.fetch(request);
   },
 };
+
+function hasSessionCookie(request: Request): boolean {
+  const cookie = request.headers.get("cookie") || "";
+  return /sb-[^-]+-auth-token/.test(cookie);
+}
 
 async function handleHealthCheck(env: Env, start: number): Promise<Response> {
   let containerStatus = "unknown";

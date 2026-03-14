@@ -7,6 +7,10 @@ compatibility_date = "2024-12-01"
 binding = "WEB"
 service = "playheads-web"
 
+[[services]]
+binding = "LANDING"
+service = "playheads-landing"
+
 # Backend container
 [[containers]]
 class_name = "BackendContainer"
@@ -32,3 +36,4 @@ head_sampling_rate = 1
 [vars]
 LLM_PROVIDER = "anthropic"
 APPLE_MUSIC_TOKEN_TTL_SECONDS = "3600"
+APP_HOSTNAME = ""

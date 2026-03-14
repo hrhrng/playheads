@@ -1,0 +1,32 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Hero from '../components/Hero.astro';
+import Features from '../components/Features.astro';
+import Footer from '../components/Footer.astro';
+
+export const prerender = true;
+
+const appUrl = import.meta.env.PUBLIC_APP_URL || '/app/';
+---
+
+<Layout title="Playhead — Sonic Intelligence">
+  <!-- Nav -->
+  <nav class="sticky top-0 z-50 backdrop-blur-lg bg-air-50/80 border-b border-air-100/60">
+    <div class="flex items-center justify-between px-6 py-3 max-w-5xl mx-auto">
+      <a href="/" class="text-sm font-semibold tracking-tight">Playhead</a>
+      <div class="flex items-center gap-6">
+        <a href="#features" class="text-sm text-air-400 hover:text-air-900 transition-colors hidden sm:block">Features</a>
+        <a
+          href={appUrl}
+          class="text-sm font-medium px-4 py-1.5 rounded-full border border-air-200 text-air-900 hover:bg-white hover:border-air-300 transition-all"
+        >
+          Sign In
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <Hero />
+  <Features />
+  <Footer />
+</Layout>

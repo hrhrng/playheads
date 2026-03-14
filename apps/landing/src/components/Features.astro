@@ -1,0 +1,30 @@
+---
+const features = [
+  {
+    title: 'Converse',
+    description: 'Describe a mood, a memory, a moment. Your agent translates intent into music — no browsing, no searching.',
+  },
+  {
+    title: 'Listen',
+    description: 'Songs play directly through Apple Music. Your agent curates, you experience.',
+  },
+  {
+    title: 'Yours',
+    description: 'Taste evolves with every session. Conversations stay private, context carries forward.',
+  },
+];
+---
+
+<section id="features" class="scroll-mt-16 px-6 pt-10 pb-16 max-w-3xl mx-auto">
+  <div class="border-t border-air-100 pt-10 space-y-10">
+    {features.map((feature, i) => (
+      <div class="flex items-baseline gap-6">
+        <span class="text-air-300 font-mono text-xs tabular-nums shrink-0">{String(i + 1).padStart(2, '0')}</span>
+        <div>
+          <h3 class="text-lg font-semibold tracking-tight mb-1.5">{feature.title}</h3>
+          <p class="text-air-400 text-sm leading-relaxed max-w-md">{feature.description}</p>
+        </div>
+      </div>
+    ))}
+  </div>
+</section>

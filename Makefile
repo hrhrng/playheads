@@ -1,7 +1,9 @@
-.PHONY: dev dev-web dev-backend install install-web install-backend clean help \
-       test test-backend test-web lint lint-web type-check ci \
+.PHONY: dev dev-web dev-backend dev-landing install install-web install-backend \
+       install-landing clean help test test-backend test-web lint lint-web \
+       type-check ci build-landing deploy-landing \
        deploy deploy-preview deploy-production build-web \
        deploy-preview-web deploy-preview-gateway \
+       deploy-preview-landing deploy-production-landing \
        deploy-production-web deploy-production-gateway \
        deploy-secrets-preview deploy-secrets-production
 
@@ -21,16 +23,24 @@ dev-backend:
 	@echo "Starting backend..."
 	uv run --package backend uvicorn apps.backend.main:app --port 8001 --reload
 
+dev-landing:
+	@echo "Starting landing page..."
+	pnpm --filter landing dev
+
 # =============================================================================
 # Install
 # =============================================================================
 
-install: install-web install-backend
+install: install-web install-landing install-backend
 	@echo "All dependencies installed!"
 
 install-web:
 	@echo "Installing web dependencies..."
 	pnpm install --filter web
+
+install-landing:
+	@echo "Installing landing dependencies..."
+	pnpm install --filter landing
 
 install-backend:
 	@echo "Installing backend dependencies..."
@@ -67,6 +77,13 @@ type-check:
 ci: lint type-check test
 
 # =============================================================================
+# Landing
+# =============================================================================
+
+build-landing:
+	pnpm --filter landing build
+
+# =============================================================================
 # Clean
 # =============================================================================
 
@@ -83,13 +100,17 @@ clean:
 
 deploy: deploy-preview
 
-deploy-preview: build-web deploy-preview-web deploy-preview-gateway
+deploy-preview: build-web build-landing deploy-preview-landing deploy-preview-web deploy-preview-gateway
 
-deploy-production: build-web deploy-production-web deploy-production-gateway
+deploy-production: build-web build-landing deploy-production-landing deploy-production-web deploy-production-gateway
 
 build-web:
 	@echo "Building web frontend..."
 	pnpm --filter web build
+
+deploy-preview-landing:
+	@echo "Deploying landing worker (preview)..."
+	cd apps/landing && npx wrangler deploy --config wrangler.preview.toml
 
 deploy-preview-web:
 	@echo "Deploying web worker (preview)..."
@@ -98,6 +119,10 @@ deploy-preview-web:
 deploy-preview-gateway:
 	@echo "Deploying gateway worker (preview)..."
 	cd apps/gateway && npx wrangler deploy --config wrangler.preview.toml
+
+deploy-production-landing:
+	@echo "Deploying landing worker (production)..."
+	cd apps/landing && npx wrangler deploy --config wrangler.production.toml
 
 deploy-production-web:
 	@echo "Deploying web worker (production)..."
@@ -140,10 +165,12 @@ help:
 	@echo "    make dev            - Start both frontend and backend"
 	@echo "    make dev-web        - Start frontend only"
 	@echo "    make dev-backend    - Start backend only"
+	@echo "    make dev-landing    - Start landing page only"
 	@echo ""
 	@echo "  Install:"
 	@echo "    make install        - Install all dependencies"
 	@echo "    make install-web    - Install frontend dependencies"
+	@echo "    make install-landing - Install landing dependencies"
 	@echo "    make install-backend - Install backend dependencies"
 	@echo ""
 	@echo "  Test:"
@@ -155,6 +182,11 @@ help:
 	@echo "    make lint           - Lint frontend"
 	@echo "    make type-check     - TypeScript type checking"
 	@echo "    make ci             - Full CI pipeline (lint + type-check + test)"
+	@echo ""
+	@echo "  Landing:"
+	@echo "    make build-landing            - Build landing page"
+	@echo "    make deploy-preview-landing   - Deploy landing worker (preview)"
+	@echo "    make deploy-production-landing - Deploy landing worker (production)"
 	@echo ""
 	@echo "  Deploy:"
 	@echo "    make deploy              - Build + deploy to preview (default)"

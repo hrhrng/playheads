@@ -1,0 +1,16 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import AdminDashboard from '../../components/AdminDashboard.tsx';
+
+const supabaseUrl = import.meta.env.SUPABASE_URL || '';
+// Use the anon key for client-side auth flow; service role is server-only
+const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY || '';
+---
+
+<Layout title="Playhead Admin">
+  <AdminDashboard
+    client:load
+    supabaseUrl={supabaseUrl}
+    supabaseAnonKey={supabaseAnonKey}
+  />
+</Layout>
