@@ -276,6 +276,21 @@ WEB_SEARCH_TOOL = {
 }
 
 
+def _summarize_search_results(raw_content) -> str:
+    """Extract readable titles/URLs from web_search_tool_result, skip encrypted data."""
+    if not raw_content or not isinstance(raw_content, list):
+        return ""
+    lines = []
+    for item in raw_content:
+        if not isinstance(item, dict):
+            continue
+        title = item.get("title", "")
+        url = item.get("url", "")
+        if title or url:
+            lines.append(f"- {title} ({url})" if title else f"- {url}")
+    return "\n".join(lines) if lines else "Search completed"
+
+
 # =============================================================================
 # System Prompt Template
 # =============================================================================
@@ -517,16 +532,21 @@ async def _process_astream(agent_graph, stream_input, config):
                                 "web_search_tool_result", "web_fetch_tool_result",
                                 "code_execution_tool_result",
                             ):
-                                # Server-side tool result
+                                # Server-side tool result — extract readable summary
                                 tool_use_id = part.get("tool_use_id", "")
                                 tool_name = active_tool_calls.get(tool_use_id, "unknown")
-                                result_content = part.get("content", "")
+                                raw_content = part.get("content", "")
+                                # Extract titles/URLs from search results, skip encrypted_content
+                                result_summary = _summarize_search_results(raw_content)
                                 if tool_use_id in tool_calls_map:
                                     tool_calls_map[tool_use_id]["status"] = "success"
-                                    tool_calls_map[tool_use_id]["result"] = str(result_content) if result_content else ""
+                                    tool_calls_map[tool_use_id]["result"] = result_summary
+                                    # Backfill args if they were empty during streaming
+                                    if not tool_calls_map[tool_use_id].get("args"):
+                                        tool_calls_map[tool_use_id]["args"] = {}
                                 yield {"event": "tool_end", "data": {
                                     "id": tool_use_id, "tool_name": tool_name,
-                                    "result": str(result_content)[:200] if result_content else "",
+                                    "result": result_summary,
                                     "status": "success",
                                 }}
                                 active_tool_calls.pop(tool_use_id, None)
