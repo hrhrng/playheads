@@ -2,7 +2,7 @@ name: Cleanup Stale Previews
 
 on:
   schedule:
-    - cron: '0 0 * * 1' # Every Monday UTC 00:00
+    - cron: '0 5 * * *' # Every day UTC 05:00
   workflow_dispatch: # Manual trigger
 
 jobs:
@@ -11,28 +11,53 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      MAX_AGE_DAYS: 7
+      MAX_AGE_DAYS: 1
     steps:
-      - name: Cleanup stale preview workers
+      - name: Cleanup stale preview workers and containers
         run: |
           CUTOFF=$(date -d "-${MAX_AGE_DAYS} days" -u +%Y-%m-%dT%H:%M:%SZ)
           echo "Cutoff: $CUTOFF (older than ${MAX_AGE_DAYS} days)"
 
+          # Production worker names — never delete these
+          PROD_NAMES='["playheads-gateway","playheads-web","playheads-landing","playheads-backend","playheads-admin","playheads-gateway-preview"]'
+
+          # Fetch all workers
           WORKERS=$(curl -s \
             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
             "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts" \
             | jq -c '.result[]')
 
-          echo "$WORKERS" | jq -r --arg cutoff "$CUTOFF" 'select(
-            (.id | startswith("playheads-gateway-") or startswith("playheads-web-"))
-            and (.id | IN("playheads-gateway", "playheads-web") | not)
+          # Delete stale preview workers (any playheads-* not in production list, older than cutoff)
+          echo "$WORKERS" | jq -r --arg cutoff "$CUTOFF" --argjson prod "$PROD_NAMES" 'select(
+            (.id | startswith("playheads-"))
+            and (.id | IN($prod[]) | not)
             and (.modified_on < $cutoff)
           ) | .id' | while read -r WORKER; do
-            echo "Deleting stale worker: $WORKER"
+            echo "Deleting worker: $WORKER"
             curl -s -X DELETE \
               -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
               "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER" \
               | jq -r '"  → success: \(.success)"'
           done
+
+          # Cleanup stale container applications
+          CONTAINERS=$(curl -s \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/containers/applications" \
+            | jq -c '.result[]? // empty')
+
+          if [ -n "$CONTAINERS" ]; then
+            echo "$CONTAINERS" | jq -r --arg cutoff "$CUTOFF" 'select(
+              (.name | startswith("playheads-"))
+              and (.name | IN("playheads-backend-backendcontainer") | not)
+              and ((.modified_on // .created_on // "9999") < $cutoff)
+            ) | .name' | while read -r APP; do
+              echo "Deleting container app: $APP"
+              curl -s -X DELETE \
+                -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+                "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/containers/applications/$APP" \
+                | jq -r '"  → success: \(.success)"'
+            done
+          fi
 
           echo "Done."
