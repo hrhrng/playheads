@@ -1,0 +1,38 @@
+name: Cleanup Stale Previews
+
+on:
+  schedule:
+    - cron: '0 0 * * 1' # Every Monday UTC 00:00
+  workflow_dispatch: # Manual trigger
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      MAX_AGE_DAYS: 7
+    steps:
+      - name: Cleanup stale preview workers
+        run: |
+          CUTOFF=$(date -d "-${MAX_AGE_DAYS} days" -u +%Y-%m-%dT%H:%M:%SZ)
+          echo "Cutoff: $CUTOFF (older than ${MAX_AGE_DAYS} days)"
+
+          WORKERS=$(curl -s \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts" \
+            | jq -c '.result[]')
+
+          echo "$WORKERS" | jq -r --arg cutoff "$CUTOFF" 'select(
+            (.id | startswith("playheads-gateway-") or startswith("playheads-web-"))
+            and (.id | IN("playheads-gateway", "playheads-web") | not)
+            and (.modified_on < $cutoff)
+          ) | .id' | while read -r WORKER; do
+            echo "Deleting stale worker: $WORKER"
+            curl -s -X DELETE \
+              -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+              "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER" \
+              | jq -r '"  → success: \(.success)"'
+          done
+
+          echo "Done."

@@ -47,7 +47,7 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx wrangler deploy --config wrangler.production.toml
+        run: npx wrangler deploy
 
       - name: Deploy gateway worker
         working-directory: apps/gateway
@@ -55,6 +55,21 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          npx wrangler deploy --config wrangler.production.toml \
+          npx wrangler deploy \
             --route "app.${{ vars.PRODUCTION_DOMAIN }}/*" \
             --route "${{ vars.PRODUCTION_DOMAIN }}/*"
+
+      - name: Sync secrets to gateway worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          ALL_SECRETS: ${{ toJSON(secrets) }}
+        run: |
+          WORKER="playheads-gateway"
+          SKIP_KEYS='["GITHUB_TOKEN","CLOUDFLARE_API_TOKEN","CLOUDFLARE_ACCOUNT_ID"]'
+          for KEY in $(echo "$ALL_SECRETS" | jq -r --argjson skip "$SKIP_KEYS" 'keys[] | select(. as $k | $skip | index($k) | not)'); do
+            VAL=$(echo "$ALL_SECRETS" | jq -r --arg k "$KEY" '.[$k]')
+            if [ -z "$VAL" ]; then continue; fi
+            echo "$VAL" | npx wrangler secret put "$KEY" --name "$WORKER" 2>/dev/null
+            echo "✓ $KEY"
+          done
