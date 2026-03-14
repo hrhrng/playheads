@@ -42,6 +42,26 @@ export function useAuth() {
     setLoading(true);
     setAuthMessage(null);
 
+    try {
+      // Check waitlist status first (idempotent — adds if not exists)
+      const res = await fetch('/api/waitlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+
+      if (res.ok && data.status !== 'approved') {
+        // Not approved — don't send magic link
+        setAuthMessage({ type: 'success', text: data.message || "You're on the list! We'll notify you when it's your turn." });
+        setLoading(false);
+        return;
+      }
+    } catch {
+      // Waitlist check failed — proceed with login anyway
+    }
+
+    // Approved (or waitlist check failed) — send magic link
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: { emailRedirectTo: window.location.href },

@@ -26,10 +26,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
       .single();
 
     if (existing) {
-      if (existing.status === 'approved') {
-        return Response.json({ message: "You're already approved! Sign in to get started." });
-      }
-      return Response.json({ message: "You're already on the list! We'll notify you soon." });
+      return Response.json({ status: existing.status, message: existing.status === 'approved'
+        ? "You're approved! Check your email to sign in."
+        : "You're on the list! We'll notify you when it's your turn." });
     }
 
     // Insert new entry
@@ -39,13 +38,13 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
     if (error) {
       if (error.code === '23505') {
-        return Response.json({ message: "You're already on the list! We'll notify you soon." });
+        return Response.json({ status: 'pending', message: "You're on the list! We'll notify you when it's your turn." });
       }
       console.error('Waitlist insert error:', error);
       return Response.json({ error: 'Something went wrong. Please try again.' }, { status: 500 });
     }
 
-    return Response.json({ message: "You're on the list! We'll be in touch soon." });
+    return Response.json({ status: 'pending', message: "You're on the list! We'll notify you when it's your turn." });
   } catch {
     return Response.json({ error: 'Invalid request.' }, { status: 400 });
   }
