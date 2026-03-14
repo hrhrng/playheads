@@ -14,10 +14,6 @@ service = "playheads-landing"
 binding = "BACKEND"
 service = "playheads-backend"
 
-[[migrations]]
-tag = "v2"
-deleted_classes = ["BackendContainer"]
-
 [observability]
 enabled = true
 
