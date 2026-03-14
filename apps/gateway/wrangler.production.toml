@@ -1,11 +1,11 @@
-name = "playheads-gateway-production"
+name = "playheads-gateway"
 main = "src/index.ts"
 compatibility_date = "2024-12-01"
 
 # Route frontend to web worker via Service Binding
 [[services]]
 binding = "WEB"
-service = "playheads-web-production"
+service = "playheads-web"
 
 # Backend container
 [[containers]]
