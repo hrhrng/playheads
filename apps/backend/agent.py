@@ -512,7 +512,8 @@ async def _process_astream(agent_graph, stream_input, config):
                                 tool_id = part.get("id", "")
                                 tool_name = part.get("name", "")
                                 tool_input = part.get("input", {})
-                                if tool_name:
+                                if tool_name and tool_id not in active_tool_calls:
+                                    # First encounter — register but defer tool_start if input is empty
                                     current_text_part = None
                                     tool_call_part = {
                                         "type": "tool_call", "id": tool_id,
@@ -521,13 +522,22 @@ async def _process_astream(agent_graph, stream_input, config):
                                     }
                                     message_parts.append(tool_call_part)
                                     active_tool_calls[tool_id] = tool_name
-                                    if tool_id not in tool_calls_map:
-                                        tool_calls_map[tool_id] = tool_call_part
-                                    emitted_tool_starts.add(tool_id)
-                                    yield {"event": "tool_start", "data": {
-                                        "id": tool_id, "tool_name": tool_name,
-                                        "args": tool_input,
-                                    }}
+                                    tool_calls_map[tool_id] = tool_call_part
+                                    if tool_input and tool_input != {}:
+                                        emitted_tool_starts.add(tool_id)
+                                        yield {"event": "tool_start", "data": {
+                                            "id": tool_id, "tool_name": tool_name,
+                                            "args": tool_input,
+                                        }}
+                                elif tool_name and tool_id in active_tool_calls:
+                                    # Subsequent chunk — input may now be populated
+                                    if tool_input and tool_input != {} and tool_id not in emitted_tool_starts:
+                                        tool_calls_map[tool_id]["args"] = tool_input
+                                        emitted_tool_starts.add(tool_id)
+                                        yield {"event": "tool_start", "data": {
+                                            "id": tool_id, "tool_name": tool_name,
+                                            "args": tool_input,
+                                        }}
                             elif part.get("type") in (
                                 "web_search_tool_result", "web_fetch_tool_result",
                                 "code_execution_tool_result",
@@ -536,14 +546,18 @@ async def _process_astream(agent_graph, stream_input, config):
                                 tool_use_id = part.get("tool_use_id", "")
                                 tool_name = active_tool_calls.get(tool_use_id, "unknown")
                                 raw_content = part.get("content", "")
-                                # Extract titles/URLs from search results, skip encrypted_content
                                 result_summary = _summarize_search_results(raw_content)
                                 if tool_use_id in tool_calls_map:
                                     tool_calls_map[tool_use_id]["status"] = "success"
                                     tool_calls_map[tool_use_id]["result"] = result_summary
-                                    # Backfill args if they were empty during streaming
-                                    if not tool_calls_map[tool_use_id].get("args"):
-                                        tool_calls_map[tool_use_id]["args"] = {}
+                                # Emit deferred tool_start if input never arrived
+                                if tool_use_id not in emitted_tool_starts:
+                                    emitted_tool_starts.add(tool_use_id)
+                                    args = tool_calls_map.get(tool_use_id, {}).get("args", {})
+                                    yield {"event": "tool_start", "data": {
+                                        "id": tool_use_id, "tool_name": tool_name,
+                                        "args": args,
+                                    }}
                                 yield {"event": "tool_end", "data": {
                                     "id": tool_use_id, "tool_name": tool_name,
                                     "result": result_summary,
