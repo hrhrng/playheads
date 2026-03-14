@@ -4,6 +4,8 @@
        deploy deploy-preview deploy-production build-web \
        deploy-preview-web deploy-preview-gateway \
        deploy-preview-landing deploy-production-landing \
+       deploy-preview-admin deploy-production-admin \
+       deploy-preview-backend deploy-production-backend \
        deploy-production-web deploy-production-gateway \
        deploy-secrets-preview deploy-secrets-production
 
@@ -100,9 +102,9 @@ clean:
 
 deploy: deploy-preview
 
-deploy-preview: build-web build-landing deploy-preview-landing deploy-preview-web deploy-preview-gateway
+deploy-preview: build-web build-landing deploy-preview-landing deploy-preview-admin deploy-preview-web deploy-preview-backend deploy-preview-gateway
 
-deploy-production: build-web build-landing deploy-production-landing deploy-production-web deploy-production-gateway
+deploy-production: build-web build-landing deploy-production-landing deploy-production-admin deploy-production-web deploy-production-backend deploy-production-gateway
 
 build-web:
 	@echo "Building web frontend..."
@@ -112,9 +114,17 @@ deploy-preview-landing:
 	@echo "Deploying landing worker (preview)..."
 	cd apps/landing && npx wrangler deploy --config wrangler.preview.toml
 
+deploy-preview-admin:
+	@echo "Deploying admin worker (preview)..."
+	cd apps/admin && npx wrangler deploy
+
 deploy-preview-web:
 	@echo "Deploying web worker (preview)..."
 	cd apps/web && npx wrangler deploy --config wrangler.preview.toml
+
+deploy-preview-backend:
+	@echo "Deploying backend worker (preview)..."
+	cd apps/backend-worker && npx wrangler deploy
 
 deploy-preview-gateway:
 	@echo "Deploying gateway worker (preview)..."
@@ -124,35 +134,43 @@ deploy-production-landing:
 	@echo "Deploying landing worker (production)..."
 	cd apps/landing && npx wrangler deploy --config wrangler.production.toml
 
+deploy-production-admin:
+	@echo "Deploying admin worker (production)..."
+	cd apps/admin && npx wrangler deploy
+
 deploy-production-web:
 	@echo "Deploying web worker (production)..."
 	cd apps/web && npx wrangler deploy --config wrangler.production.toml
+
+deploy-production-backend:
+	@echo "Deploying backend worker (production)..."
+	cd apps/backend-worker && npx wrangler deploy
 
 deploy-production-gateway:
 	@echo "Deploying gateway worker (production)..."
 	cd apps/gateway && npx wrangler deploy --config wrangler.production.toml
 
 deploy-secrets-preview:
-	@echo "Setting Cloudflare secrets for preview..."
-	cd apps/gateway && npx wrangler secret put DATABASE_URL --config wrangler.preview.toml
-	cd apps/gateway && npx wrangler secret put ANTHROPIC_API_KEY --config wrangler.preview.toml
-	cd apps/gateway && npx wrangler secret put OPENAI_API_KEY --config wrangler.preview.toml
-	cd apps/gateway && npx wrangler secret put OPENAI_BASE_URL --config wrangler.preview.toml
-	cd apps/gateway && npx wrangler secret put APPLE_MUSIC_TEAM_ID --config wrangler.preview.toml
-	cd apps/gateway && npx wrangler secret put APPLE_MUSIC_KEY_ID --config wrangler.preview.toml
-	cd apps/gateway && npx wrangler secret put APPLE_MUSIC_PRIVATE_KEY --config wrangler.preview.toml
-	cd apps/gateway && npx wrangler secret put MINIMAX_API_KEY --config wrangler.preview.toml
+	@echo "Setting Cloudflare secrets for preview backend worker..."
+	cd apps/backend-worker && npx wrangler secret put DATABASE_URL
+	cd apps/backend-worker && npx wrangler secret put ANTHROPIC_API_KEY
+	cd apps/backend-worker && npx wrangler secret put OPENAI_API_KEY
+	cd apps/backend-worker && npx wrangler secret put OPENAI_BASE_URL
+	cd apps/backend-worker && npx wrangler secret put APPLE_MUSIC_TEAM_ID
+	cd apps/backend-worker && npx wrangler secret put APPLE_MUSIC_KEY_ID
+	cd apps/backend-worker && npx wrangler secret put APPLE_MUSIC_PRIVATE_KEY
+	cd apps/backend-worker && npx wrangler secret put MINIMAX_API_KEY
 
 deploy-secrets-production:
-	@echo "Setting Cloudflare secrets for production..."
-	cd apps/gateway && npx wrangler secret put DATABASE_URL --config wrangler.production.toml
-	cd apps/gateway && npx wrangler secret put ANTHROPIC_API_KEY --config wrangler.production.toml
-	cd apps/gateway && npx wrangler secret put OPENAI_API_KEY --config wrangler.production.toml
-	cd apps/gateway && npx wrangler secret put OPENAI_BASE_URL --config wrangler.production.toml
-	cd apps/gateway && npx wrangler secret put APPLE_MUSIC_TEAM_ID --config wrangler.production.toml
-	cd apps/gateway && npx wrangler secret put APPLE_MUSIC_KEY_ID --config wrangler.production.toml
-	cd apps/gateway && npx wrangler secret put APPLE_MUSIC_PRIVATE_KEY --config wrangler.production.toml
-	cd apps/gateway && npx wrangler secret put MINIMAX_API_KEY --config wrangler.production.toml
+	@echo "Setting Cloudflare secrets for production backend worker..."
+	cd apps/backend-worker && npx wrangler secret put DATABASE_URL
+	cd apps/backend-worker && npx wrangler secret put ANTHROPIC_API_KEY
+	cd apps/backend-worker && npx wrangler secret put OPENAI_API_KEY
+	cd apps/backend-worker && npx wrangler secret put OPENAI_BASE_URL
+	cd apps/backend-worker && npx wrangler secret put APPLE_MUSIC_TEAM_ID
+	cd apps/backend-worker && npx wrangler secret put APPLE_MUSIC_KEY_ID
+	cd apps/backend-worker && npx wrangler secret put APPLE_MUSIC_PRIVATE_KEY
+	cd apps/backend-worker && npx wrangler secret put MINIMAX_API_KEY
 
 # =============================================================================
 # Help

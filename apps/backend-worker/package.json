@@ -1,8 +1,11 @@
 {
-  "name": "playheads-gateway",
+  "name": "playheads-backend-worker",
   "private": true,
   "scripts": {
     "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "@cloudflare/containers": "^0.1.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20241205.0",

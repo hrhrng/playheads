@@ -35,10 +35,12 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
-          VITE_SPOTIFY_REDIRECT_URI: https://playheads-gateway-${{ steps.branch.outputs.slug }}.${{ vars.CF_WORKERS_SUBDOMAIN }}.workers.dev/callback
+          VITE_SPOTIFY_REDIRECT_URI: https://preview.app.${{ vars.PRODUCTION_DOMAIN }}/callback
         run: pnpm --filter web build
 
       - name: Build landing
+        env:
+          PUBLIC_APP_URL: https://preview.app.${{ vars.PRODUCTION_DOMAIN }}
         run: pnpm --filter landing build
 
       - name: Deploy landing worker
@@ -46,27 +48,108 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx wrangler deploy --config wrangler.preview.toml --name "playheads-landing-${{ steps.branch.outputs.slug }}"
+        run: |
+          SLUG="${{ steps.branch.outputs.slug }}"
+          DOMAIN="${{ vars.PRODUCTION_DOMAIN }}"
+          cp wrangler.preview.toml wrangler.branch.toml
+          cat >> wrangler.branch.toml <<TOML
+
+          [[routes]]
+          pattern = "landing-${SLUG}.pw.${DOMAIN}"
+          custom_domain = true
+          TOML
+          npx wrangler deploy --config wrangler.branch.toml \
+            --name "playheads-landing-${SLUG}"
 
       - name: Deploy web worker
         working-directory: apps/web
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx wrangler deploy --config wrangler.preview.toml --name "playheads-web-${{ steps.branch.outputs.slug }}"
+        run: |
+          SLUG="${{ steps.branch.outputs.slug }}"
+          DOMAIN="${{ vars.PRODUCTION_DOMAIN }}"
+          cp wrangler.preview.toml wrangler.branch.toml
+          cat >> wrangler.branch.toml <<TOML
 
-      - name: Deploy gateway worker
+          [[routes]]
+          pattern = "web-${SLUG}.pw.${DOMAIN}"
+          custom_domain = true
+          TOML
+          npx wrangler deploy --config wrangler.branch.toml \
+            --name "playheads-web-${SLUG}"
+
+      - name: Deploy backend worker
+        working-directory: apps/backend-worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          SLUG="${{ steps.branch.outputs.slug }}"
+          DOMAIN="${{ vars.PRODUCTION_DOMAIN }}"
+          cp wrangler.toml wrangler.branch.toml
+          cat >> wrangler.branch.toml <<TOML
+
+          [[routes]]
+          pattern = "backend-${SLUG}.pw.${DOMAIN}"
+          custom_domain = true
+          TOML
+          npx wrangler deploy --config wrangler.branch.toml \
+            --name "playheads-backend-${SLUG}"
+
+      - name: Deploy preview gateway
         working-directory: apps/gateway
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           BRANCH_SLUG: ${{ steps.branch.outputs.slug }}
         run: |
-          sed -e "s/name = \"playheads-gateway\"/name = \"playheads-gateway-${BRANCH_SLUG}\"/" \
-              -e "s/service = \"playheads-web\"/service = \"playheads-web-${BRANCH_SLUG}\"/" \
+          DOMAIN="${{ vars.PRODUCTION_DOMAIN }}"
+          sed -e "s/service = \"playheads-web\"/service = \"playheads-web-${BRANCH_SLUG}\"/" \
               -e "s/service = \"playheads-landing\"/service = \"playheads-landing-${BRANCH_SLUG}\"/" \
+              -e "s/service = \"playheads-backend\"/service = \"playheads-backend-${BRANCH_SLUG}\"/" \
               wrangler.preview.toml > wrangler.branch.toml
-          npx wrangler deploy --config wrangler.branch.toml
+          cat >> wrangler.branch.toml <<TOML
+
+          [[routes]]
+          pattern = "preview.${DOMAIN}"
+          custom_domain = true
+
+          [[routes]]
+          pattern = "preview.app.${DOMAIN}"
+          custom_domain = true
+          TOML
+          npx wrangler deploy --config wrangler.branch.toml \
+            --name "playheads-gateway-preview" \
+            --var APP_HOSTNAME:preview.app.${DOMAIN} \
+            --var PREVIEW_DOMAIN:pw.${DOMAIN}
+
+      - name: Deploy admin worker
+        working-directory: apps/admin
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy --name "playheads-admin-${{ steps.branch.outputs.slug }}"
+
+      - name: Sync admin secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          WORKER="playheads-admin-${{ steps.branch.outputs.slug }}"
+          declare -A SECRETS=(
+            [SUPABASE_URL]="${{ secrets.SUPABASE_URL }}"
+            [SUPABASE_SERVICE_ROLE_KEY]="${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}"
+            [SUPABASE_ANON_KEY]="${{ vars.VITE_SUPABASE_ANON_KEY }}"
+            [ADMIN_EMAILS]="${{ secrets.ADMIN_EMAILS }}"
+          )
+          for KEY in "${!SECRETS[@]}"; do
+            VAL="${SECRETS[$KEY]}"
+            if [ -n "$VAL" ]; then
+              echo "$VAL" | npx wrangler secret put "$KEY" --name "$WORKER" 2>/dev/null
+              echo "✓ $KEY"
+            fi
+          done
 
       - name: Sync landing secrets
         env:
@@ -88,13 +171,13 @@ jobs:
             fi
           done
 
-      - name: Sync secrets to gateway worker
+      - name: Sync secrets to backend worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           ALL_SECRETS: ${{ toJSON(secrets) }}
         run: |
-          WORKER="playheads-gateway-${{ steps.branch.outputs.slug }}"
+          WORKER="playheads-backend-${{ steps.branch.outputs.slug }}"
           SKIP_KEYS='["GITHUB_TOKEN","CLOUDFLARE_API_TOKEN","CLOUDFLARE_ACCOUNT_ID"]'
           for KEY in $(echo "$ALL_SECRETS" | jq -r --argjson skip "$SKIP_KEYS" 'keys[] | select(. as $k | $skip | index($k) | not)'); do
             VAL=$(echo "$ALL_SECRETS" | jq -r --arg k "$KEY" '.[$k]')

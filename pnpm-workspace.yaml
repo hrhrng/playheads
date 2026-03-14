@@ -2,3 +2,5 @@ packages:
   - 'apps/web'
   - 'apps/landing'
   - 'apps/gateway'
+  - 'apps/admin'
+  - 'apps/backend-worker'
