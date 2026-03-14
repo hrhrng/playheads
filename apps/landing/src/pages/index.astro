@@ -10,6 +10,14 @@ const appUrl = import.meta.env.PUBLIC_APP_URL || '/app/';
 ---
 
 <Layout title="Playhead — Sonic Intelligence">
+  <!-- Redirect magic link callbacks to the app -->
+  <script is:inline define:vars={{ appUrl }}>
+    if (window.location.hash && window.location.hash.includes('access_token')) {
+      var target = appUrl;
+      if (target.startsWith('/')) target = window.location.origin + target;
+      window.location.replace(target + window.location.hash);
+    }
+  </script>
   <!-- Nav -->
   <nav class="sticky top-0 z-50 backdrop-blur-lg bg-air-50/80 border-b border-air-100/60">
     <div class="flex items-center justify-between px-6 py-3 max-w-5xl mx-auto">
