@@ -26,11 +26,16 @@ export function useAuth() {
   const isLoggedIn = !!effectiveSession;
 
   useEffect(() => {
+    console.log('[auth] init, hash:', window.location.hash ? window.location.hash.substring(0, 50) + '...' : '(none)');
+    console.log('[auth] href:', window.location.href);
+
     supabase.auth.getSession().then(({ data: { session } }) => {
+      console.log('[auth] getSession result:', session ? `token=${session.access_token?.substring(0, 20)}...` : 'null');
       setSession(session as SupabaseSession | null);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('[auth] onAuthStateChange:', event, session ? 'has session' : 'no session');
       setSession(session as SupabaseSession | null);
     });
 

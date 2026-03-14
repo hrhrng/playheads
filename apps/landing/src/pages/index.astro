@@ -12,9 +12,11 @@ const appUrl = import.meta.env.PUBLIC_APP_URL || '/app/';
 <Layout title="Playhead — Sonic Intelligence">
   <!-- Redirect magic link callbacks to the app -->
   <script is:inline define:vars={{ appUrl }}>
+    console.log('[landing] hash:', window.location.hash ? window.location.hash.substring(0, 50) + '...' : '(none)');
     if (window.location.hash && window.location.hash.includes('access_token')) {
       var target = appUrl;
       if (target.startsWith('/')) target = window.location.origin + target;
+      console.log('[landing] redirecting to:', target);
       window.location.replace(target + window.location.hash);
     }
   </script>
