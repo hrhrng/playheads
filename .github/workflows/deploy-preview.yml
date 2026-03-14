@@ -84,13 +84,9 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          BRANCH_SLUG: ${{ steps.branch.outputs.slug }}
         run: |
           DOMAIN="${{ vars.PRODUCTION_DOMAIN }}"
-          sed -e "s/service = \"playheads-web\"/service = \"playheads-web-${BRANCH_SLUG}\"/" \
-              -e "s/service = \"playheads-landing\"/service = \"playheads-landing-${BRANCH_SLUG}\"/" \
-              -e "s/service = \"playheads-backend\"/service = \"playheads-backend-${BRANCH_SLUG}\"/" \
-              wrangler.preview.toml > wrangler.branch.toml
+          cp wrangler.preview.toml wrangler.branch.toml
           cat >> wrangler.branch.toml <<TOML
 
           [[routes]]
