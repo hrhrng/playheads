@@ -239,12 +239,30 @@ let page = 1;
 let totalPages = 1;
 let selected = new Set();
 let loading = false;
-let loginStep = 'email'; // email | otp
 let loginEmail = '';
 let loginMsg = '';
 let loginMsgType = '';
+let authLoading = true;
+
+// Listen for magic link callback (hash fragment with access_token)
+sb.auth.onAuthStateChange((event, session) => {
+  if (session?.access_token) {
+    token = session.access_token;
+    authLoading = false;
+    // Clean URL hash
+    if (window.location.hash) history.replaceState(null, '', window.location.pathname);
+    fetchData();
+  } else {
+    authLoading = false;
+    render();
+  }
+});
 
 function render() {
+  if (authLoading) {
+    document.getElementById('app').innerHTML = '<div class="login"><p style="color:#9ca3af">Loading...</p></div>';
+    return;
+  }
   document.getElementById('app').innerHTML = token ? renderDashboard() : renderLogin();
   bind();
 }
@@ -254,17 +272,10 @@ function renderLogin() {
     <h1>Admin Login</h1>
     <p>Sign in with your admin email</p>
     \${loginMsg ? \`<div class="msg \${loginMsgType === 'error' ? 'msg-err' : 'msg-ok'}">\${loginMsg}</div>\` : ''}
-    \${loginStep === 'email' ? \`
-      <form id="loginForm">
-        <input type="email" id="loginEmail" placeholder="admin@example.com" required value="\${loginEmail}" />
-        <button type="submit" class="btn btn-black">Send Login Code</button>
-      </form>
-    \` : \`
-      <form id="otpForm">
-        <input type="text" id="otpCode" placeholder="Enter 6-digit code" class="otp-input" required maxlength="6" />
-        <button type="submit" class="btn btn-black">Verify</button>
-      </form>
-    \`}
+    <form id="loginForm">
+      <input type="email" id="loginEmail" placeholder="admin@example.com" required value="\${loginEmail}" />
+      <button type="submit" class="btn btn-black">Send Magic Link</button>
+    </form>
   </div></div>\`;
 }
 
@@ -331,18 +342,10 @@ function bind() {
   if (lf) lf.onsubmit = async (e) => {
     e.preventDefault();
     loginEmail = document.getElementById('loginEmail').value;
-    const { error } = await sb.auth.signInWithOtp({ email: loginEmail, options: { shouldCreateUser: false } });
+    const { error } = await sb.auth.signInWithOtp({ email: loginEmail, options: { shouldCreateUser: false, emailRedirectTo: window.location.origin } });
     if (error) { loginMsg = error.message; loginMsgType = 'error'; }
-    else { loginStep = 'otp'; loginMsg = 'Check your email for a code.'; loginMsgType = 'ok'; }
+    else { loginMsg = 'Check your email for a login link.'; loginMsgType = 'ok'; }
     render();
-  };
-  const of = document.getElementById('otpForm');
-  if (of) of.onsubmit = async (e) => {
-    e.preventDefault();
-    const code = document.getElementById('otpCode').value;
-    const { data, error } = await sb.auth.verifyOtp({ email: loginEmail, token: code, type: 'email' });
-    if (error) { loginMsg = error.message; loginMsgType = 'error'; render(); return; }
-    if (data.session) { token = data.session.access_token; await fetchData(); }
   };
   const sa = document.getElementById('selectAll');
   if (sa) sa.onchange = () => {
@@ -376,7 +379,7 @@ async function fetchData() {
 
 window.setFilter = (f) => { filter = f; page = 1; fetchData(); };
 window.setPage = (p) => { page = p; fetchData(); };
-window.signout = () => { token = null; loginStep = 'email'; loginMsg = ''; render(); };
+window.signout = () => { sb.auth.signOut(); token = null; loginMsg = ''; render(); };
 
 window.doAction = async (ids, action) => {
   await fetch('/api/waitlist', {
