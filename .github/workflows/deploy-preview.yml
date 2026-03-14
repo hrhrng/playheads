@@ -88,14 +88,14 @@ jobs:
           SLUG="${{ steps.branch.outputs.slug }}"
           DOMAIN="${{ vars.PRODUCTION_DOMAIN }}"
           cp wrangler.toml wrangler.branch.toml
+          sed -i "s/^name = .*/name = \"playheads-backend-${SLUG}\"/" wrangler.branch.toml
           cat >> wrangler.branch.toml <<TOML
 
           [[routes]]
           pattern = "backend-${SLUG}.pw.${DOMAIN}"
           custom_domain = true
           TOML
-          npx wrangler deploy --config wrangler.branch.toml \
-            --name "playheads-backend-${SLUG}"
+          npx wrangler deploy --config wrangler.branch.toml
 
       - name: Deploy preview gateway
         working-directory: apps/gateway
