@@ -3,15 +3,10 @@ import MusicBars from './MusicBars.astro';
 import WaitlistForm from './WaitlistForm.tsx';
 ---
 
-<section class="min-h-[85vh] flex flex-col items-center justify-center px-6 py-20">
+<section class="flex flex-col items-center px-6 pt-16 pb-10">
   <div class="flex flex-col items-center max-w-lg w-full">
-    <!-- Logo -->
-    <div class="w-32 h-32 rounded-full overflow-hidden grayscale hover:grayscale-0 transition-all duration-700 animate-fade-in">
-      <img src="/logo.jpg" alt="Playhead" class="w-full h-full object-cover scale-105 mix-blend-multiply" />
-    </div>
-
     <!-- Title -->
-    <div class="text-center mt-10 space-y-3 animate-fade-in-delay-1">
+    <div class="text-center space-y-3 animate-fade-in">
       <h1 class="text-3xl font-semibold tracking-tight">Playhead</h1>
       <div class="flex items-center justify-center gap-3">
         <div class="h-px w-10 bg-air-200" />
@@ -22,12 +17,12 @@ import WaitlistForm from './WaitlistForm.tsx';
     </div>
 
     <!-- Subtitle -->
-    <p class="text-air-500 text-center mt-6 text-sm leading-relaxed max-w-sm animate-fade-in-delay-2">
+    <p class="text-air-500 text-center mt-6 text-sm leading-relaxed max-w-sm animate-fade-in-delay-1">
       Your AI-powered music companion. Discover, explore, and experience music in a whole new way.
     </p>
 
     <!-- Waitlist Form -->
-    <div class="w-full mt-10 animate-fade-in-delay-3">
+    <div class="w-full mt-8 animate-fade-in-delay-2">
       <WaitlistForm client:load />
     </div>
   </div>
