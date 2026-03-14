@@ -1,8 +1,7 @@
 """
-Tests for agent features: web search tool, thinking mode extraction, tool registration.
+Tests for agent features: native web search, thinking mode extraction, tool registration.
 
-Uses FakeGraph and MemorySaver — no database, no API keys, no network (except
-search_web which hits DuckDuckGo for a real smoke test).
+Uses FakeGraph and MemorySaver — no database, no API keys, no network.
 
 Run:
     uv run --project apps/backend --extra dev pytest apps/backend/test_agent.py -v
@@ -15,7 +14,7 @@ from typing import Any
 from unittest.mock import MagicMock
 
 from apps.backend.agent import (
-    search_web,
+    WEB_SEARCH_TOOL,
     TOOLS,
     SYSTEM_PROMPT_TEMPLATE,
     _process_astream,
@@ -67,29 +66,19 @@ class FakeGraph:
 
 
 # =============================================================================
-# 1. search_web tool — real DuckDuckGo smoke test
+# 1. Native web search tool spec
 # =============================================================================
 
-class TestSearchWebTool:
-    """Verify the search_web @tool hits DuckDuckGo and returns formatted results."""
+class TestWebSearchToolSpec:
+    """Verify the WEB_SEARCH_TOOL dict has the correct structure."""
 
-    def test_returns_formatted_results(self):
-        """search_web should return a string — either formatted results or a no-results message.
-        DuckDuckGo may rate-limit in CI, so we only assert the return type and that
-        it doesn't crash. When results come back, they start with '- '.
-        """
-        result = search_web.invoke({"query": "best jazz albums 2024"})
-        assert isinstance(result, str)
-        assert len(result) > 0
-        # If we got real results, verify the format
-        if result != "No results found." and not result.startswith("Web search failed"):
-            lines = [l for l in result.split("\n") if l.startswith("- ")]
-            assert len(lines) > 0
+    def test_has_required_fields(self):
+        assert WEB_SEARCH_TOOL["type"] == "web_search_20250305"
+        assert WEB_SEARCH_TOOL["name"] == "web_search"
 
-    def test_graceful_on_nonsense_query(self):
-        """Should not crash even on garbage queries."""
-        result = search_web.invoke({"query": "xyzzy_nonexistent_12345_zzz"})
-        assert isinstance(result, str)
+    def test_is_dict_not_tool(self):
+        """Server-side tools are dicts, not BaseTool instances."""
+        assert isinstance(WEB_SEARCH_TOOL, dict)
 
 
 # =============================================================================
@@ -98,17 +87,18 @@ class TestSearchWebTool:
 
 class TestToolRegistration:
     EXPECTED_TOOLS = {
-        "search_music", "search_web", "add_to_queue", "play_track",
+        "search_music", "add_to_queue", "play_track",
         "skip_next", "remove_from_playlist", "get_now_playing", "get_playlist",
     }
-
-    def test_search_web_registered(self):
-        names = {t.name for t in TOOLS}
-        assert "search_web" in names
 
     def test_all_tools_present(self):
         actual = {t.name for t in TOOLS}
         assert self.EXPECTED_TOOLS == actual
+
+    def test_web_search_not_in_base_tools(self):
+        """web_search is a server-side tool added conditionally, not in TOOLS."""
+        names = {t.name for t in TOOLS}
+        assert "web_search" not in names
 
 
 # =============================================================================
@@ -116,12 +106,12 @@ class TestToolRegistration:
 # =============================================================================
 
 class TestSystemPrompt:
-    def test_mentions_search_web(self):
+    def test_mentions_web_search(self):
         prompt = SYSTEM_PROMPT_TEMPLATE.format(state_context="test")
-        assert "search_web" in prompt
+        assert "web_search" in prompt
 
     def test_distinguishes_search_tools(self):
-        """Prompt should explain search_web = discovery, search_music = Apple Music."""
+        """Prompt should explain web_search = discovery, search_music = Apple Music."""
         prompt = SYSTEM_PROMPT_TEMPLATE.format(state_context="test").lower()
         assert "discovery" in prompt or "recommendations" in prompt
 
@@ -258,7 +248,193 @@ class TestThinkingExtraction:
 
 
 # =============================================================================
-# 5. Agent creation with MemorySaver — no DB needed
+# 5. Server-side web_search streaming events
+# =============================================================================
+
+class TestWebSearchStreaming:
+    """Verify _process_astream emits tool_start/tool_end for server-side web_search."""
+
+    @pytest.mark.asyncio
+    async def test_server_tool_use_emits_tool_start(self):
+        """server_tool_use content block → tool_start SSE event."""
+        graph = FakeGraph([
+            ("messages", (FakeMessageChunk(
+                content=[
+                    {"type": "server_tool_use", "id": "srvtoolu_123", "name": "web_search", "input": {"query": "best jazz 2024"}},
+                ],
+            ),)),
+            ("messages", (FakeMessageChunk(
+                content=[
+                    {"type": "web_search_tool_result", "tool_use_id": "srvtoolu_123", "content": [
+                        {"type": "web_search_result", "url": "https://example.com", "title": "Jazz 2024", "page_age": "2d", "encrypted_content": "..."},
+                    ]},
+                ],
+            ),)),
+            ("messages", (FakeMessageChunk(
+                content=[{"type": "text", "text": "Here are the top jazz albums!"}],
+            ),)),
+        ])
+
+        events = [e async for e in _process_astream(graph, {"messages": []}, {})]
+        types = [e["event"] for e in events]
+
+        assert "tool_start" in types
+        tool_start = next(e for e in events if e["event"] == "tool_start")
+        assert tool_start["data"]["tool_name"] == "web_search"
+        assert tool_start["data"]["id"] == "srvtoolu_123"
+        assert tool_start["data"]["args"] == {"query": "best jazz 2024"}
+
+    @pytest.mark.asyncio
+    async def test_web_search_result_emits_tool_end(self):
+        """web_search_tool_result content block → tool_end SSE event."""
+        graph = FakeGraph([
+            ("messages", (FakeMessageChunk(
+                content=[
+                    {"type": "server_tool_use", "id": "srvtoolu_456", "name": "web_search", "input": {"query": "miles davis"}},
+                ],
+            ),)),
+            ("messages", (FakeMessageChunk(
+                content=[
+                    {"type": "web_search_tool_result", "tool_use_id": "srvtoolu_456", "content": [
+                        {"type": "web_search_result", "url": "https://example.com/miles", "title": "Miles Davis"},
+                    ]},
+                ],
+            ),)),
+            ("messages", (FakeMessageChunk(content="Great artist!"),)),
+        ])
+
+        events = [e async for e in _process_astream(graph, {"messages": []}, {})]
+        types = [e["event"] for e in events]
+
+        assert "tool_end" in types
+        tool_end = next(e for e in events if e["event"] == "tool_end")
+        assert tool_end["data"]["id"] == "srvtoolu_456"
+        assert tool_end["data"]["tool_name"] == "web_search"
+        assert tool_end["data"]["status"] == "success"
+
+    @pytest.mark.asyncio
+    async def test_full_web_search_flow_event_order(self):
+        """Full flow: tool_start → tool_end → text → done, in order."""
+        graph = FakeGraph([
+            ("messages", (FakeMessageChunk(
+                content=[
+                    {"type": "server_tool_use", "id": "srv_001", "name": "web_search", "input": {"query": "周杰伦"}},
+                    {"type": "web_search_tool_result", "tool_use_id": "srv_001", "content": [{"type": "web_search_result", "url": "https://zh.wikipedia.org", "title": "Jay Chou"}]},
+                    {"type": "text", "text": "周杰伦是华语乐坛天王"},
+                ],
+            ),)),
+        ])
+
+        events = [e async for e in _process_astream(graph, {"messages": []}, {})]
+        types = [e["event"] for e in events]
+
+        assert types == ["tool_start", "tool_end", "text", "done"]
+
+    @pytest.mark.asyncio
+    async def test_web_search_tool_call_in_message_parts(self):
+        """Server-side tool calls should appear in message_parts for persistence."""
+        graph = FakeGraph([
+            ("messages", (FakeMessageChunk(
+                content=[
+                    {"type": "server_tool_use", "id": "srv_002", "name": "web_search", "input": {"query": "test"}},
+                    {"type": "web_search_tool_result", "tool_use_id": "srv_002", "content": []},
+                    {"type": "text", "text": "result"},
+                ],
+            ),)),
+        ])
+
+        events = [e async for e in _process_astream(graph, {"messages": []}, {})]
+        done_ev = next(e for e in events if e["event"] == "done")
+        parts = done_ev["data"]["message_parts"]
+        part_types = [p["type"] for p in parts]
+
+        assert "tool_call" in part_types
+        tool_part = next(p for p in parts if p["type"] == "tool_call")
+        assert tool_part["tool_name"] == "web_search"
+        assert tool_part["status"] == "success"
+        assert tool_part["id"] == "srv_002"
+
+    @pytest.mark.asyncio
+    async def test_text_after_web_search_still_streamed(self):
+        """Text content following a web search should still be streamed normally."""
+        graph = FakeGraph([
+            ("messages", (FakeMessageChunk(
+                content=[
+                    {"type": "server_tool_use", "id": "srv_003", "name": "web_search", "input": {"query": "q"}},
+                    {"type": "web_search_tool_result", "tool_use_id": "srv_003", "content": []},
+                    {"type": "text", "text": "Found some great music!"},
+                ],
+            ),)),
+        ])
+
+        events = [e async for e in _process_astream(graph, {"messages": []}, {})]
+        text_events = [e for e in events if e["event"] == "text"]
+
+        assert len(text_events) == 1
+        assert text_events[0]["data"]["content"] == "Found some great music!"
+
+        done = next(e for e in events if e["event"] == "done")
+        assert done["data"]["full_response"] == "Found some great music!"
+
+
+# =============================================================================
+# 6. Agent creation — web_search binding
+# =============================================================================
+
+class TestWebSearchBinding:
+    """Verify WEB_SEARCH_TOOL is conditionally passed to create_agent based on model type."""
+
+    def test_anthropic_model_includes_web_search(self):
+        """ChatAnthropic models should have WEB_SEARCH_TOOL in tools passed to create_agent."""
+        from unittest.mock import patch as mock_patch
+        from langchain_anthropic import ChatAnthropic
+        from langgraph.checkpoint.memory import MemorySaver
+
+        mock_model = MagicMock(spec=ChatAnthropic)
+        mock_model.bind_tools = MagicMock(return_value=mock_model)
+
+        with mock_patch("apps.backend.agent.create_agent") as mock_create:
+            mock_create.return_value = MagicMock()
+            create_music_agent(
+                state_context="test",
+                checkpointer=MemorySaver(),
+                model=mock_model,
+            )
+
+            # Verify create_agent was called with WEB_SEARCH_TOOL in tools
+            call_kwargs = mock_create.call_args
+            tools_arg = call_kwargs.kwargs.get("tools") or call_kwargs[1].get("tools")
+            dict_tools = [t for t in tools_arg if isinstance(t, dict)]
+            assert any(
+                t.get("type") == "web_search_20250305" for t in dict_tools
+            ), f"WEB_SEARCH_TOOL not found in create_agent tools. Dicts: {dict_tools}"
+
+    def test_non_anthropic_model_excludes_web_search(self):
+        """Non-ChatAnthropic models should NOT have WEB_SEARCH_TOOL in tools."""
+        from unittest.mock import patch as mock_patch
+        from langgraph.checkpoint.memory import MemorySaver
+
+        mock_model = MagicMock()  # not spec=ChatAnthropic
+        mock_model.bind_tools = MagicMock(return_value=mock_model)
+
+        with mock_patch("apps.backend.agent.create_agent") as mock_create:
+            mock_create.return_value = MagicMock()
+            create_music_agent(
+                state_context="test",
+                checkpointer=MemorySaver(),
+                model=mock_model,
+            )
+
+            call_kwargs = mock_create.call_args
+            tools_arg = call_kwargs.kwargs.get("tools") or call_kwargs[1].get("tools")
+            dict_tools = [t for t in tools_arg if isinstance(t, dict)]
+            assert not any(
+                t.get("type", "").startswith("web_search") for t in dict_tools
+            ), f"WEB_SEARCH_TOOL should not be present for non-Anthropic models. Dicts: {dict_tools}"
+
+
+# =============================================================================
+# 7. Agent creation with MemorySaver — no DB needed
 # =============================================================================
 
 class TestCreateMusicAgent:

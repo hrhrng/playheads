@@ -341,37 +341,6 @@ class TestMultiTurnDeterministic:
         assert adapter.session.current_track.id == "b"
 
     @pytest.mark.asyncio
-    async def test_search_web_then_add(self, mock_apple_music, mock_ddgs):
-        """search_web → search_music → add_to_queue two-step flow."""
-        model = FakeChatModelWithTools(responses=[
-            # Turn 1: web search for recommendations
-            AIMessage(content="", tool_calls=[{
-                "name": "search_web", "args": {"query": "best jazz albums"},
-                "id": "call_web", "type": "tool_call",
-            }]),
-            AIMessage(content="I recommend Take Five by Dave Brubeck!"),
-            # Turn 2: user picks a track → search + add
-            AIMessage(content="", tool_calls=[{
-                "name": "search_music", "args": {"query": "Take Five Dave Brubeck"},
-                "id": "call_search", "type": "tool_call",
-            }]),
-            AIMessage(content="", tool_calls=[{
-                "name": "add_to_queue", "args": {"track_id": "12345"},
-                "id": "call_add", "type": "tool_call",
-            }]),
-            AIMessage(content="已将 Take Five 加入队列！"),
-        ])
-
-        adapter = AgentTestAdapter(model)
-
-        r1 = await adapter.chat("推荐一些爵士乐")
-        assert any(e["event"] == "tool_start" and e["data"]["tool_name"] == "search_web" for e in r1.events)
-
-        r2 = await adapter.chat("播放第一首推荐")
-        assert any(e["event"] == "tool_start" and e["data"]["tool_name"] == "add_to_queue" for e in r2.events)
-        assert len(adapter.session.playlist) >= 1
-
-    @pytest.mark.asyncio
     async def test_remove_from_playlist(self, mock_apple_music):
         """Remove a track — verify action and state change."""
         session = SessionState(

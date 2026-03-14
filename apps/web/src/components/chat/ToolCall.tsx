@@ -39,6 +39,7 @@ export const ToolCall = ({
   // 工具简化名称
   const toolDisplayNames: Record<string, string> = {
     search_music: 'Search',
+    web_search: 'Web Search',
     play_track: 'Play',
     skip_next: 'Skip',
     add_to_playlist: 'Add to Playlist',

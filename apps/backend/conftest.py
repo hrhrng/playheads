@@ -69,33 +69,6 @@ def mock_apple_music():
         yield
 
 
-@pytest.fixture
-def mock_ddgs():
-    """Mock DuckDuckGo search — returns canned jazz results for deterministic tests.
-
-    Replaces the DDGS context manager used by the search_web tool so that
-    tests never hit the real DuckDuckGo API.
-    """
-    canned_results = [
-        {"title": "Top Jazz Albums", "body": "Take Five by Dave Brubeck is a timeless classic."},
-        {"title": "Jazz Essentials", "body": "So What by Miles Davis, Blue Train by John Coltrane."},
-    ]
-
-    class FakeDDGS:
-        """Minimal stand-in for duckduckgo_search.DDGS context manager."""
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *args):
-            return False
-
-        def text(self, query, max_results=5):
-            return canned_results
-
-    with patch("apps.backend.agent.DDGS", FakeDDGS):
-        yield
-
-
 # =============================================================================
 # API test fixtures — httpx client & mocked SessionStore
 # =============================================================================

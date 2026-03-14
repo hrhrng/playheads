@@ -17,7 +17,6 @@ from langchain.agents import create_agent
 from langchain.tools import tool
 from langchain_anthropic import ChatAnthropic
 from langchain_openai import ChatOpenAI
-from duckduckgo_search import DDGS
 from langgraph.config import get_stream_writer
 
 if TYPE_CHECKING:
@@ -266,32 +265,15 @@ async def remove_from_playlist(index: str) -> str:
     return f"Removed track {idx} from playlist."
 
 
-@tool
-def search_web(query: str) -> str:
-    """Search the web for music recommendations, playlist ideas, artist info,
-    trending songs, or genre exploration. Use this to discover music beyond
-    simple track lookups — e.g. "best jazz albums 2024", "songs similar to
-    Bohemian Rhapsody", "周杰伦最新专辑推荐".
+# =============================================================================
+# Claude Native Web Search (server-side tool)
+# =============================================================================
 
-    For finding a specific track on Apple Music, use search_music instead.
-
-    Args:
-        query: Search query string for web search
-    """
-    try:
-        with DDGS() as ddgs:
-            results = list(ddgs.text(query, max_results=5))
-        if not results:
-            return "No results found."
-        # Format results concisely for the LLM to digest
-        formatted = []
-        for r in results:
-            title = r.get("title", "")
-            body = r.get("body", "")
-            formatted.append(f"- {title}: {body}")
-        return "\n".join(formatted)
-    except Exception as e:
-        return f"Web search failed: {e}"
+WEB_SEARCH_TOOL = {
+    "type": "web_search_20250305",
+    "name": "web_search",
+    "max_uses": 5,
+}
 
 
 # =============================================================================
@@ -312,15 +294,15 @@ Workflow:
 - "Remove N" → remove_from_playlist(N)
 - "What's playing?" → get_now_playing()
 - "Show queue" → get_playlist()
-- "Recommend" → search_web(query) → show results → wait for user to pick
+- "Recommend" → web_search(query) → show results → wait for user to pick
 
 IMPORTANT:
 - search_music only searches — it does NOT add to queue or play.
 - add_to_queue needs a track_id from search_music results.
 - play_track plays a track ALREADY in the playlist (1-indexed).
 - remove_from_playlist takes a 1-indexed position.
-- search_web is for discovery and recommendations (web results). search_music is for finding specific tracks on Apple Music.
-- When asked to build a playlist, use search_web for ideas, then search_music + add_to_queue for each track.
+- web_search is for discovery and recommendations (web results). search_music is for finding specific tracks on Apple Music.
+- When asked to build a playlist, use web_search for ideas, then search_music + add_to_queue for each track.
 
 Be conversational and fun! Keep responses concise."""
 
@@ -329,7 +311,7 @@ Be conversational and fun! Keep responses concise."""
 # Agent Creation (LangChain 1.0 API)
 # =============================================================================
 
-TOOLS = [search_music, search_web, add_to_queue, play_track, skip_next, remove_from_playlist, get_now_playing, get_playlist]
+TOOLS = [search_music, add_to_queue, play_track, skip_next, remove_from_playlist, get_now_playing, get_playlist]
 
 
 def create_music_agent(state_context: str, checkpointer=None, model=None):
@@ -383,10 +365,15 @@ def create_music_agent(state_context: str, checkpointer=None, model=None):
                 streaming=True,
             )
 
+    # Add Claude's native web search when using Anthropic provider
+    tools = list(TOOLS)
+    if isinstance(model, ChatAnthropic):
+        tools.append(WEB_SEARCH_TOOL)
+
     # create_agent returns a graph object with checkpointer
     agent_graph = create_agent(
         model=model,
-        tools=TOOLS,
+        tools=tools,
         system_prompt=system_prompt,
         checkpointer=checkpointer
     )
@@ -505,6 +492,44 @@ async def _process_astream(agent_graph, stream_input, config):
                                     else:
                                         current_thinking_part["content"] += thinking_content
                                     yield {"event": "thinking", "data": {"content": thinking_content}}
+                            elif part.get("type") == "server_tool_use":
+                                # Server-side tool invocation (e.g. web_search)
+                                tool_id = part.get("id", "")
+                                tool_name = part.get("name", "")
+                                tool_input = part.get("input", {})
+                                if tool_name:
+                                    current_text_part = None
+                                    tool_call_part = {
+                                        "type": "tool_call", "id": tool_id,
+                                        "tool_name": tool_name, "args": tool_input,
+                                        "status": "pending",
+                                    }
+                                    message_parts.append(tool_call_part)
+                                    active_tool_calls[tool_id] = tool_name
+                                    if tool_id not in tool_calls_map:
+                                        tool_calls_map[tool_id] = tool_call_part
+                                    emitted_tool_starts.add(tool_id)
+                                    yield {"event": "tool_start", "data": {
+                                        "id": tool_id, "tool_name": tool_name,
+                                        "args": tool_input,
+                                    }}
+                            elif part.get("type") in (
+                                "web_search_tool_result", "web_fetch_tool_result",
+                                "code_execution_tool_result",
+                            ):
+                                # Server-side tool result
+                                tool_use_id = part.get("tool_use_id", "")
+                                tool_name = active_tool_calls.get(tool_use_id, "unknown")
+                                result_content = part.get("content", "")
+                                if tool_use_id in tool_calls_map:
+                                    tool_calls_map[tool_use_id]["status"] = "success"
+                                    tool_calls_map[tool_use_id]["result"] = str(result_content) if result_content else ""
+                                yield {"event": "tool_end", "data": {
+                                    "id": tool_use_id, "tool_name": tool_name,
+                                    "result": str(result_content)[:200] if result_content else "",
+                                    "status": "success",
+                                }}
+                                active_tool_calls.pop(tool_use_id, None)
                 elif isinstance(content, str) and content:
                     full_response += content
                     if current_text_part is None:
