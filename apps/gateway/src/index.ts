@@ -69,6 +69,11 @@ export default {
     const url = new URL(request.url);
     const start = Date.now();
 
+    // /api/waitlist → landing worker (waitlist API)
+    if (url.pathname === "/api/waitlist") {
+      return env.LANDING.fetch(request);
+    }
+
     // /api/* → backend container
     if (url.pathname.startsWith("/api/")) {
       if (url.pathname === "/api/health") {
