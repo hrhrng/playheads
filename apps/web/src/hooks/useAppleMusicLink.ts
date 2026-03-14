@@ -12,13 +12,16 @@ import { validateAppleMusicToken } from '../api/appleMusicAuth';
 
 interface UseAppleMusicLinkReturn {
   isAppleLinked: boolean;
-  storedMusicUserToken: string | null;
+  /** null = no token, undefined = still checking */
+  storedMusicUserToken: string | null | undefined;
+  isTokenChecked: boolean;
   linkApple: () => Promise<void>;
 }
 
 export default function useAppleMusicLink(userId: string | null): UseAppleMusicLinkReturn {
   const [isAppleLinked, setIsAppleLinked] = useState(false);
-  const [storedMusicUserToken, setStoredMusicUserToken] = useState<string | null>(null);
+  const [storedMusicUserToken, setStoredMusicUserToken] = useState<string | null | undefined>(undefined);
+  const [isTokenChecked, setIsTokenChecked] = useState(false);
   const checkedRef = useRef(false);
 
   // Link Apple Music: authorize via MusicKit, save token to Supabase
@@ -62,7 +65,11 @@ export default function useAppleMusicLink(userId: string | null): UseAppleMusicL
 
   // On page load: check link status and validate token
   useEffect(() => {
-    if (!userId || checkedRef.current) return;
+    if (!userId) {
+      setIsTokenChecked(true);
+      return;
+    }
+    if (checkedRef.current) return;
     checkedRef.current = true;
 
     (async () => {
@@ -78,6 +85,8 @@ export default function useAppleMusicLink(userId: string | null): UseAppleMusicL
       if (!token) {
         // Case 1: Never connected
         setIsAppleLinked(false);
+        setStoredMusicUserToken(null);
+        setIsTokenChecked(true);
         toast.info('Connect Apple Music', {
           description: 'Link your account to enable music playback.',
           duration: 8000,
@@ -113,12 +122,14 @@ export default function useAppleMusicLink(userId: string | null): UseAppleMusicL
           },
         );
       }
+      setIsTokenChecked(true);
     })();
   }, [userId, linkApple]);
 
   return {
     isAppleLinked,
     storedMusicUserToken,
+    isTokenChecked,
     linkApple,
   };
 }
