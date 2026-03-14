@@ -6,13 +6,23 @@ interface AuthMessage {
 interface LoginScreenProps {
   email: string;
   setEmail: (email: string) => void;
+  password: string;
+  setPassword: (password: string) => void;
+  authMode: 'login' | 'signup';
+  setAuthMode: (mode: 'login' | 'signup') => void;
   loading: boolean;
   message: AuthMessage | null;
   onLogin: (e: React.FormEvent<HTMLFormElement>) => Promise<void>;
   onGoogleLogin?: () => Promise<void>;
 }
 
-export function LoginScreen({ email, setEmail, loading, message, onLogin, onGoogleLogin }: LoginScreenProps) {
+export function LoginScreen({
+  email, setEmail,
+  password, setPassword,
+  authMode, setAuthMode,
+  loading, message,
+  onLogin, onGoogleLogin,
+}: LoginScreenProps) {
   return (
     <div className="min-h-screen w-full bg-air-50 flex flex-col items-center justify-center p-6 relative">
       <div className="flex flex-col items-center space-y-12 max-w-sm w-full animate-fade-in">
@@ -46,13 +56,33 @@ export function LoginScreen({ email, setEmail, loading, message, onLogin, onGoog
             required
             className="w-full h-12 px-4 rounded-lg border border-air-200 focus:outline-none focus:border-air-900 transition-colors"
           />
+          <input
+            type="password"
+            placeholder="Password (leave empty for magic link)"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full h-12 px-4 rounded-lg border border-air-200 focus:outline-none focus:border-air-900 transition-colors"
+          />
           <button
             type="submit"
             disabled={loading}
             className="w-full h-12 rounded-lg bg-black text-white font-medium text-sm transition-colors flex items-center justify-center gap-3 hover:bg-gray-800 disabled:opacity-50"
           >
-            {loading ? 'Sending Magic Link...' : 'Sign In with Email'}
+            {loading
+              ? (password ? (authMode === 'signup' ? 'Creating Account...' : 'Signing In...') : 'Sending Magic Link...')
+              : (password ? (authMode === 'signup' ? 'Create Account' : 'Sign In') : 'Send Magic Link')
+            }
           </button>
+
+          {password && (
+            <button
+              type="button"
+              onClick={() => setAuthMode(authMode === 'login' ? 'signup' : 'login')}
+              className="w-full text-center text-sm text-air-400 hover:text-air-600 transition-colors"
+            >
+              {authMode === 'login' ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
+            </button>
+          )}
         </form>
 
         {onGoogleLogin && (

@@ -32,6 +32,10 @@ function App() {
     authMessage,
     handleLogin,
     handleGoogleLogin,
+    password,
+    setPassword,
+    authMode,
+    setAuthMode,
     logout,
   } = useAuth();
 
@@ -228,6 +232,10 @@ function App() {
       <LoginScreen
         email={email}
         setEmail={setEmail}
+        password={password}
+        setPassword={setPassword}
+        authMode={authMode}
+        setAuthMode={setAuthMode}
         loading={loading}
         message={authMessage}
         onLogin={handleLogin}

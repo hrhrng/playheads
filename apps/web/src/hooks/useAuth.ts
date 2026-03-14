@@ -37,23 +37,41 @@ export function useAuth() {
     return () => subscription.unsubscribe();
   }, []);
 
+  const [password, setPassword] = useState('');
+  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
+
   const handleLogin = useCallback(async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
     setAuthMessage(null);
 
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: window.location.origin },
-    });
+    if (password) {
+      // Email + Password auth
+      const fn = authMode === 'signup'
+        ? supabase.auth.signUp({ email, password })
+        : supabase.auth.signInWithPassword({ email, password });
 
-    if (error) {
-      setAuthMessage({ type: 'error', text: error.message });
+      const { error } = await fn;
+      if (error) {
+        setAuthMessage({ type: 'error', text: error.message });
+      } else if (authMode === 'signup') {
+        setAuthMessage({ type: 'success', text: 'Account created! Check your email to confirm.' });
+      }
     } else {
-      setAuthMessage({ type: 'success', text: 'Check your email for the login link!' });
+      // Magic Link (no password)
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: { emailRedirectTo: window.location.origin },
+      });
+
+      if (error) {
+        setAuthMessage({ type: 'error', text: error.message });
+      } else {
+        setAuthMessage({ type: 'success', text: 'Check your email for the login link!' });
+      }
     }
     setLoading(false);
-  }, [email]);
+  }, [email, password, authMode]);
 
   const handleGoogleLogin = useCallback(async () => {
     setLoading(true);
@@ -82,6 +100,10 @@ export function useAuth() {
     isDev,
     email,
     setEmail,
+    password,
+    setPassword,
+    authMode,
+    setAuthMode,
     loading,
     authMessage,
     handleLogin,
