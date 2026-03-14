@@ -111,7 +111,7 @@ jobs:
           SLUG="${{ steps.branch.outputs.slug }}"
           DOMAIN="${{ vars.PRODUCTION_DOMAIN }}"
           cp wrangler.toml wrangler.branch.toml
-          sed -i "s/^name = .*/name = \"playheads-backend-${SLUG}\"/" wrangler.branch.toml
+          sed -i "1s/^name = .*/name = \"playheads-backend-${SLUG}\"/" wrangler.branch.toml
           cat >> wrangler.branch.toml <<TOML
 
           [[routes]]
