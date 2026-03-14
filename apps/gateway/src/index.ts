@@ -1,7 +1,6 @@
 interface Env {
   WEB: Fetcher;
-  BACKEND_WORKER?: Fetcher; // service binding (production)
-  BACKEND_URL?: string; // URL fallback (preview)
+  BACKEND_WORKER: Fetcher; // service binding (both production and preview)
 }
 
 export default {
@@ -80,25 +79,10 @@ async function fetchBackend(
   headers?: Headers,
   body?: ReadableStream<Uint8Array> | null
 ): Promise<Response> {
-  if (env.BACKEND_WORKER) {
-    // Production: service binding (zero-cost RPC within Cloudflare)
-    const req = new Request(new URL(path, "http://backend").toString(), {
-      method,
-      headers,
-      body,
-    });
-    return env.BACKEND_WORKER.fetch(req);
-  }
-
-  if (env.BACKEND_URL) {
-    // Preview: fetch via URL to branch-specific backend worker
-    const req = new Request(new URL(path, env.BACKEND_URL).toString(), {
-      method,
-      headers,
-      body,
-    });
-    return fetch(req);
-  }
-
-  return Response.json({ error: "No backend configured" }, { status: 503 });
+  const req = new Request(new URL(path, "http://backend").toString(), {
+    method,
+    headers,
+    body,
+  });
+  return env.BACKEND_WORKER.fetch(req);
 }

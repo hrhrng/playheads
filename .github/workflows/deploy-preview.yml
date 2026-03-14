@@ -75,7 +75,7 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
-          VITE_SPOTIFY_REDIRECT_URI: https://${{ steps.branch.outputs.slug }}-playheads-gateway.${{ vars.CF_WORKERS_SUBDOMAIN }}.workers.dev/callback
+          VITE_SPOTIFY_REDIRECT_URI: https://playheads-gw-${{ steps.branch.outputs.slug }}.${{ vars.CF_WORKERS_SUBDOMAIN }}.workers.dev/callback
         run: pnpm --filter web build
 
       # 3. Deploy web worker (preview URL via versions upload)
@@ -86,7 +86,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npx wrangler versions upload --config wrangler.preview.toml --preview-alias "${{ steps.branch.outputs.slug }}"
 
-      # 4. Deploy gateway worker (preview URL via versions upload, with BACKEND_URL var)
+      # 4. Deploy gateway worker per branch (needs dynamic service binding to branch backend)
       - name: Deploy gateway worker (preview)
         working-directory: apps/gateway
         env:
@@ -94,5 +94,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           BRANCH_SLUG: ${{ steps.branch.outputs.slug }}
         run: |
-          BACKEND_URL="https://playheads-backend-${BRANCH_SLUG}.${{ vars.CF_WORKERS_SUBDOMAIN }}.workers.dev"
-          npx wrangler versions upload --config wrangler.preview.toml --preview-alias "${BRANCH_SLUG}" --var "BACKEND_URL:${BACKEND_URL}"
+          sed -e "s/name = \"playheads-gateway\"/name = \"playheads-gw-${BRANCH_SLUG}\"/" \
+              -e "s/service = \"playheads-backend\"/service = \"playheads-backend-${BRANCH_SLUG}\"/" \
+              wrangler.preview.toml > wrangler.branch.toml
+          npx wrangler deploy --config wrangler.branch.toml
