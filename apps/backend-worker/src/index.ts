@@ -66,6 +66,20 @@ export default {
     const url = new URL(request.url);
     const start = Date.now();
 
+    console.log(JSON.stringify({
+      event: "request_start",
+      method: request.method,
+      path: url.pathname,
+      has_BACKEND: !!env.BACKEND,
+      BACKEND_type: typeof env.BACKEND,
+      env_keys: Object.keys(env).filter(k => !["SUPABASE_KEY", "DATABASE_URL", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "APPLE_MUSIC_PRIVATE_KEY", "MINIMAX_API_KEY"].includes(k)),
+    }));
+
+    if (!env.BACKEND) {
+      console.error("env.BACKEND is undefined — DO binding missing");
+      return Response.json({ error: "BACKEND binding not configured" }, { status: 503 });
+    }
+
     if (url.pathname === "/health") {
       let containerStatus = "unknown";
       try {
@@ -79,7 +93,8 @@ export default {
         } else {
           containerStatus = "unhealthy";
         }
-      } catch {
+      } catch (e) {
+        console.error("Health check failed:", e);
         containerStatus = "unreachable";
       }
 
@@ -91,31 +106,44 @@ export default {
       });
     }
 
-    const container = getContainer(env.BACKEND);
-    const backendUrl = new URL(
-      url.pathname + url.search,
-      "http://container"
-    );
+    try {
+      const container = getContainer(env.BACKEND);
+      console.log(JSON.stringify({ event: "got_container", container_type: typeof container }));
 
-    const proxyRequest = new Request(backendUrl.toString(), {
-      method: request.method,
-      headers: request.headers,
-      body: request.body,
-    });
+      const backendUrl = new URL(
+        url.pathname + url.search,
+        "http://container"
+      );
 
-    const response = await container.fetch(proxyRequest);
-    const latency = Date.now() - start;
+      const proxyRequest = new Request(backendUrl.toString(), {
+        method: request.method,
+        headers: request.headers,
+        body: request.body,
+      });
 
-    console.log(
-      JSON.stringify({
-        ts: new Date().toISOString(),
+      const response = await container.fetch(proxyRequest);
+      const latency = Date.now() - start;
+
+      console.log(JSON.stringify({
+        event: "request_done",
         method: request.method,
         path: url.pathname,
         status: response.status,
         latency_ms: latency,
-      })
-    );
+      }));
 
-    return response;
+      return response;
+    } catch (e) {
+      const latency = Date.now() - start;
+      console.error(JSON.stringify({
+        event: "request_error",
+        method: request.method,
+        path: url.pathname,
+        error: String(e),
+        stack: (e as Error).stack,
+        latency_ms: latency,
+      }));
+      return Response.json({ error: String(e) }, { status: 502 });
+    }
   },
 };

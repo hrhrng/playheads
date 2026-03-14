@@ -25,7 +25,7 @@ jobs:
       - name: Derive branch slug
         id: branch
         run: |
-          SLUG=$(echo "${GITHUB_REF_NAME}" | sed 's/[^a-zA-Z0-9]/-/g' | cut -c1-20 | sed 's/-$//')
+          SLUG=$(echo "${GITHUB_REF_NAME}" | sed 's/[^a-zA-Z0-9]/-/g' | sed 's/-$//')
           echo "slug=$SLUG" >> "$GITHUB_OUTPUT"
 
       - name: Install dependencies
@@ -79,36 +79,14 @@ jobs:
           npx wrangler deploy --config wrangler.branch.toml \
             --name "playheads-web-${SLUG}"
 
-      - name: Deploy backend worker
-        working-directory: apps/backend-worker
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          SLUG="${{ steps.branch.outputs.slug }}"
-          DOMAIN="${{ vars.PRODUCTION_DOMAIN }}"
-          cp wrangler.toml wrangler.branch.toml
-          cat >> wrangler.branch.toml <<TOML
-
-          [[routes]]
-          pattern = "backend-${SLUG}.pw.${DOMAIN}"
-          custom_domain = true
-          TOML
-          npx wrangler deploy --config wrangler.branch.toml \
-            --name "playheads-backend-${SLUG}"
-
       - name: Deploy preview gateway
         working-directory: apps/gateway
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          BRANCH_SLUG: ${{ steps.branch.outputs.slug }}
         run: |
           DOMAIN="${{ vars.PRODUCTION_DOMAIN }}"
-          sed -e "s/service = \"playheads-web\"/service = \"playheads-web-${BRANCH_SLUG}\"/" \
-              -e "s/service = \"playheads-landing\"/service = \"playheads-landing-${BRANCH_SLUG}\"/" \
-              -e "s/service = \"playheads-backend\"/service = \"playheads-backend-${BRANCH_SLUG}\"/" \
-              wrangler.preview.toml > wrangler.branch.toml
+          cp wrangler.preview.toml wrangler.branch.toml
           cat >> wrangler.branch.toml <<TOML
 
           [[routes]]
@@ -123,6 +101,24 @@ jobs:
             --name "playheads-gateway-preview" \
             --var APP_HOSTNAME:preview.app.${DOMAIN} \
             --var PREVIEW_DOMAIN:pw.${DOMAIN}
+
+      - name: Deploy backend worker
+        working-directory: apps/backend-worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          SLUG="${{ steps.branch.outputs.slug }}"
+          DOMAIN="${{ vars.PRODUCTION_DOMAIN }}"
+          cp wrangler.toml wrangler.branch.toml
+          sed -i "1s/^name = .*/name = \"playheads-backend-${SLUG}\"/" wrangler.branch.toml
+          cat >> wrangler.branch.toml <<TOML
+
+          [[routes]]
+          pattern = "backend-${SLUG}.pw.${DOMAIN}"
+          custom_domain = true
+          TOML
+          npx wrangler deploy --config wrangler.branch.toml
 
       - name: Deploy admin worker
         working-directory: apps/admin
@@ -171,11 +167,12 @@ jobs:
             fi
           done
 
-      - name: Sync secrets to backend worker
+      - name: Sync secrets and variables to backend worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           ALL_SECRETS: ${{ toJSON(secrets) }}
+          ALL_VARS: ${{ toJSON(vars) }}
         run: |
           WORKER="playheads-backend-${{ steps.branch.outputs.slug }}"
           SKIP_KEYS='["GITHUB_TOKEN","CLOUDFLARE_API_TOKEN","CLOUDFLARE_ACCOUNT_ID"]'
@@ -183,5 +180,11 @@ jobs:
             VAL=$(echo "$ALL_SECRETS" | jq -r --arg k "$KEY" '.[$k]')
             if [ -z "$VAL" ]; then continue; fi
             echo "$VAL" | npx wrangler secret put "$KEY" --name "$WORKER" 2>/dev/null
-            echo "✓ $KEY"
+            echo "✓ secret $KEY"
+          done
+          for KEY in $(echo "$ALL_VARS" | jq -r 'keys[]'); do
+            VAL=$(echo "$ALL_VARS" | jq -r --arg k "$KEY" '.[$k]')
+            if [ -z "$VAL" ]; then continue; fi
+            echo "$VAL" | npx wrangler secret put "$KEY" --name "$WORKER" 2>/dev/null
+            echo "✓ var $KEY"
           done
