@@ -8,6 +8,8 @@ interface Env {
   LLM_PROVIDER: string;
   APPLE_MUSIC_TOKEN_TTL_SECONDS: string;
   // Secrets
+  SUPABASE_URL: string;
+  SUPABASE_KEY: string;
   DATABASE_URL: string;
   ANTHROPIC_API_KEY: string;
   ANTHROPIC_BASE_URL: string;
@@ -29,6 +31,8 @@ export class BackendContainer extends Container<Env> {
   constructor(ctx: DurableObject["ctx"], env: Env) {
     super(ctx, env);
     this.envVars = {
+      SUPABASE_URL: env.SUPABASE_URL,
+      SUPABASE_KEY: env.SUPABASE_KEY,
       DATABASE_URL: env.DATABASE_URL,
       ANTHROPIC_API_KEY: env.ANTHROPIC_API_KEY,
       ANTHROPIC_BASE_URL: env.ANTHROPIC_BASE_URL,

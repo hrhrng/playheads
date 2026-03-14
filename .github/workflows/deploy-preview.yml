@@ -64,6 +64,8 @@ jobs:
         run: |
           WORKER="playheads-gateway-${{ steps.branch.outputs.slug }}"
           declare -A SECRETS=(
+            [SUPABASE_URL]="${{ secrets.SUPABASE_URL }}"
+            [SUPABASE_KEY]="${{ secrets.SUPABASE_KEY }}"
             [DATABASE_URL]="${{ secrets.DATABASE_URL }}"
             [ANTHROPIC_API_KEY]="${{ secrets.ANTHROPIC_API_KEY }}"
             [ANTHROPIC_BASE_URL]="${{ secrets.ANTHROPIC_BASE_URL }}"

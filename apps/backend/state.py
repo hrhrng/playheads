@@ -42,7 +42,7 @@ class SessionState(BaseModel):
     is_playing: bool = False
     playback_position: float = 0.0  # seconds
     last_sync: datetime = Field(default_factory=datetime.now)
-    
+
     def add_message(self, role: str, content: str = None, parts: list[dict] = None):
         """Add a message to chat history.
 
@@ -52,16 +52,16 @@ class SessionState(BaseModel):
             parts: Multi-part message structure (new format)
         """
         self.chat_history.append(Message(role=role, content=content, parts=parts))
-    
+
     def get_context_summary(self) -> str:
         """Generate a summary for LLM context."""
         lines = []
-        
+
         if self.current_track:
             lines.append(f"Currently playing: {self.current_track.name} by {self.current_track.artist}")
         else:
             lines.append("Nothing is currently playing.")
-        
+
         if self.playlist:
             lines.append(f"Playlist has {len(self.playlist)} tracks:")
             for i, track in enumerate(self.playlist[:5]):  # Show first 5
@@ -70,155 +70,105 @@ class SessionState(BaseModel):
                 lines.append(f"  ... and {len(self.playlist) - 5} more")
         else:
             lines.append("Playlist is empty.")
-        
+
         return "\n".join(lines)
 
 
-import json
 import logging
 import time
 from datetime import datetime
 
-from sqlalchemy import select, update
-from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from .models import Conversation, ConversationState, Profile
-from .database import AsyncSessionLocal
+from .supabase_client import get_supabase
 from .title_generator import generate_conversation_title
 
 log = logging.getLogger("playhead.state")
 
+
 class SessionStore:
-    """Database-backed session store with intelligent session lifecycle management."""
+    """Supabase REST API backed session store."""
 
-    def __init__(self):
-        pass
-
-    async def get_session(self, db: AsyncSession, session_id: str, user_id: Optional[str] = None) -> Optional[SessionState]:
-        """
-        Get existing session from DB. Returns None if not exists.
-        Does NOT create new session - use create_session() for that.
-
-        Args:
-            db: Database session
-            session_id: Conversation UUID
-            user_id: User UUID (for permission check). If None, skips permission check.
-
-        Returns:
-            SessionState if found, None otherwise
-        """
+    async def get_session(self, db, session_id: str, user_id: Optional[str] = None) -> Optional[SessionState]:
+        """Get existing session from DB via Supabase REST. `db` param kept for API compat but unused."""
         t0 = time.perf_counter()
         try:
-            # Validate session_id is a valid UUID
             try:
-                session_uuid = uuid.UUID(session_id)
+                uuid.UUID(session_id)
             except (ValueError, TypeError):
                 return None
 
-            # Build query - with or without user_id check
+            sb = await get_supabase()
+
+            # Check conversation ownership
             if user_id:
                 try:
-                    user_uuid = uuid.UUID(user_id)
+                    uuid.UUID(user_id)
                 except (ValueError, TypeError):
                     return None
-
-                stmt = (
-                    select(ConversationState)
-                    .join(Conversation, Conversation.id == ConversationState.conversation_id)
-                    .where(
-                        Conversation.id == session_uuid,
-                        Conversation.user_id == user_uuid
-                    )
-                )
+                conv = await sb.table("conversations").select("id").eq("id", session_id).eq("user_id", user_id).maybe_single().execute()
             else:
-                # No user_id - query without permission check (for sync endpoint)
-                stmt = (
-                    select(ConversationState)
-                    .join(Conversation, Conversation.id == ConversationState.conversation_id)
-                    .where(Conversation.id == session_uuid)
-                )
+                conv = await sb.table("conversations").select("id").eq("id", session_id).maybe_single().execute()
 
-            result = await db.execute(stmt)
-            db_state = result.scalar_one_or_none()
-            log.info("⏱ get_session query: %.0fms (found=%s)", (time.perf_counter() - t0) * 1000, db_state is not None)
+            if not conv.data:
+                log.info("⏱ get_session: %.0fms (not found - no conversation)", (time.perf_counter() - t0) * 1000)
+                return None
 
-            if db_state:
-                return self._hydrate_session(db_state, session_id)
+            # Get conversation state
+            state = await sb.table("conversation_states").select("messages,context,last_synced_at").eq("conversation_id", session_id).maybe_single().execute()
+            log.info("⏱ get_session: %.0fms (found=%s)", (time.perf_counter() - t0) * 1000, state.data is not None)
 
-            return None
+            if not state.data:
+                return None
+
+            return self._hydrate(state.data, session_id)
         except Exception as e:
             log.error("Error getting session %s: %s (%.0fms)", session_id[:8], e, (time.perf_counter() - t0) * 1000)
             return None
 
-    async def create_session(self, db: AsyncSession, session_id: str, user_id: str) -> SessionState:
-        """
-        Create new session or get existing one (robust get_or_create pattern).
-
-        Args:
-            db: Database session
-            session_id: Conversation UUID (generated by frontend)
-            user_id: User UUID
-
-        Returns:
-            SessionState (new or existing)
-        """
+    async def create_session(self, db, session_id: str, user_id: str) -> SessionState:
+        """Create new session via Supabase REST. `db` param kept for API compat but unused."""
         t0 = time.perf_counter()
         try:
-            session_uuid = uuid.UUID(session_id)
-            user_uuid = uuid.UUID(user_id)
+            sb = await get_supabase()
 
-            # Insert Conversation + ConversationState in a single commit
-            await db.execute(
-                insert(Conversation).values(
-                    id=session_uuid,
-                    user_id=user_uuid,
-                    title=None,
-                    message_count=0
-                ).on_conflict_do_nothing(index_elements=['id'])
-            )
-            await db.execute(
-                insert(ConversationState).values(
-                    conversation_id=session_uuid,
-                    messages=[],
-                    context={}
-                ).on_conflict_do_nothing(index_elements=['conversation_id'])
-            )
-            await db.commit()
+            # Upsert conversation
+            await sb.table("conversations").upsert({
+                "id": session_id,
+                "user_id": user_id,
+                "title": None,
+                "message_count": 0,
+            }, on_conflict="id").execute()
+
+            # Upsert conversation state
+            await sb.table("conversation_states").upsert({
+                "conversation_id": session_id,
+                "messages": [],
+                "context": {},
+            }, on_conflict="conversation_id").execute()
+
             log.info("⏱ create_session: %.0fms", (time.perf_counter() - t0) * 1000)
-
-            # Return an empty SessionState directly — no need to SELECT back
-            return SessionState(
-                session_id=session_id,
-                last_sync=datetime.now(),
-            )
-
+            return SessionState(session_id=session_id, last_sync=datetime.now())
         except Exception as e:
-            await db.rollback()
             log.error("Error creating session %s: %s (%.0fms)", session_id[:8], e, (time.perf_counter() - t0) * 1000)
-            # Try to recover by just getting it
-            session = await self.get_session(db, session_id, user_id)
+            session = await self.get_session(None, session_id, user_id)
             if session:
                 return session
             raise
 
-    def _hydrate_session(self, db_state: ConversationState, session_id: str) -> SessionState:
-        """Convert DB model to Pydantic SessionState."""
-        context = db_state.context or {}
+    def _hydrate(self, data: dict, session_id: str) -> SessionState:
+        """Convert Supabase row dict to SessionState."""
+        context = data.get("context") or {}
 
-        # Parse tracks from context
         current_track = None
         if context.get("current_track"):
-            ct = context["current_track"]
-            current_track = TrackInfo(**ct)
+            current_track = TrackInfo(**context["current_track"])
 
         playlist = []
         if context.get("playlist"):
             playlist = [TrackInfo(**t) for t in context["playlist"]]
 
         chat_history = []
-        if db_state.messages:
-            for m in db_state.messages:
+        if data.get("messages"):
+            for m in data["messages"]:
                 chat_history.append(Message(**m))
 
         return SessionState(
@@ -228,131 +178,80 @@ class SessionStore:
             playlist=playlist,
             is_playing=context.get("is_playing", False),
             playback_position=context.get("playback_position", 0.0),
-            last_sync=db_state.last_synced_at or datetime.now()
+            last_sync=data.get("last_synced_at") or datetime.now()
         )
 
-    async def update_session(self, db: AsyncSession, state: SessionState, user_id: str):
-        """
-        Persist chat messages and conversation metadata to DB.
+    async def update_session(self, db, state: SessionState, user_id: str):
+        """Persist chat messages and conversation metadata via Supabase REST.
+        `db` param kept for API compat but unused.
 
-        Context ownership
-        -----------------
-        This method intentionally does NOT write the ``context`` column
-        (playlist, current_track, is_playing, playback_position).
-
-        Context is owned by the frontend and persisted exclusively via the
-        ``/state/sync`` endpoint.  Previously ``update_session`` wrote context
-        too, which caused a race condition: the agent loads session state at the
-        start of a turn (playlist=[]), streams add_to_queue actions to the
-        frontend, and then ``update_session`` at the end overwrites the context
-        the frontend just synced — wiping the playlist on every turn.
+        Does NOT write the context column — owned by frontend via /state/sync.
         """
         t0 = time.perf_counter()
-        session_uuid = uuid.UUID(state.session_id)
         messages_data = [m.model_dump(mode='json') for m in state.chat_history]
 
-        # Calculate metadata
         message_count = len(state.chat_history)
         last_message_preview = None
         last_message_at = None
 
         if state.chat_history:
-            # Get last user or agent message for preview
             last_msg = state.chat_history[-1]
-
-            # Extract preview text (handle both old and new format)
             if last_msg.content:
                 last_message_preview = last_msg.content[:100]
             elif last_msg.parts:
-                # Extract text from parts
                 text_parts = [p.get("content", "") for p in last_msg.parts if p.get("type") == "text"]
                 combined_text = "".join(text_parts)
                 last_message_preview = combined_text[:100] if combined_text else "..."
             else:
                 last_message_preview = "..."
-
-            last_message_at = last_msg.timestamp
+            last_message_at = last_msg.timestamp.isoformat()
 
         try:
-            # Upsert messages only. The on_conflict_do_update deliberately omits
-            # `context` so we never clobber playlist/playback state synced by
-            # the frontend.  The INSERT branch uses context={} as a safe default
-            # for brand-new rows (create_session normally pre-creates the row).
-            stmt = insert(ConversationState).values(
-                conversation_id=session_uuid,
-                messages=messages_data,
-                context={},
-                last_synced_at=datetime.now()
-            ).on_conflict_do_update(
-                index_elements=['conversation_id'],
-                set_={
-                    'messages': messages_data,
-                    'last_synced_at': datetime.now()
-                }
-            )
-            await db.execute(stmt)
+            sb = await get_supabase()
+            now = datetime.now().isoformat()
 
-            update_values = {
-                'message_count': message_count,
-                'last_message_preview': last_message_preview,
-                'last_message_at': last_message_at,
-                'updated_at': datetime.now()
-            }
+            # Update conversation_states (messages only, not context)
+            await sb.table("conversation_states").update({
+                "messages": messages_data,
+                "last_synced_at": now,
+            }).eq("conversation_id", state.session_id).execute()
 
-            conv_update_stmt = (
-                update(Conversation)
-                .where(Conversation.id == session_uuid)
-                .values(**update_values)
-            )
-            await db.execute(conv_update_stmt)
-            await db.commit()
+            # Update conversation metadata
+            await sb.table("conversations").update({
+                "message_count": message_count,
+                "last_message_preview": last_message_preview,
+                "last_message_at": last_message_at,
+                "updated_at": now,
+            }).eq("id", state.session_id).execute()
+
             log.info("⏱ update_session: %.0fms (%d msgs)", (time.perf_counter() - t0) * 1000, len(messages_data))
         except Exception as e:
             log.error("Failed to update session %s: %s (%.0fms)", state.session_id[:8], e, (time.perf_counter() - t0) * 1000, exc_info=True)
             raise
 
         # Generate title asynchronously if needed
-        should_generate_title = (message_count == 2 or message_count % 10 == 0)  # 2 because we have user + agent
-
+        should_generate_title = (message_count == 2 or message_count % 10 == 0)
         if should_generate_title:
             import asyncio
-            asyncio.create_task(self._generate_and_update_title(session_uuid, messages_data, message_count))
+            asyncio.create_task(self._generate_and_update_title(state.session_id, messages_data, message_count))
 
-    async def _generate_and_update_title(self, session_uuid: uuid.UUID, messages_data: list, message_count: int):
-        """
-        Background task to generate and update conversation title.
-        Runs asynchronously without blocking the main response flow.
-        """
+    async def _generate_and_update_title(self, session_id: str, messages_data: list, message_count: int):
+        """Background task to generate and update conversation title."""
         try:
-            # Generate title
             title = await generate_conversation_title(messages_data)
             log.info("Generated title: %s", title)
 
-            # Update in database with new connection
-            async with AsyncSessionLocal() as db:
-                update_stmt = (
-                    update(Conversation)
-                    .where(Conversation.id == session_uuid)
-                    .values(title=title)
-                )
-                await db.execute(update_stmt)
-                await db.commit()
-
+            sb = await get_supabase()
+            await sb.table("conversations").update({"title": title}).eq("id", session_id).execute()
         except Exception as e:
             log.warning("Background title generation failed: %s", e)
-            # Set default title for first message
             if message_count == 2:
                 try:
-                    async with AsyncSessionLocal() as db:
-                        update_stmt = (
-                            update(Conversation)
-                            .where(Conversation.id == session_uuid)
-                            .values(title="New Conversation")
-                        )
-                        await db.execute(update_stmt)
-                        await db.commit()
+                    sb = await get_supabase()
+                    await sb.table("conversations").update({"title": "New Conversation"}).eq("id", session_id).execute()
                 except Exception as fallback_error:
                     log.warning("Failed to set default title: %s", fallback_error)
 
-# Initialize store (stateless wrapper now)
+
+# Initialize store
 store = SessionStore()

@@ -38,6 +38,7 @@ log = logging.getLogger("playhead")
 
 # Then import database which depends on env vars
 from apps.backend.database import get_db, DATABASE_URL_RAW, warmup_pool
+from apps.backend.supabase_client import get_supabase
 
 app = FastAPI(title="Playhead Music Agent API", version="2.0.0")
 
@@ -92,6 +93,12 @@ async def startup_event():
         await warmup_pool()
     except Exception as e:
         log.warning("DB pool warmup failed (will connect on first request): %s", e)
+
+    # Init Supabase REST client
+    try:
+        await get_supabase()
+    except Exception as e:
+        log.warning("Supabase client init failed: %s", e)
 
 
 # =============================================================================
@@ -270,7 +277,7 @@ async def chat(request: ChatRequest, db: AsyncSession = Depends(get_db)):
 
 
 @app.get("/state", response_model=StateResponse)
-async def get_state(session_id: Optional[str] = None, user_id: Optional[str] = None, db: AsyncSession = Depends(get_db)):
+async def get_state(session_id: Optional[str] = None, user_id: Optional[str] = None):
     """Get current session state."""
     from apps.backend.state import store
 
@@ -279,7 +286,7 @@ async def get_state(session_id: Optional[str] = None, user_id: Optional[str] = N
          return StateResponse(session_id="default")
 
     # Get session (returns None if not exists)
-    session = await store.get_session(db, session_id, user_id) if user_id else None
+    session = await store.get_session(None, session_id, user_id) if user_id else None
 
     # If session not found, raise 404
     if not session:
@@ -299,18 +306,15 @@ async def get_state(session_id: Optional[str] = None, user_id: Optional[str] = N
 
 
 @app.post("/state/sync")
-async def sync_state(request: SyncRequest, db: AsyncSession = Depends(get_db)):
+async def sync_state(request: SyncRequest):
     """
-    Sync frontend playback state (context) to backend.
+    Sync frontend playback state (context) to backend via Supabase REST.
 
     IMPORTANT: Only updates the `context` and `last_synced_at` columns.
     Never touches `messages` — messages are persisted exclusively by
-    run_agent_stream via /chat. This prevents a race condition where
-    state/sync could overwrite agent messages written mid-stream.
+    run_agent_stream via /chat.
     """
     import uuid as _uuid
-    from sqlalchemy import update as sa_update
-    from apps.backend.models import ConversationState, Conversation
 
     if not request.session_id:
         return {"error": "Session ID required"}
@@ -318,25 +322,19 @@ async def sync_state(request: SyncRequest, db: AsyncSession = Depends(get_db)):
         return {"error": "user_id required for sync"}
 
     try:
-        conv_uuid = _uuid.UUID(request.session_id)
-        user_uuid = _uuid.UUID(request.user_id)
+        _uuid.UUID(request.session_id)
+        _uuid.UUID(request.user_id)
     except ValueError:
         raise HTTPException(400, "Invalid ID format")
 
-    # Permission check: verify conversation belongs to this user
-    from sqlalchemy import select
-    ownership = await db.execute(
-        select(Conversation.id).where(
-            Conversation.id == conv_uuid,
-            Conversation.user_id == user_uuid,
-        )
-    )
-    if not ownership.scalar_one_or_none():
+    sb = await get_supabase()
+
+    # Permission check
+    conv = await sb.table("conversations").select("id").eq("id", request.session_id).eq("user_id", request.user_id).maybe_single().execute()
+    if not conv.data:
         return {"status": "no_session", "session_id": request.session_id}
 
-    # Build a partial context dict from the fields the frontend actually sent.
-    # syncPlaylistToBackend sends only `playlist`; syncMusicKitState sends
-    # playlist + current_track + is_playing + playback_position.
+    # Build partial context update
     context_update: dict = {}
     if request.current_track:
         context_update["current_track"] = request.current_track
@@ -347,29 +345,21 @@ async def sync_state(request: SyncRequest, db: AsyncSession = Depends(get_db)):
     if request.playback_position is not None:
         context_update["playback_position"] = request.playback_position
 
-    # Merge into existing context instead of replacing it.
-    # This prevents a playlist-only sync from clobbering current_track (and
-    # vice-versa).  Uses read-merge-write because the column type is JSON,
-    # not JSONB (which would support the atomic || operator).
-    now = datetime.now()
-    existing = await db.execute(
-        select(ConversationState.context).where(ConversationState.conversation_id == conv_uuid)
-    )
-    existing_context = existing.scalar_one_or_none() or {}
+    # Read-merge-write to avoid clobbering unrelated fields
+    existing = await sb.table("conversation_states").select("context").eq("conversation_id", request.session_id).maybe_single().execute()
+    existing_context = (existing.data or {}).get("context") or {}
     merged_context = {**existing_context, **context_update}
 
-    stmt = (
-        sa_update(ConversationState)
-        .where(ConversationState.conversation_id == conv_uuid)
-        .values(context=merged_context, last_synced_at=now)
-    )
-    await db.execute(stmt)
-    await db.commit()
+    now = datetime.now().isoformat()
+    await sb.table("conversation_states").update({
+        "context": merged_context,
+        "last_synced_at": now,
+    }).eq("conversation_id", request.session_id).execute()
 
     return {
         "status": "synced",
         "session_id": request.session_id,
-        "last_sync": now.isoformat(),
+        "last_sync": now,
     }
 
 
@@ -378,7 +368,7 @@ class CreateSessionRequest(BaseModel):
 
 
 @app.post("/session/create")
-async def create_session(request: CreateSessionRequest, db: AsyncSession = Depends(get_db)):
+async def create_session(request: CreateSessionRequest):
     """Create a new empty session and return the session_id."""
     import uuid
     from apps.backend.state import store
@@ -386,11 +376,8 @@ async def create_session(request: CreateSessionRequest, db: AsyncSession = Depen
     if not request.user_id:
         raise HTTPException(400, "user_id is required")
 
-    # Generate new session ID
     session_id = str(uuid.uuid4())
-
-    # Create session in database
-    session = await store.create_session(db, session_id, request.user_id)
+    session = await store.create_session(None, session_id, request.user_id)
 
     return {
         "session_id": session.session_id
@@ -460,26 +447,19 @@ class CreateConversationResponse(BaseModel):
     created_at: str
 
 @app.post("/conversations/create", response_model=CreateConversationResponse)
-async def create_conversation(
-    request: CreateConversationRequest,
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Create a new empty conversation.
-    Returns the new conversation ID immediately.
-    """
+async def create_conversation(request: CreateConversationRequest):
+    """Create a new empty conversation via Supabase REST."""
     from apps.backend.state import store
     import uuid
-    import traceback
 
     try:
-        user_uuid = uuid.UUID(request.user_id)
+        uuid.UUID(request.user_id)
     except ValueError as e:
         raise HTTPException(400, f"Invalid user_id format: {str(e)}")
 
     try:
         new_conversation_id = str(uuid.uuid4())
-        await store.create_session(db, new_conversation_id, request.user_id)
+        await store.create_session(None, new_conversation_id, request.user_id)
         log.info("Conversation created: %s (user=%s)", new_conversation_id[:8], request.user_id[:8])
 
         return CreateConversationResponse(
@@ -491,90 +471,63 @@ async def create_conversation(
         raise HTTPException(500, f"Failed to create conversation: {str(e)}")
 
 @app.get("/conversations", response_model=ConversationsResponse)
-async def list_conversations(
-    user_id: str,  # Required: user ID from auth header or query param
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    List user's conversations with metadata.
-    Returns conversations sorted by pinned status then updated_at.
-    """
-    from sqlalchemy import select
-    from apps.backend.models import Conversation
+async def list_conversations(user_id: str):
+    """List user's conversations via Supabase REST."""
     import uuid
 
     try:
-        user_uuid = uuid.UUID(user_id)
+        uuid.UUID(user_id)
     except ValueError:
         raise HTTPException(400, "Invalid user_id format")
 
-    # Query conversations with permission check
-    stmt = (
-        select(Conversation)
-        .where(
-            Conversation.user_id == user_uuid,
-            Conversation.is_archived == False
-        )
-        .order_by(
-            Conversation.is_pinned.desc(),
-            Conversation.updated_at.desc()
-        )
+    sb = await get_supabase()
+    result = await (
+        sb.table("conversations")
+        .select("id,title,message_count,last_message_preview,last_message_at,is_pinned,updated_at")
+        .eq("user_id", user_id)
+        .eq("is_archived", False)
+        .order("is_pinned", desc=True)
+        .order("updated_at", desc=True)
         .limit(50)
+        .execute()
     )
-    result = await db.execute(stmt)
-    convs = result.scalars().all()
 
     return ConversationsResponse(
         conversations=[
             ConversationItem(
-                id=str(c.id),
-                title=c.title,  # Can be None if not yet generated
-                message_count=c.message_count or 0,
-                last_message_preview=c.last_message_preview,
-                last_message_at=c.last_message_at.isoformat() if c.last_message_at else None,
-                is_pinned=c.is_pinned or False,
-                updated_at=c.updated_at.isoformat() if c.updated_at else ""
-            ) for c in convs
+                id=str(c["id"]),
+                title=c.get("title"),
+                message_count=c.get("message_count") or 0,
+                last_message_preview=c.get("last_message_preview"),
+                last_message_at=c.get("last_message_at"),
+                is_pinned=c.get("is_pinned") or False,
+                updated_at=c.get("updated_at") or ""
+            ) for c in (result.data or [])
         ]
     )
 
 
 @app.delete("/conversations/{conversation_id}")
-async def delete_conversation(
-    conversation_id: str,
-    user_id: str,  # Required: user ID for permission check
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Delete a conversation (with permission check).
-    Only the owner can delete their conversations.
-    """
-    from sqlalchemy import delete, select
-    from apps.backend.models import Conversation, ConversationState
+async def delete_conversation(conversation_id: str, user_id: str):
+    """Delete a conversation via Supabase REST (with permission check)."""
     import uuid
 
     try:
-        conv_uuid = uuid.UUID(conversation_id)
-        user_uuid = uuid.UUID(user_id)
+        uuid.UUID(conversation_id)
+        uuid.UUID(user_id)
     except ValueError:
         raise HTTPException(400, "Invalid ID format")
 
-    # Verify conversation exists and belongs to user
-    stmt = select(Conversation).where(
-        Conversation.id == conv_uuid,
-        Conversation.user_id == user_uuid
-    )
-    result = await db.execute(stmt)
-    conv = result.scalar_one_or_none()
+    sb = await get_supabase()
 
-    if not conv:
+    # Verify ownership
+    conv = await sb.table("conversations").select("id").eq("id", conversation_id).eq("user_id", user_id).maybe_single().execute()
+    if not conv.data:
         raise HTTPException(404, "Conversation not found or access denied")
 
-    # Delete conversation state first (foreign key constraint)
-    await db.execute(delete(ConversationState).where(ConversationState.conversation_id == conv_uuid))
-    # Delete conversation
-    await db.execute(delete(Conversation).where(Conversation.id == conv_uuid))
-    await db.commit()
+    # Delete state first, then conversation
+    await sb.table("conversation_states").delete().eq("conversation_id", conversation_id).execute()
+    await sb.table("conversations").delete().eq("id", conversation_id).execute()
 
     return {"success": True, "deleted": conversation_id}
 
@@ -590,34 +543,23 @@ async def update_conversation(
     conversation_id: str,
     user_id: str,
     update_data: ConversationUpdateRequest,
-    db: AsyncSession = Depends(get_db)
 ):
-    """
-    Update conversation metadata (title, pinned, archived).
-    Only the owner can update their conversations.
-    """
-    from sqlalchemy import select, update
-    from apps.backend.models import Conversation
+    """Update conversation metadata via Supabase REST."""
     import uuid
 
     try:
-        conv_uuid = uuid.UUID(conversation_id)
-        user_uuid = uuid.UUID(user_id)
+        uuid.UUID(conversation_id)
+        uuid.UUID(user_id)
     except ValueError:
         raise HTTPException(400, "Invalid ID format")
 
-    # Verify conversation exists and belongs to user
-    stmt = select(Conversation).where(
-        Conversation.id == conv_uuid,
-        Conversation.user_id == user_uuid
-    )
-    result = await db.execute(stmt)
-    conv = result.scalar_one_or_none()
+    sb = await get_supabase()
 
-    if not conv:
+    # Verify ownership
+    conv = await sb.table("conversations").select("id").eq("id", conversation_id).eq("user_id", user_id).maybe_single().execute()
+    if not conv.data:
         raise HTTPException(404, "Conversation not found or access denied")
 
-    # Build update dict from provided fields
     update_values = {}
     if update_data.title is not None:
         update_values['title'] = update_data.title
@@ -629,14 +571,7 @@ async def update_conversation(
     if not update_values:
         raise HTTPException(400, "No fields to update")
 
-    # Apply updates
-    update_stmt = (
-        update(Conversation)
-        .where(Conversation.id == conv_uuid)
-        .values(**update_values)
-    )
-    await db.execute(update_stmt)
-    await db.commit()
+    await sb.table("conversations").update(update_values).eq("id", conversation_id).execute()
 
     return {"success": True, "updated": conversation_id, "fields": list(update_values.keys())}
 
