@@ -87,7 +87,8 @@ export const ToolCall = ({
       {isExpanded && (
         <div className="border-t px-3 pb-3 pt-2 bg-white/50">
           <div className="space-y-2">
-            {/* Arguments */}
+            {/* Arguments — hide if empty (e.g. server-side tools like web_search) */}
+            {args && Object.keys(args).length > 0 && (
             <div>
               <div className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-1">
                 INPUT
@@ -96,6 +97,7 @@ export const ToolCall = ({
                 {JSON.stringify(args, null, 2)}
               </pre>
             </div>
+            )}
 
             {/* Result */}
             <div>
