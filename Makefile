@@ -4,6 +4,7 @@
        deploy deploy-preview deploy-production build-web \
        deploy-preview-web deploy-preview-gateway \
        deploy-preview-landing deploy-production-landing \
+       deploy-preview-admin deploy-production-admin \
        deploy-production-web deploy-production-gateway \
        deploy-secrets-preview deploy-secrets-production
 
@@ -100,9 +101,9 @@ clean:
 
 deploy: deploy-preview
 
-deploy-preview: build-web build-landing deploy-preview-landing deploy-preview-web deploy-preview-gateway
+deploy-preview: build-web build-landing deploy-preview-landing deploy-preview-admin deploy-preview-web deploy-preview-gateway
 
-deploy-production: build-web build-landing deploy-production-landing deploy-production-web deploy-production-gateway
+deploy-production: build-web build-landing deploy-production-landing deploy-production-admin deploy-production-web deploy-production-gateway
 
 build-web:
 	@echo "Building web frontend..."
@@ -111,6 +112,10 @@ build-web:
 deploy-preview-landing:
 	@echo "Deploying landing worker (preview)..."
 	cd apps/landing && npx wrangler deploy --config wrangler.preview.toml
+
+deploy-preview-admin:
+	@echo "Deploying admin worker (preview)..."
+	cd apps/admin && npx wrangler deploy
 
 deploy-preview-web:
 	@echo "Deploying web worker (preview)..."
@@ -123,6 +128,10 @@ deploy-preview-gateway:
 deploy-production-landing:
 	@echo "Deploying landing worker (production)..."
 	cd apps/landing && npx wrangler deploy --config wrangler.production.toml
+
+deploy-production-admin:
+	@echo "Deploying admin worker (production)..."
+	cd apps/admin && npx wrangler deploy
 
 deploy-production-web:
 	@echo "Deploying web worker (production)..."
