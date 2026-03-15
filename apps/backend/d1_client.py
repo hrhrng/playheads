@@ -9,7 +9,6 @@ Everything else (conversations, profiles, waitlist) is in D1.
 """
 import logging
 import os
-import threading
 from typing import Any
 
 import httpx
@@ -18,22 +17,11 @@ log = logging.getLogger("playhead.d1")
 
 _BASE = "https://api.cloudflare.com/client/v4"
 
-# Thread-local storage for per-request credentials (injected via headers)
-_request_creds = threading.local()
-
-
-def set_request_credentials(account_id: str, api_token: str, db_id: str) -> None:
-    """Set D1 credentials for the current request (called from middleware)."""
-    _request_creds.account_id = account_id
-    _request_creds.api_token = api_token
-    _request_creds.db_id = db_id
-
 
 def _config() -> tuple[str, str, str]:
-    # Prefer per-request credentials (from Worker headers), fall back to env vars
-    account_id = getattr(_request_creds, 'account_id', None) or os.environ.get("CLOUDFLARE_ACCOUNT_ID", "")
-    api_token = getattr(_request_creds, 'api_token', None) or os.environ.get("CLOUDFLARE_API_TOKEN", "")
-    db_id = getattr(_request_creds, 'db_id', None) or os.environ.get("D1_DATABASE_ID", "")
+    account_id = os.environ.get("CLOUDFLARE_ACCOUNT_ID", "")
+    api_token = os.environ.get("CLOUDFLARE_API_TOKEN", "")
+    db_id = os.environ.get("D1_DATABASE_ID", "")
     if not account_id or not api_token or not db_id:
         raise RuntimeError(f"D1 credentials missing: account_id={'set' if account_id else 'MISSING'}, api_token={'set' if api_token else 'MISSING'}, db_id={'set' if db_id else 'MISSING'}")
     return account_id, api_token, db_id
