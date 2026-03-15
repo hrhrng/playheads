@@ -5,6 +5,7 @@
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { magicLink } from 'better-auth/plugins';
+import * as schema from './schema';
 
 export interface AuthEnv {
   BETTER_AUTH_SECRET: string;
@@ -85,7 +86,7 @@ export function createAuth(db: Parameters<typeof drizzleAdapter>[0], env: AuthEn
   }
 
   return betterAuth({
-    database: drizzleAdapter(db, { provider: 'sqlite' }),
+    database: drizzleAdapter(db, { provider: 'sqlite', schema }),
     secret: env.BETTER_AUTH_SECRET,
     baseURL: env.BETTER_AUTH_URL,
     trustedOrigins,
