@@ -32,9 +32,8 @@ describe('useAuth', () => {
   it('updates session when better-auth returns one', async () => {
     mockGetSession.mockResolvedValue({
       data: {
-        session: {
-          user: { id: 'u1', email: 'a@b.com', name: 'Test', waitlistApproved: true },
-        },
+        session: { id: 'sess_1', token: 'tok' },
+        user: { id: 'u1', email: 'a@b.com', name: 'Test', waitlistApproved: true },
       },
     });
 

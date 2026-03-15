@@ -34,8 +34,8 @@ export function useAuth() {
   // Check existing session on mount
   useEffect(() => {
     authClient.getSession().then(({ data }) => {
-      if (data?.session?.user) {
-        const u = data.session.user as Record<string, unknown>;
+      if (data?.user) {
+        const u = data.user as Record<string, unknown>;
         setSession({
           user: {
             id: u.id as string,
