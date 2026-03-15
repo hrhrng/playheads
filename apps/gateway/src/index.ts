@@ -1,4 +1,4 @@
-import { createAuth } from "@playheads/auth";
+import { createAuthWithApple } from "@playheads/auth";
 import { drizzle } from "drizzle-orm/d1";
 import { schema } from "@playheads/auth";
 import { eq } from "drizzle-orm";
@@ -60,7 +60,7 @@ export default {
     // /api/auth/* → better-auth handler
     if (url.pathname.startsWith("/api/auth")) {
       const db = drizzle(env.DB);
-      const auth = createAuth(db, env);
+      const auth = await createAuthWithApple(db, env);
       return auth.handler(request);
     }
 
