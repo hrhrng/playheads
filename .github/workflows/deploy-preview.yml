@@ -41,6 +41,8 @@ jobs:
       - name: Build landing
         env:
           PUBLIC_APP_URL: https://preview.app.${{ vars.PRODUCTION_DOMAIN }}
+          PUBLIC_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          PUBLIC_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
         run: pnpm --filter landing build
 
       - name: Deploy landing worker
@@ -152,8 +154,6 @@ jobs:
           declare -A SECRETS=(
             [SUPABASE_URL]="${{ secrets.SUPABASE_URL }}"
             [SUPABASE_SERVICE_ROLE_KEY]="${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}"
-            [SUPABASE_ANON_KEY]="${{ vars.VITE_SUPABASE_ANON_KEY }}"
-            [ADMIN_EMAILS]="${{ secrets.ADMIN_EMAILS }}"
           )
           for KEY in "${!SECRETS[@]}"; do
             VAL="${SECRETS[$KEY]}"

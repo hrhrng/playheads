@@ -1,7 +1,6 @@
 interface Env {
   SUPABASE_URL: string;
   SUPABASE_SERVICE_ROLE_KEY: string;
-  SUPABASE_ANON_KEY: string;
 }
 
 export default {
@@ -17,28 +16,9 @@ export default {
   },
 };
 
-// --- Auth ---
-
-async function verifyAdmin(request: Request, env: Env): Promise<{ email: string } | null> {
-  const token = request.headers.get("authorization")?.replace("Bearer ", "");
-  if (!token) return null;
-
-  const res = await fetch(`${env.SUPABASE_URL}/auth/v1/user`, {
-    headers: { Authorization: `Bearer ${token}`, apikey: env.SUPABASE_SERVICE_ROLE_KEY },
-  });
-  if (!res.ok) return null;
-
-  const user = (await res.json()) as { email?: string };
-  if (!user.email) return null;
-
-  return { email: user.email };
-}
-
 // --- API ---
 
 async function handleList(request: Request, env: Env): Promise<Response> {
-  const admin = await verifyAdmin(request, env);
-  if (!admin) return Response.json({ error: "Unauthorized" }, { status: 401 });
 
   const url = new URL(request.url);
   const status = url.searchParams.get("status") || "";
@@ -77,9 +57,6 @@ async function handleList(request: Request, env: Env): Promise<Response> {
 }
 
 async function handleAction(request: Request, env: Env): Promise<Response> {
-  const admin = await verifyAdmin(request, env);
-  if (!admin) return Response.json({ error: "Unauthorized" }, { status: 401 });
-
   const { ids, action } = (await request.json()) as { ids: string[]; action: string };
   if (!Array.isArray(ids) || ids.length === 0) {
     return Response.json({ error: "ids[] required" }, { status: 400 });
@@ -103,7 +80,7 @@ async function handleAction(request: Request, env: Env): Promise<Response> {
   };
   if (action === "approve") {
     body.approved_at = new Date().toISOString();
-    body.approved_by = admin.email;
+    body.approved_by = "admin";
   }
 
   const idsFilter = ids.map((id) => `"${id}"`).join(",");
@@ -133,9 +110,6 @@ async function handleAction(request: Request, env: Env): Promise<Response> {
 }
 
 async function handleInvite(request: Request, env: Env): Promise<Response> {
-  const admin = await verifyAdmin(request, env);
-  if (!admin) return Response.json({ error: "Unauthorized" }, { status: 401 });
-
   const { email } = (await request.json()) as { email: string };
   if (!email || typeof email !== "string") {
     return Response.json({ error: "Email is required" }, { status: 400 });
@@ -171,7 +145,7 @@ async function handleInvite(request: Request, env: Env): Promise<Response> {
       body: JSON.stringify({
         status: "approved",
         approved_at: new Date().toISOString(),
-        approved_by: admin.email,
+        approved_by: "admin",
         updated_at: new Date().toISOString(),
       }),
     });
@@ -184,7 +158,7 @@ async function handleInvite(request: Request, env: Env): Promise<Response> {
         email: normalized,
         status: "approved",
         approved_at: new Date().toISOString(),
-        approved_by: admin.email,
+        approved_by: "admin",
       }),
     });
   }
@@ -224,7 +198,6 @@ function serveHTML(env: Env): Response {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Playhead Admin</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"><\/script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif; color: #111827; font-size: 14px; }
@@ -243,11 +216,6 @@ function serveHTML(env: Env): Response {
   .nav-item.active { color: #fff; background: rgba(255,255,255,0.1); }
   .nav-item svg { width: 18px; height: 18px; opacity: 0.7; }
   .nav-item.active svg { opacity: 1; }
-  .sidebar-footer { padding: 16px 20px; border-top: 1px solid rgba(255,255,255,0.08); }
-  .sidebar-footer .user-email { font-size: 12px; color: #6b7280; margin-bottom: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .sidebar-footer button { font-size: 12px; color: #6b7280; cursor: pointer; border: none; background: none; padding: 0; }
-  .sidebar-footer button:hover { color: #fff; }
-
   /* Main */
   .main { flex: 1; overflow-y: auto; }
   .main-header { padding: 20px 32px; border-bottom: 1px solid #eee; background: #fff; display: flex; justify-content: space-between; align-items: center; }
@@ -309,16 +277,6 @@ function serveHTML(env: Env): Response {
   .msg-ok { background: #dcfce7; color: #15803d; }
   .msg-err { background: #fef2f2; color: #b91c1c; }
 
-  /* Login */
-  .login-screen { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #f8f9fb; }
-  .login-box { width: 100%; max-width: 380px; padding: 32px; background: #fff; border-radius: 16px; border: 1px solid #f0f0f0; }
-  .login-box h1 { text-align: center; margin-bottom: 4px; font-size: 18px; }
-  .login-box p { text-align: center; color: #9ca3af; font-size: 13px; margin-bottom: 24px; }
-  .login-box input { width: 100%; height: 44px; padding: 0 14px; border: 1px solid #e5e7eb; border-radius: 8px; font-size: 14px; outline: none; margin-bottom: 12px; }
-  .login-box input:focus { border-color: #111; box-shadow: 0 0 0 3px rgba(17,17,17,0.06); }
-  .login-box .btn { width: 100%; height: 44px; font-size: 14px; justify-content: center; }
-  .login-box .msg { padding: 10px; border-radius: 8px; text-align: center; font-size: 13px; margin-bottom: 12px; }
-
   /* Toast */
   .toast { position: fixed; bottom: 24px; right: 24px; padding: 12px 20px; border-radius: 10px; font-size: 13px; font-weight: 500; z-index: 200; box-shadow: 0 4px 20px rgba(0,0,0,0.12); animation: toast-in 0.3s ease; }
   @keyframes toast-in { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
@@ -327,13 +285,7 @@ function serveHTML(env: Env): Response {
 <body>
 <div id="app"></div>
 <script>
-const SUPABASE_URL = "${env.SUPABASE_URL}";
-const SUPABASE_ANON_KEY = "${env.SUPABASE_ANON_KEY}";
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
 // State
-let token = null;
-let adminEmail = '';
 let currentPage = 'waitlist';
 let entries = [];
 let stats = { total: 0, pending: 0, approved: 0, rejected: 0 };
@@ -342,41 +294,9 @@ let page = 1;
 let totalPages = 1;
 let selected = new Set();
 let loading = false;
-let loginEmail = '';
-let loginMsg = '';
-let loginMsgType = '';
-let authLoading = true;
 let showInviteModal = false;
 let inviteMsg = '';
 let inviteMsgType = '';
-
-// Auth
-async function initAuth() {
-  const { data: { session } } = await sb.auth.getSession();
-  if (session?.access_token) {
-    token = session.access_token;
-    adminEmail = session.user?.email || '';
-    authLoading = false;
-    if (window.location.hash) history.replaceState(null, '', window.location.pathname);
-    fetchData();
-  } else {
-    authLoading = false;
-    render();
-  }
-  sb.auth.onAuthStateChange((event, session) => {
-    if (event === 'SIGNED_IN' && session?.access_token) {
-      token = session.access_token;
-      adminEmail = session.user?.email || '';
-      if (window.location.hash) history.replaceState(null, '', window.location.pathname);
-      fetchData();
-    } else if (event === 'SIGNED_OUT') {
-      token = null;
-      adminEmail = '';
-      render();
-    }
-  });
-}
-initAuth();
 
 // Icons (inline SVG)
 const icons = {
@@ -387,24 +307,8 @@ const icons = {
 
 // Render
 function render() {
-  if (authLoading) {
-    document.getElementById('app').innerHTML = '<div class="login-screen"><p style="color:#9ca3af">Loading...</p></div>';
-    return;
-  }
-  document.getElementById('app').innerHTML = token ? renderApp() : renderLogin();
+  document.getElementById('app').innerHTML = renderApp();
   bind();
-}
-
-function renderLogin() {
-  return \`<div class="login-screen"><div class="login-box">
-    <h1>Playhead Admin</h1>
-    <p>Sign in with your admin email</p>
-    \${loginMsg ? \`<div class="msg \${loginMsgType === 'error' ? 'msg-err' : 'msg-ok'}">\${loginMsg}</div>\` : ''}
-    <form id="loginForm">
-      <input type="email" id="loginEmail" placeholder="admin@example.com" required value="\${loginEmail}" />
-      <button type="submit" class="btn btn-primary">Send Magic Link</button>
-    </form>
-  </div></div>\`;
 }
 
 function renderApp() {
@@ -424,10 +328,6 @@ function renderApp() {
             \${n.icon} \${n.label}
           </button>
         \`).join('')}
-      </div>
-      <div class="sidebar-footer">
-        <div class="user-email">\${adminEmail}</div>
-        <button onclick="signout()">Sign out</button>
       </div>
     </div>
     <div class="main">
@@ -523,16 +423,6 @@ function renderInviteModal() {
 
 // Bind events
 function bind() {
-  const lf = document.getElementById('loginForm');
-  if (lf) lf.onsubmit = async (e) => {
-    e.preventDefault();
-    loginEmail = document.getElementById('loginEmail').value;
-    const { error } = await sb.auth.signInWithOtp({ email: loginEmail, options: { shouldCreateUser: false, emailRedirectTo: window.location.origin } });
-    if (error) { loginMsg = error.message; loginMsgType = 'error'; }
-    else { loginMsg = 'Check your email for a login link.'; loginMsgType = 'ok'; }
-    render();
-  };
-
   const sa = document.getElementById('selectAll');
   if (sa) sa.onchange = () => {
     if (selected.size === entries.length) selected.clear();
@@ -554,7 +444,7 @@ function bind() {
     try {
       const res = await fetch('/api/invite', {
         method: 'POST',
-        headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
       });
       const data = await res.json();
@@ -586,8 +476,7 @@ async function fetchData() {
   loading = true; render();
   const params = new URLSearchParams({ page: String(page) });
   if (filter) params.set('status', filter);
-  const res = await fetch('/api/waitlist?' + params, { headers: { Authorization: 'Bearer ' + token } });
-  if (res.status === 401) { token = null; loginMsg = 'Access denied. Not an admin or secrets not configured.'; loginMsgType = 'error'; render(); return; }
+  const res = await fetch('/api/waitlist?' + params);
   const json = await res.json();
   entries = json.data || [];
   stats = json.stats || stats;
@@ -601,21 +490,20 @@ async function fetchData() {
 window.navigateTo = (p) => { currentPage = p; render(); };
 window.setFilter = (f) => { filter = f; page = 1; fetchData(); };
 window.setPage = (p) => { page = p; fetchData(); };
-window.signout = () => { sb.auth.signOut(); token = null; adminEmail = ''; loginMsg = ''; render(); };
 window.openInvite = () => { showInviteModal = true; inviteMsg = ''; render(); document.getElementById('inviteEmail')?.focus(); };
 window.closeInvite = () => { showInviteModal = false; inviteMsg = ''; render(); };
 
 window.doAction = async (ids, action) => {
   await fetch('/api/waitlist', {
     method: 'PATCH',
-    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ids, action }),
   });
   fetchData();
 };
 window.bulkAction = (action) => { doAction([...selected], action); };
 
-render();
+fetchData();
 <\/script>
 </body>
 </html>`;
