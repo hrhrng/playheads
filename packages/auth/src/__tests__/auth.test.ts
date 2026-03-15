@@ -2,7 +2,7 @@
  * TDD tests for better-auth server factory.
  */
 import { describe, it, expect } from 'vitest';
-import { createAuth } from '../auth';
+import { createAuthWithApple } from '../auth';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import * as schema from '../schema';
@@ -58,10 +58,10 @@ function createTestDb() {
   return drizzle(sqlite, { schema });
 }
 
-describe('createAuth', () => {
-  it('returns an auth instance with handler method', () => {
+describe('createAuthWithApple', () => {
+  it('returns an auth instance with handler method', async () => {
     const db = createTestDb();
-    const auth = createAuth(db, {
+    const auth = await createAuthWithApple(db, {
       BETTER_AUTH_SECRET: 'test-secret-at-least-32-chars-long!!',
       BETTER_AUTH_URL: 'http://localhost:8787',
     });
@@ -72,7 +72,7 @@ describe('createAuth', () => {
 
   it('auth handler responds to GET /api/auth/ok', async () => {
     const db = createTestDb();
-    const auth = createAuth(db, {
+    const auth = await createAuthWithApple(db, {
       BETTER_AUTH_SECRET: 'test-secret-at-least-32-chars-long!!',
       BETTER_AUTH_URL: 'http://localhost:8787',
     });
@@ -85,7 +85,7 @@ describe('createAuth', () => {
 
   it('auth handler responds to POST /api/auth/sign-up/email', async () => {
     const db = createTestDb();
-    const auth = createAuth(db, {
+    const auth = await createAuthWithApple(db, {
       BETTER_AUTH_SECRET: 'test-secret-at-least-32-chars-long!!',
       BETTER_AUTH_URL: 'http://localhost:8787',
     });
