@@ -15,9 +15,6 @@ class_name = "BackendContainer"
 tag = "v1"
 new_sqlite_classes = ["BackendContainer"]
 
-[[migrations]]
-tag = "v2"
-renamed_classes = [{from = "BackendContainer", to = "BackendContainer"}]
 
 [observability]
 enabled = true
