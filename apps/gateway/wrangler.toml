@@ -1,6 +1,7 @@
 name = "playheads-gateway"
 main = "src/index.ts"
 compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
 
 [[services]]
 binding = "WEB"
@@ -17,6 +18,11 @@ service = "playheads-backend"
 [[services]]
 binding = "ADMIN"
 service = "playheads-admin"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "playheads-db"
+database_id = "31cba35f-8e23-46eb-880f-19d667c0946b"
 
 [observability]
 enabled = true

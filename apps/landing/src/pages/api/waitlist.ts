@@ -1,5 +1,7 @@
 import type { APIRoute } from 'astro';
-import { getSupabase } from '../../lib/supabase';
+import { drizzle } from 'drizzle-orm/d1';
+import { schema } from '@playheads/auth';
+import { eq } from 'drizzle-orm';
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const env = (locals as any).runtime?.env ?? import.meta.env;
@@ -16,36 +18,46 @@ export const POST: APIRoute = async ({ request, locals }) => {
       return Response.json({ error: 'Please enter a valid email.' }, { status: 400 });
     }
 
-    const supabase = getSupabase(env);
+    const db = drizzle(env.DB);
 
     // Check if already exists
-    const { data: existing } = await supabase
-      .from('waitlist')
-      .select('status')
-      .eq('email', normalized)
-      .single();
+    const [existing] = await db
+      .select({ status: schema.waitlist.status })
+      .from(schema.waitlist)
+      .where(eq(schema.waitlist.email, normalized));
 
     if (existing) {
-      return Response.json({ status: existing.status, message: existing.status === 'approved'
-        ? "You're approved! Check your email to sign in."
-        : "You're on the list! We'll notify you when it's your turn." });
+      return Response.json({
+        status: existing.status,
+        message: existing.status === 'approved'
+          ? "You're approved! Check your email to sign in."
+          : "You're on the list! We'll notify you when it's your turn.",
+      });
     }
 
     // Insert new entry
-    const { error } = await supabase
-      .from('waitlist')
-      .insert({ email: normalized });
+    const now = Date.now();
+    const id = crypto.randomUUID();
 
-    if (error) {
-      if (error.code === '23505') {
-        return Response.json({ status: 'pending', message: "You're on the list! We'll notify you when it's your turn." });
-      }
-      console.error('Waitlist insert error:', error);
-      return Response.json({ error: 'Something went wrong. Please try again.' }, { status: 500 });
+    await db.insert(schema.waitlist).values({
+      id,
+      email: normalized,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    return Response.json({
+      status: 'pending',
+      message: "You're on the list! We'll notify you when it's your turn.",
+    });
+  } catch (err: any) {
+    if (err?.message?.includes('UNIQUE')) {
+      return Response.json({
+        status: 'pending',
+        message: "You're on the list! We'll notify you when it's your turn.",
+      });
     }
-
-    return Response.json({ status: 'pending', message: "You're on the list! We'll notify you when it's your turn." });
-  } catch {
+    console.error('Waitlist error:', err);
     return Response.json({ error: 'Invalid request.' }, { status: 400 });
   }
 };

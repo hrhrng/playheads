@@ -7,7 +7,6 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
-import { supabase } from '../utils/supabase';
 import { validateAppleMusicToken } from '../api/appleMusicAuth';
 
 interface UseAppleMusicLinkReturn {
@@ -24,7 +23,7 @@ export default function useAppleMusicLink(userId: string | null): UseAppleMusicL
   const [isTokenChecked, setIsTokenChecked] = useState(false);
   const checkedRef = useRef(false);
 
-  // Link Apple Music: authorize via MusicKit, save token to Supabase
+  // Link Apple Music: authorize via MusicKit, save token via /api/profile
   const linkApple = useCallback(async () => {
     const mk = (window as any).MusicKit?.getInstance();
     if (!mk) {
@@ -44,17 +43,25 @@ export default function useAppleMusicLink(userId: string | null): UseAppleMusicL
     if (mk.isAuthorized && userId) {
       const token = mk.musicUserToken;
       if (token) {
-        const { error } = await supabase
-          .from('profiles')
-          .update({ apple_music_token: token })
-          .eq('id', userId);
+        try {
+          const res = await fetch('/api/profile', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId, appleMusicToken: token }),
+          });
 
-        if (!error) {
-          setIsAppleLinked(true);
-          setStoredMusicUserToken(token);
-          toast.success('Apple Music connected successfully');
-        } else {
-          console.error('Link Error:', error);
+          if (res.ok) {
+            setIsAppleLinked(true);
+            setStoredMusicUserToken(token);
+            toast.success('Apple Music connected successfully');
+          } else {
+            console.error('Link Error:', await res.text());
+            toast.error('Failed to connect Apple Music', {
+              description: 'Please try again or check your connection',
+            });
+          }
+        } catch (err) {
+          console.error('Link Error:', err);
           toast.error('Failed to connect Apple Music', {
             description: 'Please try again or check your connection',
           });
@@ -73,54 +80,59 @@ export default function useAppleMusicLink(userId: string | null): UseAppleMusicL
     checkedRef.current = true;
 
     (async () => {
-      // 1. Check if user has a token stored
-      const { data } = await supabase
-        .from('profiles')
-        .select('apple_music_token')
-        .eq('id', userId)
-        .single();
-
-      const token = data?.apple_music_token || null;
-
-      if (!token) {
-        // Case 1: Never connected
-        setIsAppleLinked(false);
-        setStoredMusicUserToken(null);
-        setIsTokenChecked(true);
-        toast.info('Connect Apple Music', {
-          description: 'Link your account to enable music playback.',
-          duration: 8000,
-          action: {
-            label: 'Connect',
-            onClick: () => linkApple(),
-          },
-        });
-        return;
-      }
-
-      // 2. Has token — validate it
-      const { valid, reason } = await validateAppleMusicToken(userId);
-
-      if (valid) {
-        setIsAppleLinked(true);
-        setStoredMusicUserToken(token);
-      } else {
-        // Case 2: Token expired
-        setIsAppleLinked(false);
-        setStoredMusicUserToken(null);
-        toast.error(
-          reason === 'token_expired'
-            ? 'Apple Music session expired'
-            : 'Apple Music connection issue',
-          {
-            description: 'Please reconnect your account.',
+      try {
+        // 1. Check if user has a token stored
+        const res = await fetch(`/api/profile?userId=${userId}`);
+        if (!res.ok) {
+          setIsAppleLinked(false);
+          setStoredMusicUserToken(null);
+          setIsTokenChecked(true);
+          toast.info('Connect Apple Music', {
+            description: 'Link your account to enable music playback.',
             duration: 8000,
-            action: {
-              label: 'Reconnect',
-              onClick: () => linkApple(),
+            action: { label: 'Connect', onClick: () => linkApple() },
+          });
+          return;
+        }
+
+        const data = await res.json();
+        const token = data?.appleMusicToken || null;
+
+        if (!token) {
+          setIsAppleLinked(false);
+          setStoredMusicUserToken(null);
+          setIsTokenChecked(true);
+          toast.info('Connect Apple Music', {
+            description: 'Link your account to enable music playback.',
+            duration: 8000,
+            action: { label: 'Connect', onClick: () => linkApple() },
+          });
+          return;
+        }
+
+        // 2. Has token — validate it
+        const { valid, reason } = await validateAppleMusicToken(userId);
+
+        if (valid) {
+          setIsAppleLinked(true);
+          setStoredMusicUserToken(token);
+        } else {
+          setIsAppleLinked(false);
+          setStoredMusicUserToken(null);
+          toast.error(
+            reason === 'token_expired'
+              ? 'Apple Music session expired'
+              : 'Apple Music connection issue',
+            {
+              description: 'Please reconnect your account.',
+              duration: 8000,
+              action: { label: 'Reconnect', onClick: () => linkApple() },
             },
-          },
-        );
+          );
+        }
+      } catch {
+        setIsAppleLinked(false);
+        setStoredMusicUserToken(null);
       }
       setIsTokenChecked(true);
     })();

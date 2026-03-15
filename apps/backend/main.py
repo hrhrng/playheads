@@ -38,7 +38,7 @@ log = logging.getLogger("playhead")
 
 # Then import database which depends on env vars
 from apps.backend.database import get_db, DATABASE_URL_RAW, warmup_pool
-from apps.backend.supabase_client import get_supabase
+from apps.backend import d1_client
 
 app = FastAPI(title="Playhead Music Agent API", version="2.0.0")
 
@@ -94,11 +94,7 @@ async def startup_event():
     except Exception as e:
         log.warning("DB pool warmup failed (will connect on first request): %s", e)
 
-    # Init Supabase REST client
-    try:
-        await get_supabase()
-    except Exception as e:
-        log.warning("Supabase client init failed: %s", e)
+    # D1 REST client is stateless, no init needed
 
 
 # =============================================================================
@@ -327,11 +323,14 @@ async def sync_state(request: SyncRequest):
     except ValueError:
         raise HTTPException(400, "Invalid ID format")
 
-    sb = await get_supabase()
+    import json as _json
 
     # Permission check
-    conv = await sb.table("conversations").select("id").eq("id", request.session_id).eq("user_id", request.user_id).maybe_single().execute()
-    if not conv.data:
+    rows = await d1_client.query(
+        'SELECT "id" FROM "conversation" WHERE "id" = ? AND "userId" = ?',
+        [request.session_id, request.user_id]
+    )
+    if not rows:
         return {"status": "no_session", "session_id": request.session_id}
 
     # Build partial context update
@@ -346,20 +345,23 @@ async def sync_state(request: SyncRequest):
         context_update["playback_position"] = request.playback_position
 
     # Read-merge-write to avoid clobbering unrelated fields
-    existing = await sb.table("conversation_states").select("context").eq("conversation_id", request.session_id).maybe_single().execute()
-    existing_context = (existing.data or {}).get("context") or {}
+    existing = await d1_client.query(
+        'SELECT "context" FROM "conversationState" WHERE "conversationId" = ?',
+        [request.session_id]
+    )
+    existing_context = _json.loads((existing[0] or {}).get("context", "{}")) if existing else {}
     merged_context = {**existing_context, **context_update}
 
-    now = datetime.now().isoformat()
-    await sb.table("conversation_states").update({
-        "context": merged_context,
-        "last_synced_at": now,
-    }).eq("conversation_id", request.session_id).execute()
+    now = int(time.time() * 1000)
+    await d1_client.execute(
+        'UPDATE "conversationState" SET "context" = ?, "updatedAt" = ? WHERE "conversationId" = ?',
+        [_json.dumps(merged_context), now, request.session_id]
+    )
 
     return {
         "status": "synced",
         "session_id": request.session_id,
-        "last_sync": now,
+        "last_sync": datetime.now().isoformat(),
     }
 
 
@@ -480,16 +482,11 @@ async def list_conversations(user_id: str):
     except ValueError:
         raise HTTPException(400, "Invalid user_id format")
 
-    sb = await get_supabase()
-    result = await (
-        sb.table("conversations")
-        .select("id,title,message_count,last_message_preview,last_message_at,is_pinned,updated_at")
-        .eq("user_id", user_id)
-        .eq("is_archived", False)
-        .order("is_pinned", desc=True)
-        .order("updated_at", desc=True)
-        .limit(50)
-        .execute()
+    rows = await d1_client.query(
+        'SELECT "id", "title", "messageCount", "lastMessagePreview", "lastMessageAt", "isPinned", "updatedAt" '
+        'FROM "conversation" WHERE "userId" = ? AND "isArchived" = 0 '
+        'ORDER BY "isPinned" DESC, "updatedAt" DESC LIMIT 50',
+        [user_id]
     )
 
     return ConversationsResponse(
@@ -497,12 +494,12 @@ async def list_conversations(user_id: str):
             ConversationItem(
                 id=str(c["id"]),
                 title=c.get("title"),
-                message_count=c.get("message_count") or 0,
-                last_message_preview=c.get("last_message_preview"),
-                last_message_at=c.get("last_message_at"),
-                is_pinned=c.get("is_pinned") or False,
-                updated_at=c.get("updated_at") or ""
-            ) for c in (result.data or [])
+                message_count=c.get("messageCount") or 0,
+                last_message_preview=c.get("lastMessagePreview"),
+                last_message_at=str(c["lastMessageAt"]) if c.get("lastMessageAt") else None,
+                is_pinned=bool(c.get("isPinned")),
+                updated_at=str(c.get("updatedAt") or "")
+            ) for c in rows
         ]
     )
 
@@ -518,16 +515,23 @@ async def delete_conversation(conversation_id: str, user_id: str):
     except ValueError:
         raise HTTPException(400, "Invalid ID format")
 
-    sb = await get_supabase()
-
     # Verify ownership
-    conv = await sb.table("conversations").select("id").eq("id", conversation_id).eq("user_id", user_id).maybe_single().execute()
-    if not conv.data:
+    rows = await d1_client.query(
+        'SELECT "id" FROM "conversation" WHERE "id" = ? AND "userId" = ?',
+        [conversation_id, user_id]
+    )
+    if not rows:
         raise HTTPException(404, "Conversation not found or access denied")
 
     # Delete state first, then conversation
-    await sb.table("conversation_states").delete().eq("conversation_id", conversation_id).execute()
-    await sb.table("conversations").delete().eq("id", conversation_id).execute()
+    await d1_client.execute(
+        'DELETE FROM "conversationState" WHERE "conversationId" = ?',
+        [conversation_id]
+    )
+    await d1_client.execute(
+        'DELETE FROM "conversation" WHERE "id" = ?',
+        [conversation_id]
+    )
 
     return {"success": True, "deleted": conversation_id}
 
@@ -553,27 +557,40 @@ async def update_conversation(
     except ValueError:
         raise HTTPException(400, "Invalid ID format")
 
-    sb = await get_supabase()
-
     # Verify ownership
-    conv = await sb.table("conversations").select("id").eq("id", conversation_id).eq("user_id", user_id).maybe_single().execute()
-    if not conv.data:
+    rows = await d1_client.query(
+        'SELECT "id" FROM "conversation" WHERE "id" = ? AND "userId" = ?',
+        [conversation_id, user_id]
+    )
+    if not rows:
         raise HTTPException(404, "Conversation not found or access denied")
 
-    update_values = {}
+    set_clauses = []
+    params = []
     if update_data.title is not None:
-        update_values['title'] = update_data.title
+        set_clauses.append('"title" = ?')
+        params.append(update_data.title)
     if update_data.is_pinned is not None:
-        update_values['is_pinned'] = update_data.is_pinned
+        set_clauses.append('"isPinned" = ?')
+        params.append(1 if update_data.is_pinned else 0)
     if update_data.is_archived is not None:
-        update_values['is_archived'] = update_data.is_archived
+        set_clauses.append('"isArchived" = ?')
+        params.append(1 if update_data.is_archived else 0)
 
-    if not update_values:
+    if not set_clauses:
         raise HTTPException(400, "No fields to update")
 
-    await sb.table("conversations").update(update_values).eq("id", conversation_id).execute()
+    now = int(time.time() * 1000)
+    set_clauses.append('"updatedAt" = ?')
+    params.append(now)
+    params.append(conversation_id)
 
-    return {"success": True, "updated": conversation_id, "fields": list(update_values.keys())}
+    await d1_client.execute(
+        f'UPDATE "conversation" SET {", ".join(set_clauses)} WHERE "id" = ?',
+        params
+    )
+
+    return {"success": True, "updated": conversation_id, "fields": [c.split('"')[1] for c in set_clauses[:-1]]}
 
 
 

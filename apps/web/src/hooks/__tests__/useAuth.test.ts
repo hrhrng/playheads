@@ -2,30 +2,25 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useAuth } from '../useAuth';
 
-// Mock supabase
+// Mock better-auth client
 const mockGetSession = vi.fn();
-const mockOnAuthStateChange = vi.fn();
-const mockSignInWithOtp = vi.fn();
+const mockSignInMagicLink = vi.fn();
 const mockSignOut = vi.fn();
 
-vi.mock('../../utils/supabase', () => ({
-  supabase: {
-    auth: {
-      getSession: () => mockGetSession(),
-      onAuthStateChange: (cb: unknown) => mockOnAuthStateChange(cb),
-      signInWithOtp: (opts: unknown) => mockSignInWithOtp(opts),
-      signOut: () => mockSignOut(),
+vi.mock('@playheads/auth/src/client', () => ({
+  createClient: () => ({
+    getSession: () => mockGetSession(),
+    signIn: {
+      magicLink: (opts: unknown) => mockSignInMagicLink(opts),
     },
-  },
+    signOut: () => mockSignOut(),
+  }),
 }));
 
 describe('useAuth', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockGetSession.mockResolvedValue({ data: { session: null } });
-    mockOnAuthStateChange.mockReturnValue({
-      data: { subscription: { unsubscribe: vi.fn() } },
-    });
+    mockGetSession.mockResolvedValue({ data: null });
   });
 
   it('starts with null session', () => {
@@ -34,29 +29,27 @@ describe('useAuth', () => {
     expect(result.current.isLoggedIn).toBe(false);
   });
 
-  it('updates session when supabase returns one', async () => {
-    const fakeSession = {
-      access_token: 'tok',
-      refresh_token: 'ref',
-      expires_in: 3600,
-      token_type: 'bearer',
-      user: { id: 'u1', email: 'a@b.com' },
-    };
-    mockGetSession.mockResolvedValue({ data: { session: fakeSession } });
+  it('updates session when better-auth returns one', async () => {
+    mockGetSession.mockResolvedValue({
+      data: {
+        session: {
+          user: { id: 'u1', email: 'a@b.com', name: 'Test', waitlistApproved: true },
+        },
+      },
+    });
 
     const { result } = renderHook(() => useAuth());
 
-    // Wait for the async getSession to resolve
     await act(async () => {
       await new Promise(r => setTimeout(r, 0));
     });
 
-    expect(result.current.session).toEqual(fakeSession);
+    expect(result.current.session?.user.id).toBe('u1');
     expect(result.current.isLoggedIn).toBe(true);
   });
 
-  it('handleLogin calls signInWithOtp and sets success message', async () => {
-    mockSignInWithOtp.mockResolvedValue({ error: null });
+  it('handleLogin sends magic link and sets success message', async () => {
+    mockSignInMagicLink.mockResolvedValue({ error: null });
 
     const { result } = renderHook(() => useAuth());
 
@@ -69,16 +62,16 @@ describe('useAuth', () => {
       await result.current.handleLogin(fakeEvent);
     });
 
-    expect(mockSignInWithOtp).toHaveBeenCalledWith({
+    expect(mockSignInMagicLink).toHaveBeenCalledWith({
       email: 'test@example.com',
-      options: { emailRedirectTo: expect.any(String) },
+      callbackURL: expect.any(String),
     });
     expect(result.current.authMessage?.type).toBe('success');
     expect(result.current.loading).toBe(false);
   });
 
   it('handleLogin sets error message on failure', async () => {
-    mockSignInWithOtp.mockResolvedValue({ error: { message: 'Rate limited' } });
+    mockSignInMagicLink.mockResolvedValue({ error: { message: 'Rate limited' } });
 
     const { result } = renderHook(() => useAuth());
 
@@ -94,9 +87,12 @@ describe('useAuth', () => {
     expect(result.current.authMessage).toEqual({ type: 'error', text: 'Rate limited' });
   });
 
-  it('provides a logout function', () => {
+  it('provides a logout function', async () => {
+    mockSignOut.mockResolvedValue({});
     const { result } = renderHook(() => useAuth());
-    result.current.logout();
+    await act(async () => {
+      await result.current.logout();
+    });
     expect(mockSignOut).toHaveBeenCalled();
   });
 });

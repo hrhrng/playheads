@@ -1,11 +1,20 @@
+import { createAuth } from "@playheads/auth";
+import { drizzle } from "drizzle-orm/d1";
+import { schema } from "@playheads/auth";
+import { eq } from "drizzle-orm";
+import { hasSessionCookie } from "./session";
+
 interface Env {
   WEB: Fetcher;
   LANDING: Fetcher;
   BACKEND: Fetcher;
   ADMIN: Fetcher;
+  DB: D1Database;
   APP_HOSTNAME: string;
   ADMIN_HOSTNAME: string;
-  PREVIEW_DOMAIN: string; // e.g. "pw.playheads.ai", empty in production
+  PREVIEW_DOMAIN: string;
+  BETTER_AUTH_SECRET: string;
+  BETTER_AUTH_URL: string;
 }
 
 function laneProxy(
@@ -40,10 +49,25 @@ export default {
       return env.ADMIN.fetch(request);
     }
 
+    // /api/auth/* → better-auth handler
+    if (url.pathname.startsWith("/api/auth")) {
+      const db = drizzle(env.DB);
+      const auth = createAuth(db, {
+        BETTER_AUTH_SECRET: env.BETTER_AUTH_SECRET,
+        BETTER_AUTH_URL: env.BETTER_AUTH_URL,
+      });
+      return auth.handler(request);
+    }
+
     // /api/waitlist → landing worker (waitlist API)
     if (url.pathname === "/api/waitlist") {
       if (lane) return laneProxy("landing", lane, env.PREVIEW_DOMAIN, request);
       return env.LANDING.fetch(request);
+    }
+
+    // /api/profile → D1 profile CRUD
+    if (url.pathname.startsWith("/api/profile")) {
+      return handleProfile(request, env);
     }
 
     // /api/* → backend worker
@@ -115,7 +139,79 @@ export default {
   },
 };
 
-function hasSessionCookie(request: Request): boolean {
-  const cookie = request.headers.get("cookie") || "";
-  return /sb-[^-]+-auth-token/.test(cookie);
+async function handleProfile(request: Request, env: Env): Promise<Response> {
+  const db = drizzle(env.DB);
+  const url = new URL(request.url);
+
+  if (request.method === "GET") {
+    const userId = url.searchParams.get("userId");
+    if (!userId) {
+      return Response.json({ error: "userId required" }, { status: 400 });
+    }
+
+    const [p] = await db
+      .select()
+      .from(schema.profile)
+      .where(eq(schema.profile.id, userId));
+
+    if (!p) {
+      return Response.json({ error: "not found" }, { status: 404 });
+    }
+    return Response.json(p);
+  }
+
+  if (request.method === "PUT") {
+    const body = (await request.json()) as {
+      userId: string;
+      displayName?: string;
+      avatarUrl?: string;
+      appleMusicToken?: string;
+    };
+
+    if (!body.userId) {
+      return Response.json({ error: "userId required" }, { status: 400 });
+    }
+
+    const now = Date.now();
+
+    // Upsert: try update, if no rows affected, insert
+    const existing = await db
+      .select()
+      .from(schema.profile)
+      .where(eq(schema.profile.id, body.userId));
+
+    if (existing.length > 0) {
+      await db
+        .update(schema.profile)
+        .set({
+          ...(body.displayName !== undefined && {
+            displayName: body.displayName,
+          }),
+          ...(body.avatarUrl !== undefined && { avatarUrl: body.avatarUrl }),
+          ...(body.appleMusicToken !== undefined && {
+            appleMusicToken: body.appleMusicToken,
+          }),
+          updatedAt: now,
+        })
+        .where(eq(schema.profile.id, body.userId));
+    } else {
+      await db.insert(schema.profile).values({
+        id: body.userId,
+        displayName: body.displayName ?? null,
+        avatarUrl: body.avatarUrl ?? null,
+        appleMusicToken: body.appleMusicToken ?? null,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    const [updated] = await db
+      .select()
+      .from(schema.profile)
+      .where(eq(schema.profile.id, body.userId));
+
+    return Response.json(updated);
+  }
+
+  return Response.json({ error: "method not allowed" }, { status: 405 });
 }

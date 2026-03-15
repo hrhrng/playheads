@@ -74,21 +74,22 @@ class SessionState(BaseModel):
         return "\n".join(lines)
 
 
+import json
 import logging
 import time
 from datetime import datetime
 
-from .supabase_client import get_supabase
+from . import d1_client
 from .title_generator import generate_conversation_title
 
 log = logging.getLogger("playhead.state")
 
 
 class SessionStore:
-    """Supabase REST API backed session store."""
+    """D1 REST API backed session store."""
 
     async def get_session(self, db, session_id: str, user_id: Optional[str] = None) -> Optional[SessionState]:
-        """Get existing session from DB via Supabase REST. `db` param kept for API compat but unused."""
+        """Get existing session from D1. `db` param kept for API compat but unused."""
         t0 = time.perf_counter()
         try:
             try:
@@ -96,54 +97,64 @@ class SessionStore:
             except (ValueError, TypeError):
                 return None
 
-            sb = await get_supabase()
-
             # Check conversation ownership
             if user_id:
                 try:
                     uuid.UUID(user_id)
                 except (ValueError, TypeError):
                     return None
-                conv = await sb.table("conversations").select("id").eq("id", session_id).eq("user_id", user_id).maybe_single().execute()
+                rows = await d1_client.query(
+                    'SELECT "id" FROM "conversation" WHERE "id" = ? AND "userId" = ?',
+                    [session_id, user_id]
+                )
             else:
-                conv = await sb.table("conversations").select("id").eq("id", session_id).maybe_single().execute()
+                rows = await d1_client.query(
+                    'SELECT "id" FROM "conversation" WHERE "id" = ?',
+                    [session_id]
+                )
 
-            if not conv.data:
-                log.info("⏱ get_session: %.0fms (not found - no conversation)", (time.perf_counter() - t0) * 1000)
+            if not rows:
+                log.info("⏱ get_session: %.0fms (not found)", (time.perf_counter() - t0) * 1000)
                 return None
 
             # Get conversation state
-            state = await sb.table("conversation_states").select("messages,context,last_synced_at").eq("conversation_id", session_id).maybe_single().execute()
-            log.info("⏱ get_session: %.0fms (found=%s)", (time.perf_counter() - t0) * 1000, state.data is not None)
+            state_rows = await d1_client.query(
+                'SELECT "messages", "context" FROM "conversationState" WHERE "conversationId" = ?',
+                [session_id]
+            )
+            log.info("⏱ get_session: %.0fms (found=%s)", (time.perf_counter() - t0) * 1000, len(state_rows) > 0)
 
-            if not state.data:
+            if not state_rows:
                 return None
 
-            return self._hydrate(state.data, session_id)
+            row = state_rows[0]
+            data = {
+                "messages": json.loads(row.get("messages", "[]")),
+                "context": json.loads(row.get("context", "{}")),
+            }
+            return self._hydrate(data, session_id)
         except Exception as e:
             log.error("Error getting session %s: %s (%.0fms)", session_id[:8], e, (time.perf_counter() - t0) * 1000)
             return None
 
     async def create_session(self, db, session_id: str, user_id: str) -> SessionState:
-        """Create new session via Supabase REST. `db` param kept for API compat but unused."""
+        """Create new session via D1 REST. `db` param kept for API compat but unused."""
         t0 = time.perf_counter()
         try:
-            sb = await get_supabase()
+            now = int(time.time() * 1000)
 
-            # Upsert conversation
-            await sb.table("conversations").upsert({
-                "id": session_id,
-                "user_id": user_id,
-                "title": None,
-                "message_count": 0,
-            }, on_conflict="id").execute()
+            # Insert conversation (ignore if exists)
+            await d1_client.execute(
+                'INSERT OR IGNORE INTO "conversation" ("id", "userId", "messageCount", "isPinned", "isArchived", "createdAt", "updatedAt") VALUES (?, ?, 0, 0, 0, ?, ?)',
+                [session_id, user_id, now, now]
+            )
 
-            # Upsert conversation state
-            await sb.table("conversation_states").upsert({
-                "conversation_id": session_id,
-                "messages": [],
-                "context": {},
-            }, on_conflict="conversation_id").execute()
+            # Insert conversation state (ignore if exists)
+            state_id = str(uuid.uuid4())
+            await d1_client.execute(
+                'INSERT OR IGNORE INTO "conversationState" ("id", "conversationId", "messages", "context", "createdAt", "updatedAt") VALUES (?, ?, \'[]\', \'{}\', ?, ?)',
+                [state_id, session_id, now, now]
+            )
 
             log.info("⏱ create_session: %.0fms", (time.perf_counter() - t0) * 1000)
             return SessionState(session_id=session_id, last_sync=datetime.now())
@@ -155,7 +166,7 @@ class SessionStore:
             raise
 
     def _hydrate(self, data: dict, session_id: str) -> SessionState:
-        """Convert Supabase row dict to SessionState."""
+        """Convert D1 row dict to SessionState."""
         context = data.get("context") or {}
 
         current_track = None
@@ -178,14 +189,12 @@ class SessionStore:
             playlist=playlist,
             is_playing=context.get("is_playing", False),
             playback_position=context.get("playback_position", 0.0),
-            last_sync=data.get("last_synced_at") or datetime.now()
+            last_sync=datetime.now()
         )
 
     async def update_session(self, db, state: SessionState, user_id: str):
-        """Persist chat messages and conversation metadata via Supabase REST.
+        """Persist chat messages and conversation metadata via D1 REST.
         `db` param kept for API compat but unused.
-
-        Does NOT write the context column — owned by frontend via /state/sync.
         """
         t0 = time.perf_counter()
         messages_data = [m.model_dump(mode='json') for m in state.chat_history]
@@ -204,25 +213,23 @@ class SessionStore:
                 last_message_preview = combined_text[:100] if combined_text else "..."
             else:
                 last_message_preview = "..."
-            last_message_at = last_msg.timestamp.isoformat()
+            last_message_at = int(last_msg.timestamp.timestamp() * 1000)
 
         try:
-            sb = await get_supabase()
-            now = datetime.now().isoformat()
+            now = int(time.time() * 1000)
+            messages_json = json.dumps(messages_data)
 
-            # Update conversation_states (messages only, not context)
-            await sb.table("conversation_states").update({
-                "messages": messages_data,
-                "last_synced_at": now,
-            }).eq("conversation_id", state.session_id).execute()
+            # Update conversation state (messages only, not context)
+            await d1_client.execute(
+                'UPDATE "conversationState" SET "messages" = ?, "updatedAt" = ? WHERE "conversationId" = ?',
+                [messages_json, now, state.session_id]
+            )
 
             # Update conversation metadata
-            await sb.table("conversations").update({
-                "message_count": message_count,
-                "last_message_preview": last_message_preview,
-                "last_message_at": last_message_at,
-                "updated_at": now,
-            }).eq("id", state.session_id).execute()
+            await d1_client.execute(
+                'UPDATE "conversation" SET "messageCount" = ?, "lastMessagePreview" = ?, "lastMessageAt" = ?, "updatedAt" = ? WHERE "id" = ?',
+                [message_count, last_message_preview, last_message_at, now, state.session_id]
+            )
 
             log.info("⏱ update_session: %.0fms (%d msgs)", (time.perf_counter() - t0) * 1000, len(messages_data))
         except Exception as e:
@@ -241,14 +248,18 @@ class SessionStore:
             title = await generate_conversation_title(messages_data)
             log.info("Generated title: %s", title)
 
-            sb = await get_supabase()
-            await sb.table("conversations").update({"title": title}).eq("id", session_id).execute()
+            await d1_client.execute(
+                'UPDATE "conversation" SET "title" = ? WHERE "id" = ?',
+                [title, session_id]
+            )
         except Exception as e:
             log.warning("Background title generation failed: %s", e)
             if message_count == 2:
                 try:
-                    sb = await get_supabase()
-                    await sb.table("conversations").update({"title": "New Conversation"}).eq("id", session_id).execute()
+                    await d1_client.execute(
+                        'UPDATE "conversation" SET "title" = ? WHERE "id" = ?',
+                        ["New Conversation", session_id]
+                    )
                 except Exception as fallback_error:
                     log.warning("Failed to set default title: %s", fallback_error)
 
