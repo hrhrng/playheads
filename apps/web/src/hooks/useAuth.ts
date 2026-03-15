@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
+import { toast } from 'sonner';
 import { createClient } from '@playheads/auth/src/client';
 
 const authClient = createClient('/api/auth');
+const LINKED_KEY = 'playheads_account_linked_notified';
 
 export interface AuthSession {
   user: {
@@ -44,6 +46,26 @@ export function useAuth() {
             waitlistApproved: u.waitlistApproved as boolean | undefined,
           },
         });
+
+        // Check if accounts were linked (multiple providers)
+        authClient.listAccounts().then(({ data: accountsData }) => {
+          const accounts = (accountsData as unknown as { id: string; provider: string }[]) || [];
+          if (accounts.length > 1) {
+            const notifiedProviders = localStorage.getItem(LINKED_KEY) || '';
+            const providerNames = accounts.map(a => a.provider).sort().join(',');
+            if (notifiedProviders !== providerNames) {
+              localStorage.setItem(LINKED_KEY, providerNames);
+              const names = accounts.map(a =>
+                a.provider === 'credential' ? 'Email' :
+                a.provider.charAt(0).toUpperCase() + a.provider.slice(1)
+              ).join(' + ');
+              toast.info('Accounts linked', {
+                description: `Your ${names} accounts are connected under ${u.email}.`,
+                duration: 6000,
+              });
+            }
+          }
+        }).catch(() => {});
       }
     }).catch(() => {});
   }, []);
