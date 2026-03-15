@@ -196,6 +196,11 @@ export function createAuth(db: Parameters<typeof drizzleAdapter>[0], env: AuthEn
     );
   }
 
+  // Extract root domain for cross-subdomain cookies
+  const rootDomain = env.BETTER_AUTH_URL
+    ? new URL(env.BETTER_AUTH_URL).hostname.split('.').slice(-2).join('.')
+    : undefined;
+
   return betterAuth({
     database: drizzleAdapter(db, { provider: 'sqlite', schema }),
     secret: env.BETTER_AUTH_SECRET,
@@ -204,6 +209,11 @@ export function createAuth(db: Parameters<typeof drizzleAdapter>[0], env: AuthEn
     emailAndPassword: { enabled: true },
     socialProviders,
     plugins,
+    advanced: {
+      crossSubDomainCookies: rootDomain
+        ? { enabled: true, domain: `.${rootDomain}` }
+        : undefined,
+    },
     user: {
       additionalFields: {
         waitlistApproved: {
@@ -273,6 +283,11 @@ export async function createAuthWithApple(db: Parameters<typeof drizzleAdapter>[
     );
   }
 
+  // Extract root domain for cross-subdomain cookies
+  const rootDomain = env.BETTER_AUTH_URL
+    ? new URL(env.BETTER_AUTH_URL).hostname.split('.').slice(-2).join('.')
+    : undefined;
+
   return betterAuth({
     database: drizzleAdapter(db, { provider: 'sqlite', schema }),
     secret: env.BETTER_AUTH_SECRET,
@@ -281,6 +296,11 @@ export async function createAuthWithApple(db: Parameters<typeof drizzleAdapter>[
     emailAndPassword: { enabled: true },
     socialProviders,
     plugins,
+    advanced: {
+      crossSubDomainCookies: rootDomain
+        ? { enabled: true, domain: `.${rootDomain}` }
+        : undefined,
+    },
     user: {
       additionalFields: {
         waitlistApproved: {
