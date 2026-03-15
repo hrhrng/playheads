@@ -196,7 +196,6 @@ export async function createAuthWithApple(db: Parameters<typeof drizzleAdapter>[
       },
     },
     advanced: {
-      generateId: () => crypto.randomUUID(),
       crossSubDomainCookies: rootDomain
         ? { enabled: true, domain: `.${rootDomain}` }
         : undefined,

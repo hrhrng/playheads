@@ -317,12 +317,6 @@ async def sync_state(request: SyncRequest):
     if not request.user_id:
         return {"error": "user_id required for sync"}
 
-    try:
-        _uuid.UUID(request.session_id)
-        _uuid.UUID(request.user_id)
-    except ValueError:
-        raise HTTPException(400, "Invalid ID format")
-
     import json as _json
 
     # Permission check
@@ -450,14 +444,9 @@ class CreateConversationResponse(BaseModel):
 
 @app.post("/conversations/create", response_model=CreateConversationResponse)
 async def create_conversation(request: CreateConversationRequest):
-    """Create a new empty conversation via Supabase REST."""
+    """Create a new empty conversation."""
     from apps.backend.state import store
     import uuid
-
-    try:
-        uuid.UUID(request.user_id)
-    except ValueError as e:
-        raise HTTPException(400, f"Invalid user_id format: {str(e)}")
 
     try:
         new_conversation_id = str(uuid.uuid4())
@@ -474,14 +463,7 @@ async def create_conversation(request: CreateConversationRequest):
 
 @app.get("/conversations", response_model=ConversationsResponse)
 async def list_conversations(user_id: str):
-    """List user's conversations via Supabase REST."""
-    import uuid
-
-    try:
-        uuid.UUID(user_id)
-    except ValueError:
-        raise HTTPException(400, "Invalid user_id format")
-
+    """List user's conversations."""
     rows = await d1_client.query(
         'SELECT "id", "title", "messageCount", "lastMessagePreview", "lastMessageAt", "isPinned", "updatedAt" '
         'FROM "conversation" WHERE "userId" = ? AND "isArchived" = 0 '
@@ -506,15 +488,7 @@ async def list_conversations(user_id: str):
 
 @app.delete("/conversations/{conversation_id}")
 async def delete_conversation(conversation_id: str, user_id: str):
-    """Delete a conversation via Supabase REST (with permission check)."""
-    import uuid
-
-    try:
-        uuid.UUID(conversation_id)
-        uuid.UUID(user_id)
-    except ValueError:
-        raise HTTPException(400, "Invalid ID format")
-
+    """Delete a conversation (with permission check)."""
     # Verify ownership
     rows = await d1_client.query(
         'SELECT "id" FROM "conversation" WHERE "id" = ? AND "userId" = ?',
@@ -548,15 +522,7 @@ async def update_conversation(
     user_id: str,
     update_data: ConversationUpdateRequest,
 ):
-    """Update conversation metadata via Supabase REST."""
-    import uuid
-
-    try:
-        uuid.UUID(conversation_id)
-        uuid.UUID(user_id)
-    except ValueError:
-        raise HTTPException(400, "Invalid ID format")
-
+    """Update conversation metadata."""
     # Verify ownership
     rows = await d1_client.query(
         'SELECT "id" FROM "conversation" WHERE "id" = ? AND "userId" = ?',

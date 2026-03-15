@@ -92,17 +92,11 @@ class SessionStore:
         """Get existing session from D1. `db` param kept for API compat but unused."""
         t0 = time.perf_counter()
         try:
-            try:
-                uuid.UUID(session_id)
-            except (ValueError, TypeError):
+            if not session_id:
                 return None
 
             # Check conversation ownership
             if user_id:
-                try:
-                    uuid.UUID(user_id)
-                except (ValueError, TypeError):
-                    return None
                 rows = await d1_client.query(
                     'SELECT "id" FROM "conversation" WHERE "id" = ? AND "userId" = ?',
                     [session_id, user_id]
