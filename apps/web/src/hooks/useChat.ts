@@ -114,15 +114,19 @@ export function useChat({
    * Send message handler - creates session for new chats first
    * Uses flushSync to ensure user message appears immediately
    */
+  const creatingSessionRef = useRef(false);
+
   const handleSendMessage = async (
     text?: string,
     skipAddingUserMessage = false
   ): Promise<void> => {
     const messageText = text || input;
-    if (!messageText.trim()) return;
+    if (!messageText.trim() || isLoading) return;
 
     // For new chats without session, create session first and navigate
     if (!sessionId) {
+      if (creatingSessionRef.current) return; // prevent duplicate creates
+      creatingSessionRef.current = true;
       try {
         if (!userId) {
           throw new Error('User ID is required');
@@ -147,6 +151,8 @@ export function useChat({
         toast.error('Failed to create chat session', {
           description: 'Please refresh the page or try again'
         });
+      } finally {
+        creatingSessionRef.current = false;
       }
     } else {
       // For existing chats, add user message synchronously first (unless skipped)
