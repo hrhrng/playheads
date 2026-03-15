@@ -2,7 +2,6 @@ interface Env {
   SUPABASE_URL: string;
   SUPABASE_SERVICE_ROLE_KEY: string;
   SUPABASE_ANON_KEY: string;
-  ADMIN_EMAILS: string;
 }
 
 export default {
@@ -31,9 +30,6 @@ async function verifyAdmin(request: Request, env: Env): Promise<{ email: string 
 
   const user = (await res.json()) as { email?: string };
   if (!user.email) return null;
-
-  const admins = env.ADMIN_EMAILS.split(",").map((e) => e.trim().toLowerCase());
-  if (!admins.includes(user.email.toLowerCase())) return null;
 
   return { email: user.email };
 }

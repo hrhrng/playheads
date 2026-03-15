@@ -2,12 +2,14 @@ interface Env {
   WEB: Fetcher;
   LANDING: Fetcher;
   BACKEND: Fetcher;
+  ADMIN: Fetcher;
   APP_HOSTNAME: string;
+  ADMIN_HOSTNAME: string;
   PREVIEW_DOMAIN: string; // e.g. "pw.playheads.ai", empty in production
 }
 
 function laneProxy(
-  type: "web" | "landing" | "backend",
+  type: "web" | "landing" | "backend" | "admin",
   lane: string,
   previewDomain: string,
   request: Request,
@@ -81,6 +83,12 @@ export default {
       );
 
       return response;
+    }
+
+    // admin hostname → admin worker directly
+    if (env.ADMIN_HOSTNAME && url.hostname === env.ADMIN_HOSTNAME) {
+      if (lane) return laneProxy("admin", lane, env.PREVIEW_DOMAIN, request);
+      return env.ADMIN.fetch(request);
     }
 
     // app hostname → web worker directly

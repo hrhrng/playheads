@@ -96,10 +96,15 @@ jobs:
           [[routes]]
           pattern = "preview.app.${DOMAIN}"
           custom_domain = true
+
+          [[routes]]
+          pattern = "preview.admin.${DOMAIN}"
+          custom_domain = true
           TOML
           npx wrangler deploy --config wrangler.branch.toml \
             --name "playheads-gateway-preview" \
             --var APP_HOSTNAME:preview.app.${DOMAIN} \
+            --var ADMIN_HOSTNAME:preview.admin.${DOMAIN} \
             --var PREVIEW_DOMAIN:pw.${DOMAIN}
 
       - name: Deploy backend worker
@@ -125,7 +130,18 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx wrangler deploy --name "playheads-admin-${{ steps.branch.outputs.slug }}"
+        run: |
+          SLUG="${{ steps.branch.outputs.slug }}"
+          DOMAIN="${{ vars.PRODUCTION_DOMAIN }}"
+          cp wrangler.toml wrangler.branch.toml
+          cat >> wrangler.branch.toml <<TOML
+
+          [[routes]]
+          pattern = "admin-${SLUG}.pw.${DOMAIN}"
+          custom_domain = true
+          TOML
+          npx wrangler deploy --config wrangler.branch.toml \
+            --name "playheads-admin-${SLUG}"
 
       - name: Sync admin secrets
         env:
