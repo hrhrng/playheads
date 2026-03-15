@@ -1,8 +1,8 @@
-import type { SupabaseSession } from '../types';
+import type { AuthSession } from './useAuth';
 
 type WaitlistStatus = 'approved' | 'pending';
 
-export function useWaitlistGate(session: SupabaseSession | null): WaitlistStatus {
+export function useWaitlistGate(session: AuthSession | null): WaitlistStatus {
   if (!session?.user) return 'pending';
-  return session.user.user_metadata?.waitlist_approved === true ? 'approved' : 'pending';
+  return session.user.waitlistApproved === true ? 'approved' : 'pending';
 }

@@ -1,9 +1,14 @@
 {
   "name": "admin",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "@playheads/auth": "workspace:*",
+    "drizzle-orm": "^0.44.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20241205.0",

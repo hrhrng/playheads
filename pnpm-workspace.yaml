@@ -4,3 +4,4 @@ packages:
   - 'apps/gateway'
   - 'apps/admin'
   - 'apps/backend-worker'
+  - 'packages/*'

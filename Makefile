@@ -52,13 +52,16 @@ install-backend:
 # Test
 # =============================================================================
 
-test: test-backend test-web
+test: test-backend test-web test-auth
 
 test-backend:
 	uv run --project apps/backend pytest apps/backend/ -v
 
 test-web:
 	pnpm --filter web test
+
+test-auth:
+	pnpm --filter @playheads/auth test
 
 # =============================================================================
 # Lint & Type-check

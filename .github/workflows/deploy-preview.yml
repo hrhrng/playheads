@@ -33,16 +33,12 @@ jobs:
 
       - name: Build frontend
         env:
-          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
           VITE_SPOTIFY_REDIRECT_URI: https://preview.app.${{ vars.PRODUCTION_DOMAIN }}/callback
         run: pnpm --filter web build
 
       - name: Build landing
         env:
           PUBLIC_APP_URL: https://preview.app.${{ vars.PRODUCTION_DOMAIN }}
-          PUBLIC_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
-          PUBLIC_SUPABASE_ANON_KEY: ${{ vars.VITE_SUPABASE_ANON_KEY }}
         run: pnpm --filter landing build
 
       - name: Deploy landing worker
@@ -145,35 +141,24 @@ jobs:
           npx wrangler deploy --config wrangler.branch.toml \
             --name "playheads-admin-${SLUG}"
 
-      - name: Sync admin secrets
+      - name: Sync gateway secrets
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          WORKER="playheads-admin-${{ steps.branch.outputs.slug }}"
+          WORKER="playheads-gateway-preview"
+          DOMAIN="${{ vars.PRODUCTION_DOMAIN }}"
           declare -A SECRETS=(
-            [SUPABASE_URL]="${{ secrets.SUPABASE_URL }}"
-            [SUPABASE_SERVICE_ROLE_KEY]="${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}"
-          )
-          for KEY in "${!SECRETS[@]}"; do
-            VAL="${SECRETS[$KEY]}"
-            if [ -n "$VAL" ]; then
-              echo "$VAL" | npx wrangler secret put "$KEY" --name "$WORKER" 2>/dev/null
-              echo "✓ $KEY"
-            fi
-          done
-
-      - name: Sync landing secrets
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          WORKER="playheads-landing-${{ steps.branch.outputs.slug }}"
-          declare -A SECRETS=(
-            [SUPABASE_URL]="${{ secrets.SUPABASE_URL }}"
-            [SUPABASE_SERVICE_ROLE_KEY]="${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}"
-            [ADMIN_EMAILS]="${{ secrets.ADMIN_EMAILS }}"
-            [CRON_SECRET]="${{ secrets.CRON_SECRET }}"
+            [BETTER_AUTH_SECRET]="${{ secrets.BETTER_AUTH_SECRET }}"
+            [BETTER_AUTH_URL]="https://preview.${DOMAIN}"
+            [BETTER_AUTH_TRUSTED_ORIGINS]="https://preview.${DOMAIN},https://preview.app.${DOMAIN},http://localhost:5173"
+            [APPLE_CLIENT_ID]="${{ secrets.APPLE_CLIENT_ID }}"
+            [APPLE_KEY_ID]="${{ secrets.APPLE_KEY_ID }}"
+            [APPLE_TEAM_ID]="${{ secrets.APPLE_TEAM_ID }}"
+            [APPLE_PRIVATE_KEY]="${{ secrets.APPLE_PRIVATE_KEY }}"
+            [GOOGLE_CLIENT_ID]="${{ secrets.GOOGLE_CLIENT_ID }}"
+            [GOOGLE_CLIENT_SECRET]="${{ secrets.GOOGLE_CLIENT_SECRET }}"
+            [RESEND_API_KEY]="${{ secrets.RESEND_API_KEY }}"
           )
           for KEY in "${!SECRETS[@]}"; do
             VAL="${SECRETS[$KEY]}"
@@ -191,7 +176,7 @@ jobs:
           ALL_VARS: ${{ toJSON(vars) }}
         run: |
           WORKER="playheads-backend-${{ steps.branch.outputs.slug }}"
-          SKIP_KEYS='["GITHUB_TOKEN","CLOUDFLARE_API_TOKEN","CLOUDFLARE_ACCOUNT_ID"]'
+          SKIP_KEYS='["GITHUB_TOKEN"]'
           for KEY in $(echo "$ALL_SECRETS" | jq -r --argjson skip "$SKIP_KEYS" 'keys[] | select(. as $k | $skip | index($k) | not)'); do
             VAL=$(echo "$ALL_SECRETS" | jq -r --arg k "$KEY" '.[$k]')
             if [ -z "$VAL" ]; then continue; fi

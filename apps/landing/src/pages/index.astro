@@ -7,8 +7,6 @@ import Footer from '../components/Footer.astro';
 export const prerender = true;
 
 const appUrl = import.meta.env.PUBLIC_APP_URL || '/';
-const supabaseUrl = import.meta.env.PUBLIC_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY || '';
 ---
 
 <Layout title="The Playheads — Return to Music">
@@ -34,19 +32,13 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY || '';
   <Footer />
 </Layout>
 
-<script define:vars={{ supabaseUrl, supabaseAnonKey, appUrl }}>
-  if (supabaseUrl && supabaseAnonKey) {
-    import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm').then(({ createClient }) => {
-      const sb = createClient(supabaseUrl, supabaseAnonKey);
-      sb.auth.getSession().then(({ data: { session } }) => {
-        if (session) {
-          const link = document.getElementById('auth-link');
-          if (link) {
-            link.textContent = 'Open App';
-            link.href = appUrl;
-          }
-        }
-      });
-    });
+<script define:vars={{ appUrl }}>
+  // Check for better-auth session cookie
+  if (document.cookie.includes('better-auth.session_token')) {
+    const link = document.getElementById('auth-link');
+    if (link) {
+      link.textContent = 'Open App';
+      link.href = appUrl;
+    }
   }
 </script>

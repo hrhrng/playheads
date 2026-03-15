@@ -204,35 +204,31 @@ async def validate_user_token(user_id: str):
     Validate user's Apple Music token by making test API call.
     Returns token validity status.
     """
-    import uuid as uuid_module
-    from sqlalchemy import select
-    from apps.backend.database import AsyncSessionLocal
-    from apps.backend.models import Profile
+    from . import d1_client
 
     try:
-        user_uuid = uuid_module.UUID(user_id)
+        rows = await d1_client.query(
+            'SELECT "appleMusicToken" FROM "profile" WHERE "id" = ?',
+            [user_id]
+        )
 
-        async with AsyncSessionLocal() as db:
-            stmt = select(Profile).where(Profile.id == user_uuid)
-            result = await db.execute(stmt)
-            profile = result.scalar_one_or_none()
+        if not rows or not rows[0].get("appleMusicToken"):
+            return {"valid": False, "reason": "no_token"}
 
-            if not profile or not profile.apple_music_token:
-                return {"valid": False, "reason": "no_token"}
+        token = rows[0]["appleMusicToken"]
 
-            # Test token with lightweight API call
-            try:
-                await _apple_music_get(
-                    "v1/me/storefront",
-                    user_token=profile.apple_music_token
+        # Test token with lightweight API call
+        try:
+            await _apple_music_get("v1/me/storefront", user_token=token)
+            return {"valid": True}
+        except HTTPException as e:
+            if e.status_code in (401, 403):
+                # Clear invalid token via D1
+                await d1_client.execute(
+                    'UPDATE "profile" SET "appleMusicToken" = NULL WHERE "id" = ?',
+                    [user_id]
                 )
-                return {"valid": True}
-            except HTTPException as e:
-                if e.status_code in (401, 403):
-                    # Clear invalid token
-                    profile.apple_music_token = None
-                    await db.commit()
-                    return {"valid": False, "reason": "token_expired"}
-                raise
+                return {"valid": False, "reason": "token_expired"}
+            raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

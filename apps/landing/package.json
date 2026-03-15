@@ -14,7 +14,8 @@
     "@astrojs/cloudflare": "^12.5.0",
     "@astrojs/react": "^4.2.1",
     "@astrojs/tailwind": "^6.0.2",
-    "@supabase/supabase-js": "^2.78.0",
+    "@playheads/auth": "workspace:*",
+    "drizzle-orm": "^0.44.0",
     "astro": "^5.8.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"

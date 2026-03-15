@@ -1,6 +1,15 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+
+vi.mock('@playheads/auth/src/client', () => ({
+  createClient: () => ({
+    signIn: { social: vi.fn() },
+    signOut: vi.fn(),
+    getSession: vi.fn().mockResolvedValue({ data: null }),
+  }),
+}));
+
 import { LoginScreen } from '../LoginScreen';
 
 describe('LoginScreen', () => {
@@ -45,5 +54,11 @@ describe('LoginScreen', () => {
     render(<LoginScreen {...defaultProps} email="test@test.com" onLogin={onLogin} />);
     await userEvent.click(screen.getByText('Sign In with Email'));
     expect(onLogin).toHaveBeenCalled();
+  });
+
+  it('renders Apple and Google sign-in buttons', () => {
+    render(<LoginScreen {...defaultProps} />);
+    expect(screen.getByText('Continue with Apple')).toBeInTheDocument();
+    expect(screen.getByText('Continue with Google')).toBeInTheDocument();
   });
 });

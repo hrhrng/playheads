@@ -15,6 +15,7 @@ class_name = "BackendContainer"
 tag = "v1"
 new_sqlite_classes = ["BackendContainer"]
 
+
 [observability]
 enabled = true
 

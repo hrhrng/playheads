@@ -13,7 +13,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.78.0",
+    "@playheads/auth": "workspace:*",
+    "better-auth": "^1.2.0",
     "rc-slider": "^11.1.9",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

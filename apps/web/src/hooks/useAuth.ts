@@ -1,6 +1,18 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../utils/supabase';
-import type { SupabaseSession } from '../types';
+import { toast } from 'sonner';
+import { createClient } from '@playheads/auth/src/client';
+
+const authClient = createClient('/api/auth');
+const LINKED_KEY = 'playheads_account_linked_notified';
+
+export interface AuthSession {
+  user: {
+    id: string;
+    email: string;
+    name: string;
+    waitlistApproved?: boolean;
+  };
+}
 
 interface AuthMessage {
   type: 'error' | 'success';
@@ -8,38 +20,54 @@ interface AuthMessage {
 }
 
 export function useAuth() {
-  const [session, setSession] = useState<SupabaseSession | null>(null);
+  const [session, setSession] = useState<AuthSession | null>(null);
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [authMessage, setAuthMessage] = useState<AuthMessage | null>(null);
 
   // Dev mode: skip auth with ?dev=1
   const isDev = import.meta.env.DEV && new URLSearchParams(window.location.search).has('dev');
-  const devSession: SupabaseSession = {
-    access_token: 'dev',
-    refresh_token: 'dev',
-    expires_in: 99999,
-    token_type: 'bearer',
-    user: { id: 'dev-user', email: 'dev@playhead.local' },
+  const devSession: AuthSession = {
+    user: { id: 'dev-user', email: 'dev@playhead.local', name: 'Dev User', waitlistApproved: true },
   };
   const effectiveSession = isDev ? devSession : session;
   const isLoggedIn = !!effectiveSession;
 
+  // Check existing session on mount
   useEffect(() => {
-    console.log('[auth] init, hash:', window.location.hash ? window.location.hash.substring(0, 50) + '...' : '(none)');
-    console.log('[auth] href:', window.location.href);
+    authClient.getSession().then(({ data }) => {
+      if (data?.user) {
+        const u = data.user as Record<string, unknown>;
+        setSession({
+          user: {
+            id: u.id as string,
+            email: u.email as string,
+            name: u.name as string,
+            waitlistApproved: u.waitlistApproved as boolean | undefined,
+          },
+        });
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      console.log('[auth] getSession result:', session ? `token=${session.access_token?.substring(0, 20)}...` : 'null');
-      setSession(session as SupabaseSession | null);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('[auth] onAuthStateChange:', event, session ? 'has session' : 'no session');
-      setSession(session as SupabaseSession | null);
-    });
-
-    return () => subscription.unsubscribe();
+        // Check if accounts were linked (multiple providers)
+        authClient.listAccounts().then(({ data: accountsData }) => {
+          const accounts = (accountsData as unknown as { id: string; provider: string }[]) || [];
+          if (accounts.length > 1) {
+            const notifiedProviders = localStorage.getItem(LINKED_KEY) || '';
+            const providerNames = accounts.map(a => a.provider).sort().join(',');
+            if (notifiedProviders !== providerNames) {
+              localStorage.setItem(LINKED_KEY, providerNames);
+              const names = accounts.map(a =>
+                a.provider === 'credential' ? 'Email' :
+                a.provider.charAt(0).toUpperCase() + a.provider.slice(1)
+              ).join(' + ');
+              toast.info('Accounts linked', {
+                description: `Your ${names} accounts are connected under ${u.email}.`,
+                duration: 6000,
+              });
+            }
+          }
+        }).catch(() => {});
+      }
+    }).catch(() => {});
   }, []);
 
   const handleLogin = useCallback(async (e: React.FormEvent<HTMLFormElement>) => {
@@ -57,7 +85,6 @@ export function useAuth() {
       const data = await res.json();
 
       if (res.ok && data.status !== 'approved') {
-        // Not approved — don't send magic link
         setAuthMessage({ type: 'success', text: data.message || "You're on the list! We'll notify you when it's your turn." });
         setLoading(false);
         return;
@@ -66,22 +93,23 @@ export function useAuth() {
       // Waitlist check failed — proceed with login anyway
     }
 
-    // Approved (or waitlist check failed) — send magic link
-    const { error } = await supabase.auth.signInWithOtp({
+    // Send magic link
+    const { error } = await authClient.signIn.magicLink({
       email,
-      options: { emailRedirectTo: window.location.origin + window.location.pathname },
+      callbackURL: window.location.origin + window.location.pathname,
     });
 
     if (error) {
-      setAuthMessage({ type: 'error', text: error.message });
+      setAuthMessage({ type: 'error', text: error.message || 'Failed to send magic link' });
     } else {
       setAuthMessage({ type: 'success', text: 'Check your email for the login link!' });
     }
     setLoading(false);
   }, [email]);
 
-  const logout = useCallback(() => {
-    supabase.auth.signOut();
+  const logout = useCallback(async () => {
+    await authClient.signOut();
+    setSession(null);
   }, []);
 
   return {

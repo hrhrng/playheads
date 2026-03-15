@@ -1,13 +1,16 @@
+import { drizzle } from "drizzle-orm/d1";
+import { schema } from "@playheads/auth";
+import { eq, inArray, count, asc } from "drizzle-orm";
+
 interface Env {
-  SUPABASE_URL: string;
-  SUPABASE_SERVICE_ROLE_KEY: string;
+  DB: D1Database;
 }
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
 
-    if (url.pathname === "/") return serveHTML(env);
+    if (url.pathname === "/") return serveHTML();
     if (url.pathname === "/api/waitlist" && request.method === "GET") return handleList(request, env);
     if (url.pathname === "/api/waitlist" && request.method === "PATCH") return handleAction(request, env);
     if (url.pathname === "/api/invite" && request.method === "POST") return handleInvite(request, env);
@@ -19,35 +22,36 @@ export default {
 // --- API ---
 
 async function handleList(request: Request, env: Env): Promise<Response> {
-
   const url = new URL(request.url);
-  const status = url.searchParams.get("status") || "";
+  const statusFilter = url.searchParams.get("status") || "";
   const page = parseInt(url.searchParams.get("page") || "1");
   const limit = 50;
   const offset = (page - 1) * limit;
 
-  const base = `${env.SUPABASE_URL}/rest/v1`;
-  const headers: Record<string, string> = {
-    apikey: env.SUPABASE_SERVICE_ROLE_KEY,
-    Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
-    Prefer: "count=exact",
+  const db = drizzle(env.DB);
+
+  // Build query
+  let query = db.select().from(schema.waitlist).orderBy(asc(schema.waitlist.createdAt)).limit(limit).offset(offset);
+  if (statusFilter) {
+    query = query.where(eq(schema.waitlist.status, statusFilter)) as typeof query;
+  }
+  const data = await query;
+
+  // Count totals
+  const countAll = async (s?: string) => {
+    let q = db.select({ value: count() }).from(schema.waitlist);
+    if (s) q = q.where(eq(schema.waitlist.status, s)) as typeof q;
+    const [r] = await q;
+    return r?.value ?? 0;
   };
 
-  let query = `${base}/waitlist?select=*&order=created_at.asc&offset=${offset}&limit=${limit}`;
-  if (status) query += `&status=eq.${status}`;
+  const [totalAll, pending, approved, rejected] = await Promise.all([
+    countAll(), countAll("pending"), countAll("approved"), countAll("rejected"),
+  ]);
 
-  const res = await fetch(query, { headers });
-  const data = await res.json();
-  const total = parseInt(res.headers.get("content-range")?.split("/")[1] || "0");
-
-  const [totalAll, pending, approved, rejected] = await Promise.all(
-    ["", "pending", "approved", "rejected"].map(async (s) => {
-      let q = `${base}/waitlist?select=*&offset=0&limit=0`;
-      if (s) q += `&status=eq.${s}`;
-      const r = await fetch(q, { headers: { ...headers, Prefer: "count=exact" } });
-      return parseInt(r.headers.get("content-range")?.split("/")[1] || "0");
-    })
-  );
+  const total = statusFilter
+    ? { "pending": pending, "approved": approved, "rejected": rejected }[statusFilter] ?? totalAll
+    : totalAll;
 
   return Response.json({
     data,
@@ -65,44 +69,29 @@ async function handleAction(request: Request, env: Env): Promise<Response> {
     return Response.json({ error: 'action must be "approve" or "reject"' }, { status: 400 });
   }
 
-  const base = `${env.SUPABASE_URL}/rest/v1`;
-  const headers: Record<string, string> = {
-    apikey: env.SUPABASE_SERVICE_ROLE_KEY,
-    Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
-    "Content-Type": "application/json",
-    Prefer: "return=minimal",
-  };
-
+  const db = drizzle(env.DB);
+  const now = Date.now();
   const newStatus = action === "approve" ? "approved" : "rejected";
-  const body: Record<string, unknown> = {
+
+  const updates: Record<string, unknown> = {
     status: newStatus,
-    updated_at: new Date().toISOString(),
+    updatedAt: now,
   };
   if (action === "approve") {
-    body.approved_at = new Date().toISOString();
-    body.approved_by = "admin";
+    updates.approvedAt = now;
+    updates.approvedBy = "admin";
   }
 
-  const idsFilter = ids.map((id) => `"${id}"`).join(",");
-  const res = await fetch(`${base}/waitlist?id=in.(${idsFilter})`, {
-    method: "PATCH",
-    headers,
-    body: JSON.stringify(body),
-  });
+  await db.update(schema.waitlist).set(updates).where(inArray(schema.waitlist.id, ids));
 
-  if (!res.ok) {
-    const err = await res.text();
-    return Response.json({ error: err }, { status: 500 });
-  }
-
+  // Sync waitlist approval to user table
   if (action === "approve") {
-    const emailRes = await fetch(
-      `${base}/waitlist?id=in.(${idsFilter})&select=email`,
-      { headers: { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}` } }
-    );
-    const entries = (await emailRes.json()) as { email: string }[];
+    const entries = await db.select({ email: schema.waitlist.email })
+      .from(schema.waitlist)
+      .where(inArray(schema.waitlist.id, ids));
+
     for (const entry of entries) {
-      await syncWaitlistApproval(env, entry.email);
+      await syncWaitlistApproval(db, entry.email);
     }
   }
 
@@ -120,78 +109,46 @@ async function handleInvite(request: Request, env: Env): Promise<Response> {
     return Response.json({ error: "Invalid email format" }, { status: 400 });
   }
 
-  const base = `${env.SUPABASE_URL}/rest/v1`;
-  const headers: Record<string, string> = {
-    apikey: env.SUPABASE_SERVICE_ROLE_KEY,
-    Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
-    "Content-Type": "application/json",
-  };
+  const db = drizzle(env.DB);
+  const now = Date.now();
 
-  // Check if already exists
-  const checkRes = await fetch(
-    `${base}/waitlist?email=eq.${encodeURIComponent(normalized)}&select=id,status`,
-    { headers }
-  );
-  const existing = (await checkRes.json()) as { id: string; status: string }[];
+  const [existing] = await db.select({ id: schema.waitlist.id, status: schema.waitlist.status })
+    .from(schema.waitlist)
+    .where(eq(schema.waitlist.email, normalized));
 
-  if (existing.length > 0) {
-    if (existing[0].status === "approved") {
+  if (existing) {
+    if (existing.status === "approved") {
       return Response.json({ success: true, message: "Already approved" });
     }
-    // Update to approved
-    await fetch(`${base}/waitlist?id=eq.${existing[0].id}`, {
-      method: "PATCH",
-      headers: { ...headers, Prefer: "return=minimal" },
-      body: JSON.stringify({
-        status: "approved",
-        approved_at: new Date().toISOString(),
-        approved_by: "admin",
-        updated_at: new Date().toISOString(),
-      }),
-    });
+    await db.update(schema.waitlist).set({
+      status: "approved", approvedAt: now, approvedBy: "admin", updatedAt: now,
+    }).where(eq(schema.waitlist.id, existing.id));
   } else {
-    // Insert as approved
-    await fetch(`${base}/waitlist`, {
-      method: "POST",
-      headers: { ...headers, Prefer: "return=minimal" },
-      body: JSON.stringify({
-        email: normalized,
-        status: "approved",
-        approved_at: new Date().toISOString(),
-        approved_by: "admin",
-      }),
+    await db.insert(schema.waitlist).values({
+      id: crypto.randomUUID(), email: normalized, status: "approved",
+      approvedAt: now, approvedBy: "admin", createdAt: now, updatedAt: now,
     });
   }
 
-  await syncWaitlistApproval(env, normalized);
+  await syncWaitlistApproval(db, normalized);
   return Response.json({ success: true, message: `${normalized} has been granted access` });
 }
 
-async function syncWaitlistApproval(env: Env, email: string): Promise<void> {
-  const headers = {
-    apikey: env.SUPABASE_SERVICE_ROLE_KEY,
-    Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
-  };
+async function syncWaitlistApproval(db: ReturnType<typeof drizzle>, email: string): Promise<void> {
+  // Update the user's waitlistApproved field in better-auth user table
+  const [user] = await db.select({ id: schema.user.id })
+    .from(schema.user)
+    .where(eq(schema.user.email, email.toLowerCase()));
 
-  const res = await fetch(`${env.SUPABASE_URL}/auth/v1/admin/users?page=1&per_page=50`, { headers });
-  if (!res.ok) return;
-
-  const data = (await res.json()) as { users: { id: string; email?: string; user_metadata?: Record<string, unknown> }[] };
-  const user = data.users?.find((u) => u.email?.toLowerCase() === email.toLowerCase());
   if (!user) return;
 
-  await fetch(`${env.SUPABASE_URL}/auth/v1/admin/users/${user.id}`, {
-    method: "PUT",
-    headers: { ...headers, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      user_metadata: { ...user.user_metadata, waitlist_approved: true },
-    }),
-  });
+  await db.update(schema.user).set({ waitlistApproved: true })
+    .where(eq(schema.user.id, user.id));
 }
 
 // --- HTML ---
 
-function serveHTML(env: Env): Response {
+function serveHTML(): Response {
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -355,7 +312,7 @@ function renderWaitlistPage() {
     <td><input type="checkbox" data-id="\${e.id}" \${selected.has(e.id) ? 'checked' : ''} /></td>
     <td class="email-cell">\${e.email}</td>
     <td><span class="badge badge-\${e.status}">\${e.status}</span></td>
-    <td class="date">\${new Date(e.created_at).toLocaleDateString()}</td>
+    <td class="date">\${new Date(e.createdAt).toLocaleDateString()}</td>
     <td class="actions">\${e.status === 'pending' ? \`
       <button class="btn btn-green" onclick="doAction(['\${e.id}'],'approve')">Approve</button>
       <button class="btn btn-red" onclick="doAction(['\${e.id}'],'reject')">Reject</button>

@@ -109,12 +109,6 @@ export type {
 
 // Global types
 export type {
-  SupabaseSession,
-  SupabaseUser,
-  AppMetadata,
-  UserMetadata,
-  Identity,
-  SupabaseAuthState,
   RouterLocationState,
   Conversation
 } from './global';

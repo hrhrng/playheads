@@ -14,12 +14,12 @@ import type {
   Message,
   AgentAction,
   FormattedTrack,
-  SupabaseSession,
   Conversation
 } from '../types';
+import type { AuthSession } from '../hooks/useAuth';
 
 interface RouteComponentProps {
-  session: SupabaseSession | null;
+  session: AuthSession | null;
   conversations: Conversation[];
   onDeleteConversation: (id: string) => void;
   onPinConversation: (id: string, pinned: boolean) => void;
