@@ -34,6 +34,12 @@ export default {
         ? request.headers.get("X-Lane")!
         : null;
 
+    // admin hostname → admin worker directly (must be before /api/* routing)
+    if (env.ADMIN_HOSTNAME && url.hostname === env.ADMIN_HOSTNAME) {
+      if (lane) return laneProxy("admin", lane, env.PREVIEW_DOMAIN, request);
+      return env.ADMIN.fetch(request);
+    }
+
     // /api/waitlist → landing worker (waitlist API)
     if (url.pathname === "/api/waitlist") {
       if (lane) return laneProxy("landing", lane, env.PREVIEW_DOMAIN, request);
@@ -83,12 +89,6 @@ export default {
       );
 
       return response;
-    }
-
-    // admin hostname → admin worker directly
-    if (env.ADMIN_HOSTNAME && url.hostname === env.ADMIN_HOSTNAME) {
-      if (lane) return laneProxy("admin", lane, env.PREVIEW_DOMAIN, request);
-      return env.ADMIN.fetch(request);
     }
 
     // app hostname → web worker directly
