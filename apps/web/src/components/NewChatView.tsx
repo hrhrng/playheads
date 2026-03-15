@@ -14,6 +14,8 @@ interface NewChatViewProps {
   isDJSpeaking?: boolean;
   /** Whether music is currently playing */
   isPlaying?: boolean;
+  /** Whether a session is being created */
+  isLoading?: boolean;
 }
 
 /**
@@ -23,13 +25,14 @@ export const NewChatView = ({
   onSend,
   suggestions = [],
   isDJSpeaking = false,
-  isPlaying = false
+  isPlaying = false,
+  isLoading = false
 }: NewChatViewProps): React.JSX.Element => {
   const [input, setInput] = useState<string>('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleSend = () => {
-    if (input.trim()) {
+    if (input.trim() && !isLoading) {
       const message = input;
       setInput(''); // Clear input immediately
       onSend(message);
@@ -85,18 +88,28 @@ export const NewChatView = ({
               placeholder={isDJSpeaking ? 'Push to Interrupt...' : 'Start a vibe...'}
               className="flex-1 bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-gray-800 placeholder-gray-400 text-sm resize-none py-2.5 max-h-32 no-scrollbar"
               autoFocus
+              disabled={isLoading}
             />
             <button
               onClick={handleSend}
-              disabled={!input.trim()}
-              className={`p-2 rounded-full transition-all flex-shrink-0 ${input.trim()
-                ? 'bg-gray-800 text-white hover:bg-black'
-                : 'bg-gray-100 text-gray-300'
-                }`}
+              disabled={isLoading || !input.trim()}
+              className={`p-2 rounded-full transition-all flex-shrink-0 ${
+                isLoading
+                  ? 'bg-gray-300 text-white animate-pulse'
+                  : input.trim()
+                  ? 'bg-gray-800 text-white hover:bg-black'
+                  : 'bg-gray-100 text-gray-300'
+              }`}
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 10l7-7m0 0l7 7m-7-7v18" />
-              </svg>
+              {isLoading ? (
+                <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                </svg>
+              )}
             </button>
           </div>
         </div>

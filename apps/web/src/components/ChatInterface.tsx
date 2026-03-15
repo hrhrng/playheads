@@ -121,6 +121,7 @@ export const ChatInterface = ({
         onSend={handleSendMessage}
         isDJSpeaking={isDJSpeaking}
         isPlaying={isPlaying}
+        isLoading={isLoading}
       />
     );
   }

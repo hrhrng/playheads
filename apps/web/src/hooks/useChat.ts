@@ -127,6 +127,7 @@ export function useChat({
     if (!sessionId) {
       if (creatingSessionRef.current) return; // prevent duplicate creates
       creatingSessionRef.current = true;
+      useChatStore.setState({ isLoading: true });
       try {
         if (!userId) {
           throw new Error('User ID is required');
@@ -148,6 +149,7 @@ export function useChat({
         // via useInitialMessage hook
       } catch (error) {
         console.error('Failed to create session:', error);
+        useChatStore.setState({ isLoading: false });
         toast.error('Failed to create chat session', {
           description: 'Please refresh the page or try again'
         });
