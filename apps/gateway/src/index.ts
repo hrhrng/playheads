@@ -16,6 +16,12 @@ interface Env {
   BETTER_AUTH_SECRET: string;
   BETTER_AUTH_URL: string;
   BETTER_AUTH_TRUSTED_ORIGINS: string;
+  APPLE_CLIENT_ID: string;
+  APPLE_KEY_ID: string;
+  APPLE_TEAM_ID: string;
+  APPLE_PRIVATE_KEY: string;
+  GOOGLE_CLIENT_ID: string;
+  GOOGLE_CLIENT_SECRET: string;
 }
 
 function laneProxy(
@@ -53,11 +59,7 @@ export default {
     // /api/auth/* → better-auth handler
     if (url.pathname.startsWith("/api/auth")) {
       const db = drizzle(env.DB);
-      const auth = createAuth(db, {
-        BETTER_AUTH_SECRET: env.BETTER_AUTH_SECRET,
-        BETTER_AUTH_URL: env.BETTER_AUTH_URL,
-        BETTER_AUTH_TRUSTED_ORIGINS: env.BETTER_AUTH_TRUSTED_ORIGINS,
-      });
+      const auth = createAuth(db, env);
       return auth.handler(request);
     }
 
