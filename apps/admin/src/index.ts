@@ -312,7 +312,7 @@ function renderWaitlistPage() {
     <td><input type="checkbox" data-id="\${e.id}" \${selected.has(e.id) ? 'checked' : ''} /></td>
     <td class="email-cell">\${e.email}</td>
     <td><span class="badge badge-\${e.status}">\${e.status}</span></td>
-    <td class="date">\${new Date(e.created_at).toLocaleDateString()}</td>
+    <td class="date">\${new Date(e.createdAt).toLocaleDateString()}</td>
     <td class="actions">\${e.status === 'pending' ? \`
       <button class="btn btn-green" onclick="doAction(['\${e.id}'],'approve')">Approve</button>
       <button class="btn btn-red" onclick="doAction(['\${e.id}'],'reject')">Reject</button>
