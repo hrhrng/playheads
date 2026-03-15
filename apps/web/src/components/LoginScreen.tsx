@@ -22,9 +22,9 @@ export function LoginScreen({ email, setEmail, loading, message, onLogin }: Logi
 
         {/* Title */}
         <div className="text-center space-y-3">
-          <h1 className="text-2xl font-semibold tracking-tight text-air-900 font-sans">Playhead</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-air-900 font-sans">The Playheads</h1>
           <div className="h-px w-12 bg-air-200 mx-auto" />
-          <p className="text-xs font-mono text-air-400 uppercase tracking-widest">Sonic Intelligence</p>
+          <p className="text-xs font-mono text-air-400 uppercase tracking-widest">Return to Music</p>
         </div>
 
         {/* Login Form */}
