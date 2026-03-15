@@ -121,9 +121,15 @@ export default {
         "http://container"
       );
 
+      // Pass D1 credentials as headers so Python always gets latest values
+      const proxyHeaders = new Headers(request.headers);
+      if (env.CLOUDFLARE_ACCOUNT_ID) proxyHeaders.set("X-CF-Account-ID", env.CLOUDFLARE_ACCOUNT_ID);
+      if (env.CLOUDFLARE_API_TOKEN) proxyHeaders.set("X-CF-API-Token", env.CLOUDFLARE_API_TOKEN);
+      if (env.D1_DATABASE_ID) proxyHeaders.set("X-CF-D1-Database-ID", env.D1_DATABASE_ID);
+
       const proxyRequest = new Request(backendUrl.toString(), {
         method: request.method,
-        headers: request.headers,
+        headers: proxyHeaders,
         body: request.body,
       });
 

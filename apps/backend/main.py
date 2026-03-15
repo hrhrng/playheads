@@ -52,6 +52,17 @@ app.add_middleware(
 
 
 @app.middleware("http")
+async def inject_d1_credentials(request: Request, call_next):
+    """Extract D1 credentials from Worker-injected headers into d1_client."""
+    account_id = request.headers.get("x-cf-account-id", "")
+    api_token = request.headers.get("x-cf-api-token", "")
+    db_id = request.headers.get("x-cf-d1-database-id", "")
+    if account_id and api_token and db_id:
+        d1_client.set_request_credentials(account_id, api_token, db_id)
+    return await call_next(request)
+
+
+@app.middleware("http")
 async def timing_middleware(request: Request, call_next):
     """Log total request duration for every endpoint."""
     t0 = time.perf_counter()
