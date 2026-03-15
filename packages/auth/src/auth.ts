@@ -5,6 +5,7 @@
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { magicLink } from 'better-auth/plugins';
+import { eq } from 'drizzle-orm';
 import * as schema from './schema';
 
 export interface AuthEnv {
@@ -200,11 +201,18 @@ export async function createAuthWithApple(db: Parameters<typeof drizzleAdapter>[
         : undefined,
     },
     databaseHooks: {
-      user: {
+      session: {
         create: {
-          after: async (user) => {
-            // Auto-add new users to waitlist as pending
+          after: async (session) => {
+            // On every login, ensure a waitlist entry exists
             try {
+              // Look up user email from session userId
+              const [user] = await db
+                .select({ email: schema.user.email })
+                .from(schema.user)
+                .where(eq(schema.user.id, session.userId));
+              if (!user) return;
+
               const now = Date.now();
               await db.insert(schema.waitlist).values({
                 id: crypto.randomUUID(),
@@ -214,7 +222,7 @@ export async function createAuthWithApple(db: Parameters<typeof drizzleAdapter>[
                 updatedAt: now,
               }).onConflictDoNothing();
             } catch {
-              // Ignore if waitlist entry already exists
+              // Ignore — waitlist entry may already exist
             }
           },
         },
