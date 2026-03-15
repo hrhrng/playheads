@@ -83,7 +83,7 @@ jobs:
           DOMAIN="${{ vars.PRODUCTION_DOMAIN }}"
           declare -A SECRETS=(
             [BETTER_AUTH_SECRET]="${{ secrets.BETTER_AUTH_SECRET }}"
-            [BETTER_AUTH_URL]="https://${DOMAIN}"
+            [BETTER_AUTH_URL]="https://app.${DOMAIN}"
             [BETTER_AUTH_TRUSTED_ORIGINS]="https://${DOMAIN},https://app.${DOMAIN},https://preview.${DOMAIN},https://preview.app.${DOMAIN}"
             [APPLE_CLIENT_ID]="${{ secrets.APPLE_CLIENT_ID }}"
             [APPLE_KEY_ID]="${{ secrets.APPLE_KEY_ID }}"
