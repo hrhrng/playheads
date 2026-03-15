@@ -114,7 +114,13 @@ export default {
 
     try {
       const container = getContainer(env.BACKEND);
-      console.log(JSON.stringify({ event: "got_container", container_type: typeof container }));
+      console.log(JSON.stringify({
+        event: "got_container",
+        container_type: typeof container,
+        has_CF_ACCOUNT_ID: !!env.CLOUDFLARE_ACCOUNT_ID,
+        has_CF_API_TOKEN: !!env.CLOUDFLARE_API_TOKEN,
+        has_D1_DATABASE_ID: !!env.D1_DATABASE_ID,
+      }));
 
       const backendUrl = new URL(
         url.pathname + url.search,
