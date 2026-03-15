@@ -15,6 +15,7 @@ interface Env {
   PREVIEW_DOMAIN: string;
   BETTER_AUTH_SECRET: string;
   BETTER_AUTH_URL: string;
+  BETTER_AUTH_TRUSTED_ORIGINS: string;
 }
 
 function laneProxy(
@@ -55,6 +56,7 @@ export default {
       const auth = createAuth(db, {
         BETTER_AUTH_SECRET: env.BETTER_AUTH_SECRET,
         BETTER_AUTH_URL: env.BETTER_AUTH_URL,
+        BETTER_AUTH_TRUSTED_ORIGINS: env.BETTER_AUTH_TRUSTED_ORIGINS,
       });
       return auth.handler(request);
     }
