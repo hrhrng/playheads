@@ -139,6 +139,9 @@ export function useChat({
         const userMessage: Message = { role: 'user', content: messageText };
         const preservedMessages = [...messages, userMessage];
 
+        // Reset loading before navigation so useInitialMessage can send
+        useChatStore.setState({ isLoading: false });
+
         // Call onSessionCreated to trigger navigation
         // Pass: (sessionId, messages with user message already included, initial message to send)
         if (onSessionCreated) {
