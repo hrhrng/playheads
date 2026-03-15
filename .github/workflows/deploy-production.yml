@@ -62,18 +62,12 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          DOMAIN="${{ vars.PRODUCTION_DOMAIN }}"
-          cat >> wrangler.production.toml <<TOML
-
-          [[routes]]
-          pattern = "admin.${DOMAIN}"
-          custom_domain = true
-          TOML
           npx wrangler deploy --config wrangler.production.toml \
-            --route "app.${DOMAIN}/*" \
-            --route "${DOMAIN}/*" \
-            --var APP_HOSTNAME:app.${DOMAIN} \
-            --var ADMIN_HOSTNAME:admin.${DOMAIN}
+            --route "app.${{ vars.PRODUCTION_DOMAIN }}/*" \
+            --route "${{ vars.PRODUCTION_DOMAIN }}/*" \
+            --route "admin.${{ vars.PRODUCTION_DOMAIN }}/*" \
+            --var APP_HOSTNAME:app.${{ vars.PRODUCTION_DOMAIN }} \
+            --var ADMIN_HOSTNAME:admin.${{ vars.PRODUCTION_DOMAIN }}
 
       - name: Deploy backend worker
         working-directory: apps/backend-worker
