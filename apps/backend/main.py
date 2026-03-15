@@ -464,26 +464,30 @@ async def create_conversation(request: CreateConversationRequest):
 @app.get("/conversations", response_model=ConversationsResponse)
 async def list_conversations(user_id: str):
     """List user's conversations."""
-    rows = await d1_client.query(
-        'SELECT "id", "title", "messageCount", "lastMessagePreview", "lastMessageAt", "isPinned", "updatedAt" '
-        'FROM "conversation" WHERE "userId" = ? AND "isArchived" = 0 '
-        'ORDER BY "isPinned" DESC, "updatedAt" DESC LIMIT 50',
-        [user_id]
-    )
+    try:
+        rows = await d1_client.query(
+            'SELECT "id", "title", "messageCount", "lastMessagePreview", "lastMessageAt", "isPinned", "updatedAt" '
+            'FROM "conversation" WHERE "userId" = ? AND "isArchived" = 0 '
+            'ORDER BY "isPinned" DESC, "updatedAt" DESC LIMIT 50',
+            [user_id]
+        )
 
-    return ConversationsResponse(
-        conversations=[
-            ConversationItem(
-                id=str(c["id"]),
-                title=c.get("title"),
-                message_count=c.get("messageCount") or 0,
-                last_message_preview=c.get("lastMessagePreview"),
-                last_message_at=str(c["lastMessageAt"]) if c.get("lastMessageAt") else None,
-                is_pinned=bool(c.get("isPinned")),
-                updated_at=str(c.get("updatedAt") or "")
-            ) for c in rows
-        ]
-    )
+        return ConversationsResponse(
+            conversations=[
+                ConversationItem(
+                    id=str(c["id"]),
+                    title=c.get("title"),
+                    message_count=c.get("messageCount") or 0,
+                    last_message_preview=c.get("lastMessagePreview"),
+                    last_message_at=str(c["lastMessageAt"]) if c.get("lastMessageAt") else None,
+                    is_pinned=bool(c.get("isPinned")),
+                    updated_at=str(c.get("updatedAt") or "")
+                ) for c in rows
+            ]
+        )
+    except Exception as e:
+        log.error("Failed to list conversations for user=%s: %s", user_id[:8], e, exc_info=True)
+        raise HTTPException(500, f"Failed to list conversations: {str(e)}")
 
 
 @app.delete("/conversations/{conversation_id}")
