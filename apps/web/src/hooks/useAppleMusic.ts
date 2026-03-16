@@ -396,10 +396,27 @@ export default function useAppleMusic({
           return;
         }
 
-        // ── Configure MusicKit ─────────────────────────────────────────
-        // Gate events until the app decides what state to use (see
-        // restoreStateFromBackend).
+        // ── Clear MusicKit's browser-persisted playback state ─────────
+        // MusicKit stores queue/playback state in the browser (localStorage
+        // / IndexedDB) and auto-restores it on configure(). We clear it
+        // so configure() starts with a blank slate — the app's own
+        // restoreStateFromBackend() is the single source of truth.
         playerReadyRef.current = false;
+        try {
+          // Clear localStorage keys that MusicKit uses
+          Object.keys(localStorage).forEach(key => {
+            if (key.startsWith('music.') || key.startsWith('mk-') || key.includes('musickit')) {
+              localStorage.removeItem(key);
+            }
+          });
+          // Clear MusicKit IndexedDB databases
+          const dbs = await (indexedDB.databases?.() ?? Promise.resolve([]));
+          for (const db of dbs) {
+            if (db.name && (db.name.includes('music') || db.name.includes('MusicKit'))) {
+              indexedDB.deleteDatabase(db.name);
+            }
+          }
+        } catch (_) { /* storage access may be restricted */ }
 
         const configOptions: MusicKitConfig & { musicUserToken?: string } = {
           developerToken: developerTokenRef.current!,
@@ -414,7 +431,7 @@ export default function useAppleMusic({
 
         setMusicKit(mk);
         setIsAuthorized(mk.isAuthorized);
-        setQueueState(mk.queue?.items ? [...mk.queue.items] : []);
+        setQueueState([]);
 
         // ── Events ───────────────────────────────────────────────────────
         const on = (event: string, handler: (...args: any[]) => void) => {
@@ -515,14 +532,9 @@ export default function useAppleMusic({
   }, [isTokenChecked, storedMusicUserToken]);
 
   // ==========================================================================
-  // Restore playback state
-  //
-  // Strategy: work WITH MusicKit, not against it.
-  //  1. If MusicKit already auto-restored playback (same track as checkpoint)
-  //     → adopt its state, don't re-trigger setQueue (no double playback).
-  //  2. If MusicKit is idle or on a different track
-  //     → restore from backend checkpoint as before.
-  //  3. Always return checkpoint data for playlist display.
+  // Restore playback from backend checkpoint (single source of truth).
+  // MusicKit's own persistence is cleared on init, so configure() starts
+  // with a blank slate and this function is the only thing that plays.
   // ==========================================================================
   const restoreStateFromBackend = useCallback(async (targetSessionId?: string): Promise<{ playlist?: FormattedTrack[]; current_track?: FormattedTrack | null; is_playing?: boolean; playback_position?: number } | null> => {
     const restoreId = targetSessionId || sessionId;
@@ -538,34 +550,14 @@ export default function useAppleMusic({
       if (!res.ok) { playerReadyRef.current = true; return null; }
 
       const data = await res.json();
-      const { playlist, current_track, is_playing, playback_position } = data;
+      const { current_track, is_playing, playback_position } = data;
 
       if (!musicKit || !musicKit.isAuthorized) {
         playerReadyRef.current = true;
         return data;
       }
 
-      // ── Check if MusicKit already auto-restored this track ────────
-      const mkNowPlaying = musicKit.nowPlayingItem;
-      const mkState = (musicKit as any).playbackState;
-      const mkIsPlaying = mkState === 2 || mkState === 'playing';
-
-      if (mkNowPlaying && current_track?.id && mkNowPlaying.id === current_track.id) {
-        // MusicKit already resumed the same track — adopt its state,
-        // don't call setQueue again (which would cause double playback).
-        console.log('[Restore] MusicKit already playing correct track, adopting its state');
-        setCurrentTrack(mkNowPlaying);
-        setIsPlaying(mkIsPlaying);
-        playerReadyRef.current = true;
-        return data;
-      }
-
-      // ── MusicKit is idle or on wrong track — restore from checkpoint
       if (current_track?.id) {
-        // Stop whatever MusicKit might be playing first
-        if (mkNowPlaying) {
-          try { await musicKit.stop(); } catch (_) {}
-        }
         try {
           await musicKit.setQueue({ song: current_track.id, startPlaying: is_playing } as any);
           if (playback_position && playback_position > 0) {
@@ -576,7 +568,7 @@ export default function useAppleMusic({
           if (classified.category === ErrorCategory.AUTH_EXPIRED) {
             handleAuthLost();
           } else {
-            console.error('[Restore] Failed to restore current track:', restoreErr);
+            console.error('[Restore] Failed:', restoreErr);
           }
         }
       }
