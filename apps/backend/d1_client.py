@@ -114,34 +114,3 @@ async def execute(sql: str, params: list[Any] | None = None) -> int:
     if results and "meta" in results[0]:
         return results[0]["meta"].get("changes", 0)
     return 0
-
-
-async def batch(statements: list[dict[str, Any]]) -> list[list[dict]]:
-    """Execute multiple D1 SQL statements in a single HTTP request (batch API).
-
-    Each statement is {"sql": "...", "params": [...]}.
-    Returns a list of result-row-lists, one per statement.
-    """
-    account_id, _, db_id = _config()
-    url = f"{_BASE}/accounts/{account_id}/d1/database/{db_id}/query"
-
-    client = _get_client()
-    resp = await client.post(url, json=statements)
-
-    if resp.status_code >= 400:
-        log.error("D1 batch failed (%d): %s", resp.status_code, resp.text)
-        raise RuntimeError(f"D1 batch failed: {resp.status_code} {resp.text}")
-
-    data = resp.json()
-    if not data.get("success"):
-        errors = data.get("errors", [])
-        raise RuntimeError(f"D1 batch error: {errors}")
-
-    results = data.get("result", [])
-    out: list[list[dict]] = []
-    for r in results:
-        if "results" in r:
-            out.append(r["results"])
-        else:
-            out.append([])
-    return out
