@@ -684,7 +684,7 @@ export default function useAppleMusic({
       playerReadyRef.current = true;
       if (pendingQueueRef.current) {
         await flushPendingQueue();
-      } else if (!isPlaying) {
+      } else {
         await musicKit.play();
       }
       setIsPlaying(true);
@@ -697,14 +697,12 @@ export default function useAppleMusic({
         showErrorToast(e, 'playback');
       }
     }
-  }, [musicKit, isPlaying, flushPendingQueue, syncMusicKitState, handleAuthLost]);
+  }, [musicKit, flushPendingQueue, syncMusicKitState, handleAuthLost]);
 
   const pause = useCallback(async (): Promise<void> => {
     if (!musicKit) return;
     try {
-      if (isPlaying) {
-        await musicKit.pause();
-      }
+      await musicKit.pause();
       setIsPlaying(false);
       await syncMusicKitState();
     } catch (e) {
@@ -715,17 +713,23 @@ export default function useAppleMusic({
         showErrorToast(e, 'playback');
       }
     }
-  }, [musicKit, isPlaying, syncMusicKitState, handleAuthLost]);
+  }, [musicKit, syncMusicKitState, handleAuthLost]);
 
   const togglePlay = useCallback(async (): Promise<void> => {
     if (!musicKit) return;
     try {
-      if (!isPlaying && pendingQueueRef.current) {
+      // Read real MusicKit state, not stale React closure
+      const currentlyPlaying = musicKit.playbackState === 'playing' || (musicKit.playbackState as any) === 2;
+
+      if (!currentlyPlaying && pendingQueueRef.current) {
         await flushPendingQueue();
         setIsPlaying(true);
+      } else if (currentlyPlaying) {
+        await musicKit.pause();
+        setIsPlaying(false);
       } else {
-        isPlaying ? await musicKit.pause() : await musicKit.play();
-        setIsPlaying(!isPlaying);
+        await musicKit.play();
+        setIsPlaying(true);
       }
       await syncMusicKitState();
     } catch (e) {
@@ -736,7 +740,7 @@ export default function useAppleMusic({
         showErrorToast(e, 'playback');
       }
     }
-  }, [musicKit, isPlaying, flushPendingQueue, syncMusicKitState, handleAuthLost]);
+  }, [musicKit, flushPendingQueue, syncMusicKitState, handleAuthLost]);
 
   const setQueue = useCallback(async (
     items: (string | Track)[],
