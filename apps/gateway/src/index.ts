@@ -179,16 +179,20 @@ async function handleProfile(request: Request, env: Env): Promise<Response> {
 
     const now = Date.now();
 
-    // Upsert: try update, if no rows affected, insert
-    const existing = await db
-      .select()
-      .from(schema.profile)
-      .where(eq(schema.profile.id, body.userId));
-
-    if (existing.length > 0) {
-      await db
-        .update(schema.profile)
-        .set({
+    // Single upsert via INSERT ... ON CONFLICT — 1 query instead of 3
+    await db
+      .insert(schema.profile)
+      .values({
+        id: body.userId,
+        displayName: body.displayName ?? null,
+        avatarUrl: body.avatarUrl ?? null,
+        appleMusicToken: body.appleMusicToken ?? null,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: schema.profile.id,
+        set: {
           ...(body.displayName !== undefined && {
             displayName: body.displayName,
           }),
@@ -197,18 +201,8 @@ async function handleProfile(request: Request, env: Env): Promise<Response> {
             appleMusicToken: body.appleMusicToken,
           }),
           updatedAt: now,
-        })
-        .where(eq(schema.profile.id, body.userId));
-    } else {
-      await db.insert(schema.profile).values({
-        id: body.userId,
-        displayName: body.displayName ?? null,
-        avatarUrl: body.avatarUrl ?? null,
-        appleMusicToken: body.appleMusicToken ?? null,
-        createdAt: now,
-        updatedAt: now,
+        },
       });
-    }
 
     const [updated] = await db
       .select()
