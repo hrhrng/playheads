@@ -35,6 +35,12 @@ interface AppLayoutProps {
   conversations?: Conversation[];
   /** ID of the currently active conversation */
   activeConversationId?: string | null;
+  /** Load more conversations (pagination) */
+  onLoadMoreConversations?: () => void;
+  /** Whether there are more conversations to load */
+  hasMoreConversations?: boolean;
+  /** Whether more conversations are currently being loaded */
+  isLoadingMoreConversations?: boolean;
   /** User email for settings popover */
   userEmail?: string;
   /** User display name */
@@ -63,6 +69,9 @@ export const AppLayout = ({
   onRenameConversation,
   conversations = [],
   activeConversationId = null,
+  onLoadMoreConversations,
+  hasMoreConversations,
+  isLoadingMoreConversations,
   userEmail = '',
   userName = 'User',
   onLogout,
@@ -201,6 +210,9 @@ export const AppLayout = ({
             onPinConversation={onPinConversation}
             onRenameConversation={onRenameConversation}
             onDeleteConversation={handleDeleteRequest}
+            onLoadMore={onLoadMoreConversations}
+            hasMore={hasMoreConversations}
+            isLoadingMore={isLoadingMoreConversations}
           />
         </div>
 

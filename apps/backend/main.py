@@ -439,6 +439,8 @@ class ConversationItem(BaseModel):
 
 class ConversationsResponse(BaseModel):
     conversations: list[ConversationItem]
+    has_more: bool = False
+    next_cursor: Optional[str] = None
 
 class CreateConversationRequest(BaseModel):
     user_id: str
@@ -467,15 +469,59 @@ async def create_conversation(request: CreateConversationRequest):
         raise HTTPException(500, f"Failed to create conversation: {str(e)}")
 
 @app.get("/conversations", response_model=ConversationsResponse)
-async def list_conversations(user_id: str):
-    """List user's conversations."""
+async def list_conversations(
+    user_id: str,
+    limit: int = 20,
+    cursor: Optional[str] = None,
+):
+    """List user's conversations with cursor-based pagination.
+
+    Cursor format: "{isPinned}_{updatedAt}" — encodes the position of the last
+    item on the previous page so the next page can start right after it.
+    """
     try:
-        rows = await d1_client.query(
-            'SELECT "id", "title", "messageCount", "lastMessagePreview", "lastMessageAt", "isPinned", "updatedAt" '
-            'FROM "conversation" WHERE "userId" = ? AND "isArchived" = 0 '
-            'ORDER BY "isPinned" DESC, "updatedAt" DESC LIMIT 50',
-            [user_id]
-        )
+        # Clamp limit to [1, 50]
+        limit = max(1, min(limit, 50))
+
+        # Build query with optional cursor for pagination
+        params: list = [user_id]
+
+        if cursor:
+            # Parse cursor: "isPinned_updatedAt"
+            parts = cursor.split("_", 1)
+            cursor_pinned = int(parts[0])
+            cursor_updated = int(parts[1])
+
+            # Fetch rows after cursor position using (isPinned, updatedAt) ordering
+            # isPinned DESC, updatedAt DESC — so "after" means either:
+            #   - same pinned status but older (lower updatedAt)
+            #   - lower pinned status (unpinned after pinned)
+            sql = (
+                'SELECT "id", "title", "messageCount", "lastMessagePreview", "lastMessageAt", "isPinned", "updatedAt" '
+                'FROM "conversation" WHERE "userId" = ? AND "isArchived" = 0 '
+                'AND ("isPinned" < ? OR ("isPinned" = ? AND "updatedAt" < ?)) '
+                'ORDER BY "isPinned" DESC, "updatedAt" DESC LIMIT ?'
+            )
+            params.extend([cursor_pinned, cursor_pinned, cursor_updated, limit + 1])
+        else:
+            sql = (
+                'SELECT "id", "title", "messageCount", "lastMessagePreview", "lastMessageAt", "isPinned", "updatedAt" '
+                'FROM "conversation" WHERE "userId" = ? AND "isArchived" = 0 '
+                'ORDER BY "isPinned" DESC, "updatedAt" DESC LIMIT ?'
+            )
+            params.append(limit + 1)
+
+        rows = await d1_client.query(sql, params)
+
+        # Check if there are more pages
+        has_more = len(rows) > limit
+        page_rows = rows[:limit]
+
+        # Build next cursor from last item
+        next_cursor = None
+        if has_more and page_rows:
+            last = page_rows[-1]
+            next_cursor = f"{1 if last.get('isPinned') else 0}_{last.get('updatedAt', 0)}"
 
         return ConversationsResponse(
             conversations=[
@@ -487,8 +533,10 @@ async def list_conversations(user_id: str):
                     last_message_at=str(c["lastMessageAt"]) if c.get("lastMessageAt") else None,
                     is_pinned=bool(c.get("isPinned")),
                     updated_at=str(c.get("updatedAt") or "")
-                ) for c in rows
-            ]
+                ) for c in page_rows
+            ],
+            has_more=has_more,
+            next_cursor=next_cursor,
         )
     except Exception as e:
         log.error("Failed to list conversations for user=%s: %s", user_id[:8], e, exc_info=True)

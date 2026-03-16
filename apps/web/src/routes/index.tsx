@@ -24,6 +24,9 @@ interface RouteComponentProps {
   onDeleteConversation: (id: string) => void;
   onPinConversation: (id: string, pinned: boolean) => void;
   onRenameConversation: (id: string, newTitle: string) => void;
+  onLoadMoreConversations?: () => void;
+  hasMoreConversations?: boolean;
+  isLoadingMoreConversations?: boolean;
   isDJSpeaking: boolean;
   appleTrack: Track | null;
   isApplePlaying: boolean;
@@ -53,6 +56,9 @@ export function HomeRoute({
   onDeleteConversation,
   onPinConversation,
   onRenameConversation,
+  onLoadMoreConversations,
+  hasMoreConversations,
+  isLoadingMoreConversations,
   isDJSpeaking,
   appleTrack,
   isApplePlaying,
@@ -94,6 +100,9 @@ export function HomeRoute({
       conversations={conversations}
       activeConversationId={null}
       rightPanel={null}
+      onLoadMoreConversations={onLoadMoreConversations}
+      hasMoreConversations={hasMoreConversations}
+      isLoadingMoreConversations={isLoadingMoreConversations}
       userEmail={session?.user.email || ''}
       userName={session?.user.email?.split('@')[0] || 'User'}
       onLogout={onLogout}
@@ -129,6 +138,9 @@ export function ChatRoute({
   onDeleteConversation,
   onPinConversation,
   onRenameConversation,
+  onLoadMoreConversations,
+  hasMoreConversations,
+  isLoadingMoreConversations,
   isDJSpeaking,
   appleTrack,
   isApplePlaying,
@@ -181,6 +193,9 @@ export function ChatRoute({
       onRenameConversation={onRenameConversation}
       conversations={conversations}
       activeConversationId={id}
+      onLoadMoreConversations={onLoadMoreConversations}
+      hasMoreConversations={hasMoreConversations}
+      isLoadingMoreConversations={isLoadingMoreConversations}
       userEmail={session?.user.email || ''}
       userName={session?.user.email?.split('@')[0] || 'User'}
       onLogout={onLogout}
