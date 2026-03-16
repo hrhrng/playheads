@@ -6,7 +6,7 @@ interface Props {
 
 const { title, description = 'Your AI-powered music companion. Discover, explore, and experience music in a whole new way.' } = Astro.props;
 const appUrl = import.meta.env.PUBLIC_APP_URL || '/';
-const siteUrl = 'https://playheads.net';
+const siteUrl = 'https://playheads.ai';
 const canonicalUrl = new URL(Astro.url.pathname, siteUrl).href;
 const ogImage = `${siteUrl}/og-image.png`;
 ---

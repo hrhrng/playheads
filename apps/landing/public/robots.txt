@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://playheads.net/sitemap-index.xml
+Sitemap: https://playheads.ai/sitemap-index.xml
