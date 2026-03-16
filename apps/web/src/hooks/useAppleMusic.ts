@@ -396,11 +396,9 @@ export default function useAppleMusic({
           return;
         }
 
-        // ── Configure & silence ────────────────────────────────────────
-        // playerReadyRef is the single gate: when false every MusicKit
-        // event is ignored, so whatever the SDK does internally during
-        // init is invisible to the app.  restoreStateFromBackend() is the
-        // only thing that opens it.
+        // ── Configure MusicKit ─────────────────────────────────────────
+        // Gate events until the app decides what state to use (see
+        // restoreStateFromBackend).
         playerReadyRef.current = false;
 
         const configOptions: MusicKitConfig & { musicUserToken?: string } = {
@@ -413,11 +411,10 @@ export default function useAppleMusic({
 
         const mk = await window.MusicKit.configure(configOptions as MusicKitConfig) as MusicKitInstance;
         mkInstance = mk;
-        try { await mk.stop(); } catch (_) {}
 
         setMusicKit(mk);
         setIsAuthorized(mk.isAuthorized);
-        setQueueState([]);
+        setQueueState(mk.queue?.items ? [...mk.queue.items] : []);
 
         // ── Events ───────────────────────────────────────────────────────
         const on = (event: string, handler: (...args: any[]) => void) => {
@@ -518,79 +515,57 @@ export default function useAppleMusic({
   }, [isTokenChecked, storedMusicUserToken]);
 
   // ==========================================================================
-  // Restore state from backend checkpoint
+  // Restore playback state
   //
-  // Two-phase restore:
-  //  1. Fetch checkpoint data from /state (always works, no auth needed)
-  //  2. Restore MusicKit queue from checkpoint (only if MusicKit is authorized)
-  //
-  // Phase 1 is always performed so that callers can use the returned playlist
-  // data regardless of Apple Music auth status. Phase 2 is best-effort.
+  // Strategy: work WITH MusicKit, not against it.
+  //  1. If MusicKit already auto-restored playback (same track as checkpoint)
+  //     → adopt its state, don't re-trigger setQueue (no double playback).
+  //  2. If MusicKit is idle or on a different track
+  //     → restore from backend checkpoint as before.
+  //  3. Always return checkpoint data for playlist display.
   // ==========================================================================
   const restoreStateFromBackend = useCallback(async (targetSessionId?: string): Promise<{ playlist?: FormattedTrack[]; current_track?: FormattedTrack | null; is_playing?: boolean; playback_position?: number } | null> => {
     const restoreId = targetSessionId || sessionId;
-    if (!restoreId) return null;
-
-    // Skip for anonymous sessions
-    if (restoreId === internalSessionId) {
-      console.log('[Restore] Anonymous session, skipping');
-      playerReadyRef.current = true;
-      return null;
-    }
+    if (!restoreId) { playerReadyRef.current = true; return null; }
+    if (restoreId === internalSessionId) { playerReadyRef.current = true; return null; }
 
     try {
-      // Phase 1: Fetch checkpoint data (no MusicKit auth required)
       const url = userId
         ? `${API_BASE}/state?session_id=${restoreId}&user_id=${userId}`
         : `${API_BASE}/state?session_id=${restoreId}`;
 
-      console.log(`[Restore] Loading checkpoint for session: ${restoreId}`);
       const res = await fetch(url);
-
-      if (!res.ok) {
-        if (res.status === 404) {
-          console.log('[Restore] No checkpoint found (new session)');
-        } else {
-          console.error('[Restore] Failed to fetch checkpoint:', res.status);
-        }
-        // No checkpoint — open the gate so normal playback works
-        playerReadyRef.current = true;
-        return null;
-      }
+      if (!res.ok) { playerReadyRef.current = true; return null; }
 
       const data = await res.json();
       const { playlist, current_track, is_playing, playback_position } = data;
 
-      // Phase 2: Restore MusicKit playback (requires auth)
-      // If MusicKit isn't authorized, return data for display but open gate.
       if (!musicKit || !musicKit.isAuthorized) {
-        console.log('[Restore] MusicKit not authorized, skipping playback restore (data still returned)');
         playerReadyRef.current = true;
         return data;
       }
 
-      if (!playlist || playlist.length === 0) {
-        console.log('[Restore] Empty playlist in checkpoint');
+      // ── Check if MusicKit already auto-restored this track ────────
+      const mkNowPlaying = musicKit.nowPlayingItem;
+      const mkState = (musicKit as any).playbackState;
+      const mkIsPlaying = mkState === 2 || mkState === 'playing';
+
+      if (mkNowPlaying && current_track?.id && mkNowPlaying.id === current_track.id) {
+        // MusicKit already resumed the same track — adopt its state,
+        // don't call setQueue again (which would cause double playback).
+        console.log('[Restore] MusicKit already playing correct track, adopting its state');
+        setCurrentTrack(mkNowPlaying);
+        setIsPlaying(mkIsPlaying);
         playerReadyRef.current = true;
         return data;
       }
 
-      // Validate track IDs
-      const validTrackIds = playlist
-        .map((t: FormattedTrack) => t.id)
-        .filter((id: string) => id && id !== 'undefined' && id !== 'null');
-
-      if (validTrackIds.length === 0) {
-        console.warn('[Restore] No valid track IDs in checkpoint');
-        playerReadyRef.current = true;
-        return data;
-      }
-
-      console.log(`[Restore] Restoring from checkpoint (${validTrackIds.length} tracks in playlist)`);
-
-      // Restore single track. Gate is still closed so setQueue/play
-      // events don't trigger stale syncs.
+      // ── MusicKit is idle or on wrong track — restore from checkpoint
       if (current_track?.id) {
+        // Stop whatever MusicKit might be playing first
+        if (mkNowPlaying) {
+          try { await musicKit.stop(); } catch (_) {}
+        }
         try {
           await musicKit.setQueue({ song: current_track.id, startPlaying: is_playing } as any);
           if (playback_position && playback_position > 0) {
@@ -606,11 +581,10 @@ export default function useAppleMusic({
         }
       }
 
-      // Open the gate — from here MusicKit events flow to app state
       playerReadyRef.current = true;
       return data;
     } catch (e) {
-      console.error('[Restore] Failed to restore from checkpoint:', e);
+      console.error('[Restore] Failed:', e);
       playerReadyRef.current = true;
       return null;
     }
