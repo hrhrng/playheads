@@ -666,11 +666,19 @@ export default function useAppleMusic({
     if (!musicKit) return;
     try {
       playerReadyRef.current = true;
-      await musicKit.play();
-      // Seek to saved position after play starts (media must be loaded first)
       const pendingSeek = pendingSeekRef.current;
-      if (pendingSeek !== null) {
-        pendingSeekRef.current = null;
+      pendingSeekRef.current = null;
+      await musicKit.play();
+      // Seek to saved position — must wait until media is actually
+      // playing (buffered), otherwise seekToTime silently fails.
+      if (pendingSeek !== null && pendingSeek > 0) {
+        await new Promise<void>((resolve) => {
+          const onTime = () => {
+            musicKit!.removeEventListener('playbackTimeDidChange', onTime);
+            resolve();
+          };
+          musicKit!.addEventListener('playbackTimeDidChange', onTime);
+        });
         await musicKit.seekToTime(pendingSeek);
       }
       await syncMusicKitState();
