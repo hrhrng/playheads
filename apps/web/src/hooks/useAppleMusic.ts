@@ -659,9 +659,12 @@ export default function useAppleMusic({
   // ==========================================================================
   // Playback Controls (with sync)
   // ==========================================================================
+  const isFlushingRef = useRef(false);
+
   const flushPendingQueue = useCallback(async () => {
     const pending = pendingQueueRef.current;
-    if (!pending || !musicKit) return;
+    if (!pending || !musicKit || isFlushingRef.current) return;
+    isFlushingRef.current = true;
     pendingQueueRef.current = null;
     isRestoringRef.current = true;
     try {
@@ -669,6 +672,7 @@ export default function useAppleMusic({
     } finally {
       isRestoringRef.current = false;
       restoreFinishedAtRef.current = Date.now();
+      isFlushingRef.current = false;
     }
   }, [musicKit]);
 
@@ -678,9 +682,10 @@ export default function useAppleMusic({
       playerReadyRef.current = true;
       if (pendingQueueRef.current) {
         await flushPendingQueue();
-      } else {
+      } else if (!isPlaying) {
         await musicKit.play();
       }
+      setIsPlaying(true);
       await syncMusicKitState();
     } catch (e) {
       const classified = classifyError(e);
@@ -690,12 +695,15 @@ export default function useAppleMusic({
         showErrorToast(e, 'playback');
       }
     }
-  }, [musicKit, flushPendingQueue, syncMusicKitState, handleAuthLost]);
+  }, [musicKit, isPlaying, flushPendingQueue, syncMusicKitState, handleAuthLost]);
 
   const pause = useCallback(async (): Promise<void> => {
     if (!musicKit) return;
     try {
-      await musicKit.pause();
+      if (isPlaying) {
+        await musicKit.pause();
+      }
+      setIsPlaying(false);
       await syncMusicKitState();
     } catch (e) {
       const classified = classifyError(e);
@@ -705,15 +713,17 @@ export default function useAppleMusic({
         showErrorToast(e, 'playback');
       }
     }
-  }, [musicKit, syncMusicKitState, handleAuthLost]);
+  }, [musicKit, isPlaying, syncMusicKitState, handleAuthLost]);
 
   const togglePlay = useCallback(async (): Promise<void> => {
     if (!musicKit) return;
     try {
       if (!isPlaying && pendingQueueRef.current) {
         await flushPendingQueue();
+        setIsPlaying(true);
       } else {
         isPlaying ? await musicKit.pause() : await musicKit.play();
+        setIsPlaying(!isPlaying);
       }
       await syncMusicKitState();
     } catch (e) {
