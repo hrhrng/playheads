@@ -479,6 +479,16 @@ export default function useAppleMusic({
         on('playbackStateDidChange', (e: any) => {
           if (!playerReadyRef.current) return;
           const state = e.state;
+
+          console.log('[MK] playbackStateDidChange:', {
+            state,
+            nowPlayingId: mk.nowPlayingItem?.id,
+            nowPlayingTitle: (mk.nowPlayingItem as any)?.attributes?.name,
+            lastPlayingTrackId: lastPlayingTrackIdRef.current,
+            playlistLength: playingPlaylistRef.current.length,
+            isAdvancing: isAdvancingRef.current,
+          });
+
           const playing = state === 'playing' || state === 2;
           const paused  = state === 'paused'  || state === 3;
           setIsPlaying(playing);
@@ -490,6 +500,18 @@ export default function useAppleMusic({
 
           // Auto-advance from OUR playlist
           const ended = state === 'completed' || state === 10 || state === 'ended' || state === 5;
+          if (ended) {
+            const playlist = playingPlaylistRef.current;
+            const currentId = mk.nowPlayingItem?.id || lastPlayingTrackIdRef.current;
+            const idx = currentId ? playlist.findIndex(t => t.id === currentId) : -1;
+            console.log('[MK] Track ended:', {
+              currentId,
+              idx,
+              playlistLength: playlist.length,
+              isAdvancing: isAdvancingRef.current,
+              willAdvance: idx >= 0 && idx < playlist.length - 1 && !isAdvancingRef.current,
+            });
+          }
           if (ended && !isAdvancingRef.current) {
             const playlist = playingPlaylistRef.current;
             const currentId = mk.nowPlayingItem?.id || lastPlayingTrackIdRef.current;
@@ -680,6 +702,7 @@ export default function useAppleMusic({
 
   const play = useCallback(async (): Promise<void> => {
     if (!musicKit) return;
+    console.log('[MK] play() called, pending:', !!pendingQueueRef.current, 'mkState:', musicKit.playbackState);
     try {
       playerReadyRef.current = true;
       if (pendingQueueRef.current) {
@@ -701,6 +724,7 @@ export default function useAppleMusic({
 
   const pause = useCallback(async (): Promise<void> => {
     if (!musicKit) return;
+    console.log('[MK] pause() called, mkState:', musicKit.playbackState);
     try {
       await musicKit.pause();
       setIsPlaying(false);
@@ -717,6 +741,7 @@ export default function useAppleMusic({
 
   const togglePlay = useCallback(async (): Promise<void> => {
     if (!musicKit) return;
+    console.log('[MK] togglePlay() called, mkState:', musicKit.playbackState, 'pending:', !!pendingQueueRef.current);
     try {
       // Read real MusicKit state, not stale React closure
       const currentlyPlaying = musicKit.playbackState === 'playing' || (musicKit.playbackState as any) === 2;
