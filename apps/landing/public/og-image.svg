@@ -1,0 +1,36 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="1200" height="630" fill="#F9FAFB"/>
+
+  <!-- Subtle grid pattern -->
+  <defs>
+    <pattern id="grid" width="60" height="60" patternUnits="userSpaceOnUse">
+      <path d="M 60 0 L 0 0 0 60" fill="none" stroke="#F3F4F6" stroke-width="1"/>
+    </pattern>
+  </defs>
+  <rect width="1200" height="630" fill="url(#grid)"/>
+
+  <!-- Music bars (centered, above title) -->
+  <g transform="translate(575, 210)">
+    <rect x="0" y="20" width="6" height="16" rx="3" fill="#9CA3AF"/>
+    <rect x="12" y="8" width="6" height="28" rx="3" fill="#9CA3AF"/>
+    <rect x="24" y="14" width="6" height="22" rx="3" fill="#9CA3AF"/>
+    <rect x="36" y="4" width="6" height="32" rx="3" fill="#9CA3AF"/>
+  </g>
+
+  <!-- Title -->
+  <text x="600" y="310" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif" font-size="52" font-weight="600" fill="#111827" letter-spacing="-0.02em">The Playheads</text>
+
+  <!-- Decorative lines around subtitle -->
+  <line x1="440" y1="345" x2="510" y2="345" stroke="#E5E7EB" stroke-width="1"/>
+  <line x1="690" y1="345" x2="760" y2="345" stroke="#E5E7EB" stroke-width="1"/>
+
+  <!-- Subtitle -->
+  <text x="600" y="350" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif" font-size="14" fill="#9CA3AF" letter-spacing="0.25em" font-weight="400" text-transform="uppercase">RETURN TO MUSIC</text>
+
+  <!-- Description -->
+  <text x="600" y="400" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif" font-size="20" fill="#6B7280">Your AI-powered music companion</text>
+
+  <!-- Bottom border accent -->
+  <rect x="0" y="620" width="1200" height="10" fill="#E5E7EB"/>
+</svg>

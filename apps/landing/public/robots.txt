@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://playheads.net/sitemap-index.xml
