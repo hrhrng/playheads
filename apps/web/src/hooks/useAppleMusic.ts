@@ -406,11 +406,13 @@ export default function useAppleMusic({
 
         // Kill ALL media elements in the DOM — MusicKit injects hidden
         // <audio> tags that can keep streaming even after stop().
+        // NOTE: Do NOT call media.load() here — it races with MusicKit's
+        // internal play() promise and triggers "play() interrupted by load()".
         document.querySelectorAll('audio, video').forEach(el => {
           const media = el as HTMLMediaElement;
           media.pause();
           media.removeAttribute('src');
-          media.load(); // abort any in-flight network request
+          media.srcObject = null;
         });
 
         // ── Create fresh instance ────────────────────────────────────────
@@ -575,7 +577,7 @@ export default function useAppleMusic({
         const media = el as HTMLMediaElement;
         media.pause();
         media.removeAttribute('src');
-        media.load();
+        media.srcObject = null;
       });
     };
   }, [isTokenChecked, storedMusicUserToken]);
