@@ -583,6 +583,26 @@ export default function useAppleMusic({
           if (playback_position && playback_position > 0) {
             musicKit.seekToTime(playback_position);
           }
+          // Manually update React state since we're not calling play() —
+          // MusicKit events won't fire to populate the UI.
+          if (musicKit.nowPlayingItem) {
+            setCurrentTrack(musicKit.nowPlayingItem);
+          } else {
+            // Fallback: use backend data directly
+            setCurrentTrack({
+              id: current_track.id,
+              name: current_track.name,
+              artistName: current_track.artist,
+              albumName: current_track.album,
+              artworkURL: current_track.artwork_url,
+              artwork: current_track.artwork_url ? { url: current_track.artwork_url } : undefined,
+              duration: current_track.duration || 0,
+            } as any);
+          }
+          setPlaybackTime({
+            current: playback_position || 0,
+            total: current_track.duration || 0,
+          });
         } catch (restoreErr) {
           const classified = classifyError(restoreErr);
           if (classified.category === ErrorCategory.AUTH_EXPIRED) {
