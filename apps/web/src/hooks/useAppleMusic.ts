@@ -403,12 +403,26 @@ export default function useAppleMusic({
         // restoreStateFromBackend() is the single source of truth.
         playerReadyRef.current = false;
         try {
+          // Extract kid from developer token JWT to construct the
+          // localStorage key MusicKit uses: "music.{kid}.media-user-token"
+          let musicKitKeyId = '';
+          try {
+            const jwtHeader = JSON.parse(atob(developerTokenRef.current!.split('.')[0]));
+            musicKitKeyId = jwtHeader.kid || '';
+          } catch (_) { /* ignore */ }
+
           // Clear ALL MusicKit localStorage keys (playback state, queue, token).
           Object.keys(localStorage).forEach(key => {
             if (key.startsWith('music.') || key.startsWith('mk-')) {
               localStorage.removeItem(key);
             }
           });
+
+          // Write server-side token back before configure() so MusicKit
+          // sees it as authorized immediately.
+          if (storedMusicUserToken && musicKitKeyId) {
+            localStorage.setItem(`music.${musicKitKeyId}.media-user-token`, storedMusicUserToken);
+          }
           // Clear MusicKit IndexedDB databases
           const dbs = await (indexedDB.databases?.() ?? Promise.resolve([]));
           for (const db of dbs) {
@@ -428,16 +442,6 @@ export default function useAppleMusic({
 
         const mk = await window.MusicKit.configure(configOptions as MusicKitConfig) as MusicKitInstance;
         mkInstance = mk;
-
-        // After configure(), MusicKit creates its localStorage key.
-        // Write the server-side token into it so subsequent reloads
-        // see the auth state even before configure() runs again.
-        if (storedMusicUserToken) {
-          const mutKey = Object.keys(localStorage).find(k => k.includes('media-user-token'));
-          if (mutKey) {
-            localStorage.setItem(mutKey, storedMusicUserToken);
-          }
-        }
 
         setMusicKit(mk);
         setIsAuthorized(mk.isAuthorized);
