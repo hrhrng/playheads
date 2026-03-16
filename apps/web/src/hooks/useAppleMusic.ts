@@ -93,6 +93,13 @@ export default function useAppleMusic({
   const playingPlaylistRef = useRef<FormattedTrack[]>([]);
   const playingSessionIdRef = useRef<string | null>(null);
 
+  // ── MusicKit decoupling gate ───────────────────────────────────────
+  // When false, ALL MusicKit event-driven state changes are ignored.
+  // This prevents MusicKit's internal auto-restore / stale events from
+  // polluting app state. Only set to true after the app's own restore
+  // (from backend checkpoint) has completed.
+  const playerReadyRef = useRef(false);
+
   // Generate a fallback UUID for anonymous sessions
   const generateUUID = (): string => {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
@@ -390,33 +397,17 @@ export default function useAppleMusic({
           return;
         }
 
-        // ── Nuke any pre-existing MusicKit instance ──────────────────────
-        // On page refresh MusicKit SDK may auto-restore playback from its
-        // internal persistence (IndexedDB / MediaSession). We destroy
-        // everything first so our own restore is the single source of truth.
-        console.log('[MusicKit] Destroying previous instance (if any)...');
-        try {
-          // Grab the old singleton before configure() overwrites it
-          const old = (window.MusicKit as any).getInstance?.() as MusicKitInstance | null;
-          if (old) {
-            try { await old.stop(); } catch (_) {}
-            try { await old.setQueue({ songs: [] } as any); } catch (_) {}
-          }
-        } catch (_) {}
+        // ── Configure MusicKit as a silent DRM engine ──────────────────
+        // MusicKit is ONLY used to: (1) authenticate, (2) decode DRM audio,
+        // (3) search the catalog. All playback state (playlist, current
+        // track, isPlaying, position) is owned by the app, not MusicKit.
+        //
+        // On init we force MusicKit into a fully silent state. Event
+        // handlers are gated behind playerReadyRef — nothing from MusicKit
+        // can touch app state until the app's own restore completes.
+        playerReadyRef.current = false;
 
-        // Kill ALL media elements in the DOM — MusicKit injects hidden
-        // <audio> tags that can keep streaming even after stop().
-        // NOTE: Do NOT call media.load() here — it races with MusicKit's
-        // internal play() promise and triggers "play() interrupted by load()".
-        document.querySelectorAll('audio, video').forEach(el => {
-          const media = el as HTMLMediaElement;
-          media.pause();
-          media.removeAttribute('src');
-          media.srcObject = null;
-        });
-
-        // ── Create fresh instance ────────────────────────────────────────
-        console.log('[MusicKit] Configuring fresh MusicKit instance...');
+        console.log('[MusicKit] Configuring MusicKit (silent mode)...');
         const configOptions: MusicKitConfig & { musicUserToken?: string } = {
           developerToken: developerTokenRef.current!,
           app: { name: 'Playhead', build: '1.0.0' }
@@ -429,36 +420,40 @@ export default function useAppleMusic({
 
         const mk = await window.MusicKit.configure(configOptions as MusicKitConfig) as MusicKitInstance;
         mkInstance = mk;
-        console.log('[MusicKit] Configured successfully, isAuthorized:', mk.isAuthorized);
 
-        // Even after a fresh configure(), stop + clear queue once more to be
-        // absolutely sure no residual playback slips through.
+        // Force silent: disable autoplay and stop whatever MusicKit
+        // may have auto-restored from its internal persistence.
+        mk.autoplay = false;
         try { await mk.stop(); } catch (_) {}
-        try { await mk.setQueue({ songs: [] } as any); } catch (_) {}
+        console.log('[MusicKit] Configured (silent), isAuthorized:', mk.isAuthorized);
 
         setMusicKit(mk);
         setIsAuthorized(mk.isAuthorized);
         setQueueState([]);
 
-        // Event Listeners — store references so we can remove them on cleanup
+        // ── Event listeners ───────────────────────────────────────────
+        // All playback-related events are gated behind playerReadyRef.
+        // Until the app's own restore completes, MusicKit's internal
+        // state changes are completely ignored — MusicKit is just a
+        // silent DRM decoder, nothing more.
         const on = (event: string, handler: (...args: any[]) => void) => {
           mk.addEventListener(event, handler);
           listeners.push([event, handler]);
         };
 
+        // Auth events are always relevant (not gated)
         on('authorizationStatusDidChange', () => {
           const wasAuthorized = isAuthorized;
           const nowAuthorized = mk.isAuthorized;
-
           setIsAuthorized(nowAuthorized);
-
-          // Detect authentication loss
           if (wasAuthorized && !nowAuthorized) {
             handleAuthLost();
           }
         });
 
+        // Playback events — only processed when playerReady
         on('mediaItemDidChange', (event: any) => {
+          if (!playerReadyRef.current) return;
           if (event.item) {
             setCurrentTrack(event.item);
             setPlaybackTime({ current: 0, total: 0 });
@@ -466,12 +461,11 @@ export default function useAppleMusic({
         });
 
         on('nowPlayingItemDidChange', () => {
+          if (!playerReadyRef.current) return;
           const item = mk.nowPlayingItem;
           if (item) {
             setCurrentTrack(item);
             setPlaybackTime({ current: 0, total: 0 });
-            // Sync to backend when track auto-advances — but NOT during restore
-            // (restore reads from backend; syncing back would overwrite with stale viewedPlaylist)
             if (!isRestoringRef.current) {
               syncMusicKitStateRef.current();
             }
@@ -479,39 +473,33 @@ export default function useAppleMusic({
         });
 
         on('playbackStateDidChange', (event: any) => {
+          if (!playerReadyRef.current) return;
           const state = event.state;
           const isPlayingNow = state === 'playing' || state === 2;
           const isPausedNow = state === 'paused' || state === 3;
           setIsPlaying(isPlayingNow);
           if (mk.nowPlayingItem) {
             setCurrentTrack(mk.nowPlayingItem);
-            // Track the last playing song so we know which song just ended
             if (isPlayingNow) {
               lastPlayingTrackIdRef.current = mk.nowPlayingItem.id;
             }
           }
 
-          // Sync on play/pause so the backend checkpoint reflects real playback state.
-          // Without this, pausing then refreshing would resume as "playing" (stale).
-          // Skip during restore to avoid writing back the state we just loaded.
           if ((isPlayingNow || isPausedNow) && !isRestoringRef.current) {
             syncMusicKitStateRef.current();
           }
 
-          // Auto-advance: when a song ends, play the next track from our playlist
-          // Check both string and numeric values for robustness
+          // Auto-advance: when a song ends, play the next from OUR playlist
           const isCompleted = state === 'completed' || state === 10;
           const isEnded = state === 'ended' || state === 5;
 
           if ((isCompleted || isEnded) && !isAdvancingRef.current) {
             const playlist = playingPlaylistRef.current;
-            // nowPlayingItem may be null after single-song queue ends, use ref as fallback
             const currentId = mk.nowPlayingItem?.id || lastPlayingTrackIdRef.current;
             if (currentId && playlist.length > 0) {
               const currentIdx = playlist.findIndex(t => t.id === currentId);
               if (currentIdx >= 0 && currentIdx < playlist.length - 1) {
                 isAdvancingRef.current = true;
-                // Try next tracks, skipping any that fail to resolve
                 const tryPlay = async (startIdx: number) => {
                   for (let i = startIdx; i < playlist.length; i++) {
                     const track = playlist[i];
@@ -519,7 +507,7 @@ export default function useAppleMusic({
                     try {
                       console.log('[AutoAdvance] Playing next:', track.id);
                       await mk.setQueue({ song: track.id, startPlaying: true } as any);
-                      return; // success
+                      return;
                     } catch (e: any) {
                       const classified = classifyError(e);
                       if (classified.category === ErrorCategory.AUTH_EXPIRED) {
@@ -537,11 +525,15 @@ export default function useAppleMusic({
           }
         });
 
+        // Queue events — ignored; we manage our own playlist
+        // (only kept for devtools / debugging visibility)
         on('queueItemsDidChange', () => {
+          if (!playerReadyRef.current) return;
           setQueueState([...mk.queue.items]);
         });
 
         on('playbackTimeDidChange', (event: any) => {
+          if (!playerReadyRef.current) return;
           setPlaybackTime({
             current: event.currentPlaybackTime,
             total: event.currentPlaybackDuration
@@ -563,22 +555,15 @@ export default function useAppleMusic({
 
     return () => {
       document.removeEventListener('musickitloaded', initMusicKit);
-      // Aggressively tear down MusicKit: stop, clear queue, remove listeners,
-      // and kill any orphaned media elements to prevent ghost audio.
+      // Gate closed — no more events processed
+      playerReadyRef.current = false;
+      // Stop playback and remove listeners
       if (mkInstance) {
         try { mkInstance.stop(); } catch (_) { /* ignore */ }
-        try { mkInstance.setQueue({ songs: [] } as any); } catch (_) { /* ignore */ }
         listeners.forEach(([event, handler]) => {
           try { mkInstance!.removeEventListener(event, handler); } catch (_) { /* ignore */ }
         });
       }
-      // Kill all media elements to ensure no ghost audio survives
-      document.querySelectorAll('audio, video').forEach(el => {
-        const media = el as HTMLMediaElement;
-        media.pause();
-        media.removeAttribute('src');
-        media.srcObject = null;
-      });
     };
   }, [isTokenChecked, storedMusicUserToken]);
 
@@ -599,6 +584,7 @@ export default function useAppleMusic({
     // Skip for anonymous sessions
     if (restoreId === internalSessionId) {
       console.log('[Restore] Anonymous session, skipping');
+      playerReadyRef.current = true;
       return null;
     }
 
@@ -617,39 +603,43 @@ export default function useAppleMusic({
         } else {
           console.error('[Restore] Failed to fetch checkpoint:', res.status);
         }
+        // No checkpoint — open the gate so normal playback works
+        playerReadyRef.current = true;
         return null;
       }
 
       const data = await res.json();
       const { playlist, current_track, is_playing, playback_position } = data;
 
-      // Phase 2: Restore MusicKit queue (requires auth)
-      // If MusicKit isn't authorized, still return the data so callers can
-      // use the playlist for display — just skip the playback restore.
+      // Phase 2: Restore MusicKit playback (requires auth)
+      // If MusicKit isn't authorized, return data for display but open gate.
       if (!musicKit || !musicKit.isAuthorized) {
         console.log('[Restore] MusicKit not authorized, skipping playback restore (data still returned)');
+        playerReadyRef.current = true;
         return data;
       }
 
       if (!playlist || playlist.length === 0) {
         console.log('[Restore] Empty playlist in checkpoint');
+        playerReadyRef.current = true;
         return data;
       }
 
-      // Validate track IDs (filter out null/undefined/invalid)
+      // Validate track IDs
       const validTrackIds = playlist
         .map((t: FormattedTrack) => t.id)
         .filter((id: string) => id && id !== 'undefined' && id !== 'null');
 
       if (validTrackIds.length === 0) {
         console.warn('[Restore] No valid track IDs in checkpoint');
+        playerReadyRef.current = true;
         return data;
       }
 
       console.log(`[Restore] Restoring from checkpoint (${validTrackIds.length} tracks in playlist)`);
 
-      // Only restore current track as single-song playback.
-      // Suppress sync during restore to avoid overwriting backend with stale data.
+      // Restore single track. Gate stays closed during this so MusicKit's
+      // internal events from setQueue/play don't trigger stale syncs.
       if (current_track?.id) {
         isRestoringRef.current = true;
         try {
@@ -672,10 +662,14 @@ export default function useAppleMusic({
         }
       }
 
-      console.log('[Restore] State restored from checkpoint ✓');
+      // ── Open the gate ──────────────────────────────────────────────
+      // From this point on MusicKit events flow through to app state.
+      playerReadyRef.current = true;
+      console.log('[Restore] Player ready — MusicKit events now active ✓');
       return data;
     } catch (e) {
       console.error('[Restore] Failed to restore from checkpoint:', e);
+      playerReadyRef.current = true;
       return null;
     }
   }, [musicKit, sessionId, userId, internalSessionId]);
@@ -728,6 +722,7 @@ export default function useAppleMusic({
   const play = useCallback(async (): Promise<void> => {
     if (!musicKit) return;
     try {
+      playerReadyRef.current = true;
       await musicKit.play();
       await syncMusicKitState();
     } catch (e) {
@@ -776,6 +771,7 @@ export default function useAppleMusic({
   ): Promise<void> => {
     if (!musicKit) return;
     try {
+      playerReadyRef.current = true;
       await musicKit.setQueue({ items: items as any });
       if (items.length > 0) setCurrentTrack(items[0] as Track);
       if (startPlaying) {
@@ -802,6 +798,7 @@ export default function useAppleMusic({
         return;
       }
 
+      playerReadyRef.current = true;
       await musicKit.setQueue({ song: targetTrack.id, startPlaying: true } as any);
       await syncMusicKitState();
     } catch (e) {
