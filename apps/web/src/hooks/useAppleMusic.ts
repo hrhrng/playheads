@@ -19,6 +19,10 @@ import type {
   AgentAction
 } from '../types/index.d';
 
+// Module-level guard: prevents StrictMode double-mount from running
+// two MusicKit.configure() calls concurrently.
+let isConfiguring = false;
+
 interface UseAppleMusicParams {
   userId: string | null;
   activeSessionId: string | null;
@@ -361,6 +365,8 @@ export default function useAppleMusic({
     let mkInstance: MusicKitInstance | null = null;
 
     const initMusicKit = async (): Promise<void> => {
+      if (isConfiguring) return; // StrictMode double-mount guard
+      isConfiguring = true;
       try {
         if (!window.MusicKit) {
           console.error('[MusicKit] window.MusicKit not available — CDN script may not have loaded');
@@ -518,6 +524,7 @@ export default function useAppleMusic({
         console.error('Error initializing MusicKit:', err);
       } finally {
         setIsInitializing(false);
+        isConfiguring = false;
       }
     };
 
@@ -569,22 +576,12 @@ export default function useAppleMusic({
 
       if (current_track?.id) {
         try {
-          // Load queue without auto-playing (MusicKit's internal startPlaying
-          // uses alert() on autoplay failure which we can't suppress).
-          // Then attempt play() ourselves so we can catch the error silently.
+          // Restore queue and position only — never auto-play on page load.
+          // The user must tap play to resume. This prevents ghost background
+          // playback and browser autoplay policy issues.
           await musicKit.setQueue({ song: current_track.id, startPlaying: false } as any);
           if (playback_position && playback_position > 0) {
             musicKit.seekToTime(playback_position);
-          }
-          if (is_playing) {
-            try {
-              await musicKit.play();
-            } catch (_) {
-              // Autoplay blocked by browser — user will need to tap play.
-              // This is expected on first visit; once MEI builds up,
-              // Chrome will allow autoplay automatically.
-              console.log('[Restore] Autoplay blocked by browser policy, user tap required');
-            }
           }
         } catch (restoreErr) {
           const classified = classifyError(restoreErr);
