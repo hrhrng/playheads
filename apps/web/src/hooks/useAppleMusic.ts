@@ -691,36 +691,8 @@ export default function useAppleMusic({
     isFlushingRef.current = true;
     pendingQueueRef.current = null;
     isRestoringRef.current = true;
-    const needSeek = pending.startTime != null && pending.startTime > 0;
     try {
-      if (needSeek) {
-        // Mute during the initial play→seek transition so the user
-        // doesn't hear the brief play-from-beginning before MusicKit
-        // seeks to the saved position.
-        const savedVolume = musicKit.volume;
-        musicKit.volume = 0;
-        await musicKit.setQueue({ song: pending.songId, startPlaying: true, startTime: pending.startTime } as any);
-        // Wait for seek (state 8) → playing (state 2) before restoring volume
-        await new Promise<void>((resolve) => {
-          let sawSeek = false;
-          const onState = (e: any) => {
-            if (e.state === 8 || e.state === 'seeking') sawSeek = true;
-            if (sawSeek && (e.state === 2 || e.state === 'playing')) {
-              musicKit.removeEventListener('playbackStateDidChange', onState);
-              resolve();
-            }
-          };
-          musicKit.addEventListener('playbackStateDidChange', onState);
-          // Fallback: restore volume after 3s no matter what
-          setTimeout(() => {
-            musicKit.removeEventListener('playbackStateDidChange', onState);
-            resolve();
-          }, 3000);
-        });
-        musicKit.volume = savedVolume;
-      } else {
-        await musicKit.setQueue({ song: pending.songId, startPlaying: true } as any);
-      }
+      await musicKit.setQueue({ song: pending.songId, startPlaying: true, startTime: pending.startTime } as any);
     } finally {
       isRestoringRef.current = false;
       restoreFinishedAtRef.current = Date.now();
