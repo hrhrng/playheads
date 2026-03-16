@@ -564,11 +564,22 @@ export default function useAppleMusic({
 
       if (current_track?.id) {
         try {
-          // Always startPlaying: false on restore — browsers block
-          // play() without prior user interaction (autoplay policy).
+          // Load queue without auto-playing (MusicKit's internal startPlaying
+          // uses alert() on autoplay failure which we can't suppress).
+          // Then attempt play() ourselves so we can catch the error silently.
           await musicKit.setQueue({ song: current_track.id, startPlaying: false } as any);
           if (playback_position && playback_position > 0) {
             musicKit.seekToTime(playback_position);
+          }
+          if (is_playing) {
+            try {
+              await musicKit.play();
+            } catch (_) {
+              // Autoplay blocked by browser — user will need to tap play.
+              // This is expected on first visit; once MEI builds up,
+              // Chrome will allow autoplay automatically.
+              console.log('[Restore] Autoplay blocked by browser policy, user tap required');
+            }
           }
         } catch (restoreErr) {
           const classified = classifyError(restoreErr);
