@@ -19,9 +19,8 @@ import type {
   AgentAction
 } from '../types/index.d';
 
-// Module-level guard: prevents StrictMode double-mount from running
-// two MusicKit.configure() calls concurrently.
-let isConfiguring = false;
+// Module-level: the single MusicKit instance (survives React re-mounts)
+let sharedMkInstance: MusicKitInstance | null = null;
 
 interface UseAppleMusicParams {
   userId: string | null;
@@ -363,10 +362,9 @@ export default function useAppleMusic({
     // Track event listeners and instance so we can clean up properly
     const listeners: Array<[string, (...args: any[]) => void]> = [];
     let mkInstance: MusicKitInstance | null = null;
+    let cancelled = false;
 
     const initMusicKit = async (): Promise<void> => {
-      if (isConfiguring) return; // StrictMode double-mount guard
-      isConfiguring = true;
       try {
         if (!window.MusicKit) {
           console.error('[MusicKit] window.MusicKit not available — CDN script may not have loaded');
@@ -428,16 +426,26 @@ export default function useAppleMusic({
           }
         } catch (_) { /* storage access may be restricted */ }
 
-        const mk = await window.MusicKit.configure({
-          developerToken: developerTokenRef.current!,
-          app: { name: 'Playhead', build: '1.0.0' }
-        } as MusicKitConfig) as MusicKitInstance;
+        // Reuse the singleton if already configured (StrictMode re-mount)
+        let mk: MusicKitInstance;
+        if (sharedMkInstance) {
+          mk = sharedMkInstance;
+        } else {
+          mk = await window.MusicKit.configure({
+            developerToken: developerTokenRef.current!,
+            app: { name: 'Playhead', build: '1.0.0' }
+          } as MusicKitConfig) as MusicKitInstance;
+          sharedMkInstance = mk;
+
+          // Stop any auto-restored playback immediately — MusicKit may
+          // resume from its own persistence despite our cleanup above.
+          try { mk.stop(); } catch (_) { /* ignore */ }
+        }
         mkInstance = mk;
 
-        // Stop any auto-restored playback immediately — MusicKit may
-        // resume from its own persistence despite our cleanup above.
-        // Our restoreStateFromBackend() is the single source of truth.
-        try { mk.stop(); } catch (_) { /* ignore */ }
+        // If cleanup already ran (StrictMode), bail out — the next
+        // mount will re-run initMusicKit and pick up sharedMkInstance.
+        if (cancelled) return;
 
         // Restore auth from server-side token by setting the instance
         // property directly. This avoids hacking localStorage keys.
@@ -524,7 +532,6 @@ export default function useAppleMusic({
         console.error('Error initializing MusicKit:', err);
       } finally {
         setIsInitializing(false);
-        isConfiguring = false;
       }
     };
 
@@ -535,12 +542,12 @@ export default function useAppleMusic({
     }
 
     return () => {
+      cancelled = true;
       document.removeEventListener('musickitloaded', initMusicKit);
       // Gate closed — no more events processed
       playerReadyRef.current = false;
-      // Stop playback and remove listeners
+      // Remove listeners but DON'T stop — the shared instance survives re-mounts
       if (mkInstance) {
-        try { mkInstance.stop(); } catch (_) { /* ignore */ }
         listeners.forEach(([event, handler]) => {
           try { mkInstance!.removeEventListener(event, handler); } catch (_) { /* ignore */ }
         });
