@@ -428,6 +428,11 @@ export default function useAppleMusic({
         } as MusicKitConfig) as MusicKitInstance;
         mkInstance = mk;
 
+        // Stop any auto-restored playback immediately — MusicKit may
+        // resume from its own persistence despite our cleanup above.
+        // Our restoreStateFromBackend() is the single source of truth.
+        try { mk.stop(); } catch (_) { /* ignore */ }
+
         // Restore auth from server-side token by setting the instance
         // property directly. This avoids hacking localStorage keys.
         if (storedMusicUserToken && !mk.isAuthorized) {
