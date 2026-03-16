@@ -98,6 +98,7 @@ export default function useAppleMusic({
   // polluting app state. Only set to true after the app's own restore
   // (from backend checkpoint) has completed.
   const playerReadyRef = useRef(false);
+  const isRestoringRef = useRef(false);
 
   // Generate a fallback UUID for anonymous sessions
   const generateUUID = (): string => {
@@ -509,6 +510,7 @@ export default function useAppleMusic({
 
         on('playbackTimeDidChange', (e: any) => {
           if (!playerReadyRef.current) return;
+          if (isRestoringRef.current) return;
           setPlaybackTime({ current: e.currentPlaybackTime, total: e.currentPlaybackDuration });
         });
 
@@ -567,13 +569,18 @@ export default function useAppleMusic({
 
       if (current_track?.id) {
         try {
-          // Restore queue and position only — never auto-play on page load.
-          // The user must tap play to resume. This prevents ghost background
-          // playback and browser autoplay policy issues.
-          const startTime = (playback_position && playback_position > 0) ? playback_position : undefined;
-          await musicKit.setQueue({ song: current_track.id, startPlaying: false, startTime } as any);
-          // Manually update React state since we're not calling play() —
-          // MusicKit events won't fire to populate the UI.
+          isRestoringRef.current = true;
+          const alreadyPlaying = musicKit.nowPlayingItem?.id === current_track.id;
+
+          if (!alreadyPlaying) {
+            // Restore queue and position only — never auto-play on page load.
+            // The user must tap play to resume. This prevents ghost background
+            // playback and browser autoplay policy issues.
+            const startTime = (playback_position && playback_position > 0) ? playback_position : undefined;
+            await musicKit.setQueue({ song: current_track.id, startPlaying: false, startTime } as any);
+          }
+
+          // Update React state for the UI.
           if (musicKit.nowPlayingItem) {
             setCurrentTrack(musicKit.nowPlayingItem);
           } else {
@@ -588,10 +595,13 @@ export default function useAppleMusic({
               duration: current_track.duration || 0,
             } as any);
           }
-          setPlaybackTime({
-            current: playback_position || 0,
-            total: current_track.duration || 0,
-          });
+
+          if (!alreadyPlaying) {
+            setPlaybackTime({
+              current: playback_position || 0,
+              total: current_track.duration || 0,
+            });
+          }
         } catch (restoreErr) {
           const classified = classifyError(restoreErr);
           if (classified.category === ErrorCategory.AUTH_EXPIRED) {
@@ -599,6 +609,8 @@ export default function useAppleMusic({
           } else {
             console.error('[Restore] Failed:', restoreErr);
           }
+        } finally {
+          isRestoringRef.current = false;
         }
       }
 
