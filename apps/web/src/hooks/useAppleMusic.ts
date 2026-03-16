@@ -458,7 +458,7 @@ export default function useAppleMusic({
         // Playback — gated
         on('mediaItemDidChange', (e: any) => {
           if (!playerReadyRef.current) return;
-          if (e.item) { setCurrentTrack(e.item); setPlaybackTime({ current: 0, total: 0 }); }
+          if (e.item) { setCurrentTrack(e.item); }
         });
 
         on('nowPlayingItemDidChange', () => {
@@ -466,7 +466,6 @@ export default function useAppleMusic({
           const item = mk.nowPlayingItem;
           if (item) {
             setCurrentTrack(item);
-            setPlaybackTime({ current: 0, total: 0 });
             syncMusicKitStateRef.current();
           }
         });
