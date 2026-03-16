@@ -1,22 +1,52 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
 import { API_BASE } from '../config/api';
 import type { Conversation } from '../types';
 
+const PAGE_SIZE = 20;
+
 export function useConversations(userId: string | null | undefined) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [hasMore, setHasMore] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const cursorRef = useRef<string | null>(null);
 
   const fetchConversations = useCallback(async () => {
     if (!userId) return;
 
     try {
-      const res = await fetch(`${API_BASE}/conversations?user_id=${userId}`);
+      const res = await fetch(
+        `${API_BASE}/conversations?user_id=${userId}&limit=${PAGE_SIZE}`,
+      );
       const data = await res.json();
       setConversations(data.conversations || []);
+      setHasMore(data.has_more || false);
+      cursorRef.current = data.next_cursor || null;
     } catch (e) {
       console.error('Failed to fetch conversations:', e);
     }
   }, [userId]);
+
+  const loadMore = useCallback(async () => {
+    if (!userId || !hasMore || isLoadingMore || !cursorRef.current) return;
+
+    setIsLoadingMore(true);
+    try {
+      const res = await fetch(
+        `${API_BASE}/conversations?user_id=${userId}&limit=${PAGE_SIZE}&cursor=${cursorRef.current}`,
+      );
+      const data = await res.json();
+      const newConversations: Conversation[] = data.conversations || [];
+
+      setConversations(prev => [...prev, ...newConversations]);
+      setHasMore(data.has_more || false);
+      cursorRef.current = data.next_cursor || null;
+    } catch (e) {
+      console.error('Failed to load more conversations:', e);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [userId, hasMore, isLoadingMore]);
 
   const handleDelete = useCallback(async (conversationId: string) => {
     if (!userId) return;
@@ -110,6 +140,9 @@ export function useConversations(userId: string | null | undefined) {
     conversations,
     setConversations,
     fetchConversations,
+    loadMore,
+    hasMore,
+    isLoadingMore,
     handleDelete,
     handlePin,
     handleRename,

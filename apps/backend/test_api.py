@@ -123,8 +123,8 @@ class TestGetState:
         finally:
             app.dependency_overrides.pop(get_db, None)
 
-    async def test_session_not_found_returns_404(self):
-        """When store.get_session returns None, the endpoint should 404."""
+    async def test_session_not_found_returns_empty_state(self):
+        """When store.get_session returns None, return empty default state."""
         session_id = str(uuid.uuid4())
         user_id = str(uuid.uuid4())
 
@@ -138,7 +138,11 @@ class TestGetState:
                 async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                     resp = await client.get("/state", params={"session_id": session_id, "user_id": user_id})
 
-            assert resp.status_code == 404
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["session_id"] == session_id
+            assert data["chat_history"] == []
+            assert data["current_track"] is None
         finally:
             app.dependency_overrides.pop(get_db, None)
 
