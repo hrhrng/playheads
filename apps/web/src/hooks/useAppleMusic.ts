@@ -402,28 +402,17 @@ export default function useAppleMusic({
         // so configure() starts with a blank slate — the app's own
         // restoreStateFromBackend() is the single source of truth.
         playerReadyRef.current = false;
+        // ── Clear MusicKit's browser-persisted playback state ─────────
+        // Clear localStorage keys (queue, playback, etc.) but NOT the
+        // media-user-token — we don't need to touch it at all.
+        // Auth is restored via mk.musicUserToken assignment below.
         try {
-          // Extract kid from developer token JWT to construct the
-          // localStorage key MusicKit uses: "music.{kid}.media-user-token"
-          let musicKitKeyId = '';
-          try {
-            const jwtHeader = JSON.parse(atob(developerTokenRef.current!.split('.')[0]));
-            musicKitKeyId = jwtHeader.kid || '';
-            console.log('[MusicKit] JWT kid:', musicKitKeyId, '→ localStorage key: music.' + musicKitKeyId + '.media-user-token');
-          } catch (_) { /* ignore */ }
-
-          // Clear ALL MusicKit localStorage keys (playback state, queue, token).
           Object.keys(localStorage).forEach(key => {
+            if (key.includes('media-user-token')) return; // preserve auth
             if (key.startsWith('music.') || key.startsWith('mk-')) {
               localStorage.removeItem(key);
             }
           });
-
-          // Write server-side token back before configure() so MusicKit
-          // sees it as authorized immediately.
-          if (storedMusicUserToken && musicKitKeyId) {
-            localStorage.setItem(`music.${musicKitKeyId}.media-user-token`, storedMusicUserToken);
-          }
           // Clear MusicKit IndexedDB databases
           const dbs = await (indexedDB.databases?.() ?? Promise.resolve([]));
           for (const db of dbs) {
@@ -433,13 +422,17 @@ export default function useAppleMusic({
           }
         } catch (_) { /* storage access may be restricted */ }
 
-        // Auth is handled via localStorage (music.{kid}.media-user-token)
-        // written above — musicUserToken is NOT an official configure() param.
         const mk = await window.MusicKit.configure({
           developerToken: developerTokenRef.current!,
           app: { name: 'Playhead', build: '1.0.0' }
         } as MusicKitConfig) as MusicKitInstance;
         mkInstance = mk;
+
+        // Restore auth from server-side token by setting the instance
+        // property directly. This avoids hacking localStorage keys.
+        if (storedMusicUserToken && !mk.isAuthorized) {
+          (mk as any).musicUserToken = storedMusicUserToken;
+        }
 
         setMusicKit(mk);
         setIsAuthorized(mk.isAuthorized);
