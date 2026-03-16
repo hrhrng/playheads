@@ -169,7 +169,7 @@ export const PlaylistSidebar = ({
         </div>
       )}
       {/* Playlist Container */}
-      <div className="flex-1 bg-white rounded-t-3xl flex flex-col shadow-sm overflow-hidden relative border border-white transition-all">
+      <div className="flex-1 min-h-0 bg-white rounded-t-3xl flex flex-col shadow-sm overflow-hidden relative border border-white transition-all">
 
         {/* Toggle Button - Absolute Positioned or Flex */}
         <div className={`flex ${collapsed ? 'justify-center py-6' : 'justify-between p-6 pb-2'} items-center`}>
@@ -216,7 +216,7 @@ export const PlaylistSidebar = ({
           </div>
         ) : (
           /* Full Expanded View */
-          <div className="flex-1 flex flex-col min-w-0 opacity-100 transition-opacity duration-300">
+          <div className="flex-1 min-h-0 flex flex-col min-w-0 opacity-100 transition-opacity duration-300">
 
             {/* Queue List */}
             {showQueue && (

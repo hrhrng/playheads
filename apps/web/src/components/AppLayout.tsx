@@ -243,7 +243,7 @@ export const AppLayout = ({
       </main>
 
       {/* 3. Right Sidebar (Playlist) */}
-      <aside className="shrink-0 z-10">
+      <aside className="shrink-0 z-10 h-full overflow-hidden">
         {rightPanel}
       </aside>
 
