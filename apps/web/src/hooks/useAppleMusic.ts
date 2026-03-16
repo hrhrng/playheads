@@ -409,6 +409,7 @@ export default function useAppleMusic({
           try {
             const jwtHeader = JSON.parse(atob(developerTokenRef.current!.split('.')[0]));
             musicKitKeyId = jwtHeader.kid || '';
+            console.log('[MusicKit] JWT kid:', musicKitKeyId, '→ localStorage key: music.' + musicKitKeyId + '.media-user-token');
           } catch (_) { /* ignore */ }
 
           // Clear ALL MusicKit localStorage keys (playback state, queue, token).
@@ -432,15 +433,12 @@ export default function useAppleMusic({
           }
         } catch (_) { /* storage access may be restricted */ }
 
-        const configOptions: MusicKitConfig & { musicUserToken?: string } = {
+        // Auth is handled via localStorage (music.{kid}.media-user-token)
+        // written above — musicUserToken is NOT an official configure() param.
+        const mk = await window.MusicKit.configure({
           developerToken: developerTokenRef.current!,
           app: { name: 'Playhead', build: '1.0.0' }
-        };
-        if (storedMusicUserToken) {
-          configOptions.musicUserToken = storedMusicUserToken;
-        }
-
-        const mk = await window.MusicKit.configure(configOptions as MusicKitConfig) as MusicKitInstance;
+        } as MusicKitConfig) as MusicKitInstance;
         mkInstance = mk;
 
         setMusicKit(mk);
