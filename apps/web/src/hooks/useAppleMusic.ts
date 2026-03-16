@@ -91,7 +91,6 @@ export default function useAppleMusic({
   const lastPlayingTrackIdRef = useRef<string | null>(null);
   const playingPlaylistRef = useRef<FormattedTrack[]>([]);
   const playingSessionIdRef = useRef<string | null>(null);
-  const pendingSeekRef = useRef<number | null>(null);
 
   // ── MusicKit decoupling gate ───────────────────────────────────────
   // When false, ALL MusicKit event-driven state changes are ignored.
@@ -572,12 +571,8 @@ export default function useAppleMusic({
           // Restore queue and position only — never auto-play on page load.
           // The user must tap play to resume. This prevents ghost background
           // playback and browser autoplay policy issues.
-          await musicKit.setQueue({ song: current_track.id, startPlaying: false } as any);
-          // Don't seekToTime here — media isn't loaded yet so it won't work.
-          // Store the position and seek after play() is called.
-          if (playback_position && playback_position > 0) {
-            pendingSeekRef.current = playback_position;
-          }
+          const startTime = (playback_position && playback_position > 0) ? playback_position : undefined;
+          await musicKit.setQueue({ song: current_track.id, startPlaying: false, startTime } as any);
           // Manually update React state since we're not calling play() —
           // MusicKit events won't fire to populate the UI.
           if (musicKit.nowPlayingItem) {
@@ -666,21 +661,7 @@ export default function useAppleMusic({
     if (!musicKit) return;
     try {
       playerReadyRef.current = true;
-      const pendingSeek = pendingSeekRef.current;
-      pendingSeekRef.current = null;
       await musicKit.play();
-      // Seek to saved position — must wait until media is actually
-      // playing (buffered), otherwise seekToTime silently fails.
-      if (pendingSeek !== null && pendingSeek > 0) {
-        await new Promise<void>((resolve) => {
-          const onTime = () => {
-            musicKit!.removeEventListener('playbackTimeDidChange', onTime);
-            resolve();
-          };
-          musicKit!.addEventListener('playbackTimeDidChange', onTime);
-        });
-        await musicKit.seekToTime(pendingSeek);
-      }
       await syncMusicKitState();
     } catch (e) {
       const classified = classifyError(e);
