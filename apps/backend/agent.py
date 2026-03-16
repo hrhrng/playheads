@@ -813,16 +813,22 @@ async def run_agent_stream(db, message: str, session_id: str, user_id: str = Non
 
     log.info("Agent processing: %s", message[:80])
 
-    # Persist user message immediately
-    t0 = time.perf_counter()
+    # Persist user message in background — don't block agent streaming
+    import asyncio
     session.add_message("user", content=message)
-    from apps.backend.database import AsyncSessionLocal
-    async with AsyncSessionLocal() as fresh_db:
-        try:
-            await store.update_session(fresh_db, session, user_id)
-        except Exception as e:
-            log.error("Failed to persist user message for session %s: %s", session_id[:8], e)
-    log.info("⏱ [+%.0fms] persist_user_message", _elapsed())
+
+    async def _persist_user_msg():
+        from apps.backend.database import AsyncSessionLocal
+        t_persist = time.perf_counter()
+        async with AsyncSessionLocal() as fresh_db:
+            try:
+                await store.update_session(fresh_db, session, user_id)
+            except Exception as e:
+                log.error("Failed to persist user message for session %s: %s", session_id[:8], e)
+        log.info("⏱ persist_user_message (background): %.0fms", (time.perf_counter() - t_persist) * 1000)
+
+    asyncio.create_task(_persist_user_msg())
+    log.info("⏱ [+%.0fms] persist_user_message dispatched (background)", _elapsed())
 
     # Stream events from the shared processing core.
     # Tools emit MusicKit actions as SSE events (fire-and-forget, no interrupt).

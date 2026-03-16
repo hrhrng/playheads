@@ -46,6 +46,9 @@ function App() {
     handleDelete: handleDeleteConversation,
     handlePin: handlePinConversation,
     handleRename: handleRenameConversation,
+    loadMore: loadMoreConversations,
+    hasMore: hasMoreConversations,
+    isLoadingMore: isLoadingMoreConversations,
   } = useConversations(session?.user?.id);
 
   // Per-conversation playback state
@@ -255,6 +258,9 @@ function App() {
             onDeleteConversation={handleDeleteConversation}
             onPinConversation={handlePinConversation}
             onRenameConversation={handleRenameConversation}
+            onLoadMoreConversations={loadMoreConversations}
+            hasMoreConversations={hasMoreConversations}
+            isLoadingMoreConversations={isLoadingMoreConversations}
             isDJSpeaking={false}
             appleTrack={appleTrack}
             isApplePlaying={isApplePlaying}
@@ -277,6 +283,9 @@ function App() {
             onDeleteConversation={handleDeleteConversation}
             onPinConversation={handlePinConversation}
             onRenameConversation={handleRenameConversation}
+            onLoadMoreConversations={loadMoreConversations}
+            hasMoreConversations={hasMoreConversations}
+            isLoadingMoreConversations={isLoadingMoreConversations}
             isDJSpeaking={false}
             appleTrack={appleTrack}
             isApplePlaying={isApplePlaying}

@@ -5,6 +5,29 @@ from langchain_openai import ChatOpenAI
 import os
 import asyncio
 
+# Cached LLM instance — avoid re-creating on every title generation
+_title_model: ChatOpenAI | None = None
+
+
+def _get_title_model() -> ChatOpenAI | None:
+    global _title_model
+    if _title_model is not None:
+        return _title_model
+
+    api_key = os.getenv('OPENAI_API_KEY')
+    base_url = os.getenv('OPENAI_BASE_URL')
+
+    if not api_key:
+        return None
+
+    _title_model = ChatOpenAI(
+        model="gpt-5-nano",
+        api_key=api_key,
+        base_url=base_url if base_url else None,
+        temperature=0.7
+    )
+    return _title_model
+
 
 async def generate_conversation_title(messages: list[dict], timeout: int = 15) -> str:
     """
@@ -18,19 +41,9 @@ async def generate_conversation_title(messages: list[dict], timeout: int = 15) -
         str: Generated title (max 50 chars) or default if generation fails
     """
     try:
-        # Load OpenAI configuration
-        api_key = os.getenv('OPENAI_API_KEY')
-        base_url = os.getenv('OPENAI_BASE_URL')
-
-        if not api_key:
+        model = _get_title_model()
+        if model is None:
             return "New Conversation"
-
-        model = ChatOpenAI(
-            model="gpt-5-nano",
-            api_key=api_key,
-            base_url=base_url if base_url else None,
-            temperature=0.7
-        )
 
         # Build conversation context from first 5 messages
         conversation_text = "\n".join([

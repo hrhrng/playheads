@@ -18,6 +18,25 @@ router = APIRouter(prefix="/apple-music", tags=["apple-music"])
 
 _token_cache: dict[str, int | str] = {}
 
+# Persistent HTTP client for Apple Music API — avoids TCP+TLS handshake per request
+_am_client: httpx.AsyncClient | None = None
+
+
+def _get_am_client() -> httpx.AsyncClient:
+    global _am_client
+    if _am_client is None or _am_client.is_closed:
+        _am_client = httpx.AsyncClient(
+            timeout=15,
+            base_url=APPLE_MUSIC_API_BASE,
+            http2=True,
+            limits=httpx.Limits(
+                max_connections=10,
+                max_keepalive_connections=5,
+                keepalive_expiry=120,
+            ),
+        )
+    return _am_client
+
 
 def _load_private_key() -> str:
     key_pem = os.getenv("APPLE_MUSIC_PRIVATE_KEY")
@@ -99,10 +118,10 @@ async def _apple_music_get(
     params: Optional[dict[str, str | int]] = None,
     user_token: Optional[str] = None,
 ) -> dict:
-    url = f"{APPLE_MUSIC_API_BASE}/{path.lstrip('/')}"
+    url = f"/{path.lstrip('/')}"
     headers = _build_headers(user_token=user_token)
-    async with httpx.AsyncClient(timeout=15) as client:
-        response = await client.get(url, headers=headers, params=params)
+    client = _get_am_client()
+    response = await client.get(url, headers=headers, params=params)
     if response.status_code >= 400:
         from apps.backend.error_codes import (
             AUTH_TOKEN_INVALID,

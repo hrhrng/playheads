@@ -3,6 +3,15 @@ import { drizzle } from "drizzle-orm/d1";
 import { schema } from "@playheads/auth";
 import { eq } from "drizzle-orm";
 import { hasSessionCookie } from "./session";
+import {
+  handleListConversations,
+  handleCreateConversation,
+  handleDeleteConversation,
+  handleUpdateConversation,
+  handleCreateSession,
+  handleGetState,
+  handleSyncState,
+} from "./d1-handlers";
 
 interface Env {
   WEB: Fetcher;
@@ -75,7 +84,38 @@ export default {
       return handleProfile(request, env);
     }
 
-    // /api/* → backend worker
+    // /api/conversations/* → D1 native (no Python needed)
+    if (url.pathname === "/api/conversations" && request.method === "GET") {
+      return handleListConversations(request, env.DB);
+    }
+    if (url.pathname === "/api/conversations/create" && request.method === "POST") {
+      return handleCreateConversation(request, env.DB);
+    }
+    if (url.pathname.startsWith("/api/conversations/") && request.method === "DELETE") {
+      const id = url.pathname.split("/api/conversations/")[1];
+      return handleDeleteConversation(id, request, env.DB);
+    }
+    if (url.pathname.startsWith("/api/conversations/") && request.method === "PATCH") {
+      const id = url.pathname.split("/api/conversations/")[1];
+      return handleUpdateConversation(id, request, env.DB);
+    }
+
+    // /api/session/create → D1 native
+    if (url.pathname === "/api/session/create" && request.method === "POST") {
+      return handleCreateSession(request, env.DB);
+    }
+
+    // /api/state → D1 native
+    if (url.pathname === "/api/state" && request.method === "GET") {
+      return handleGetState(request, env.DB);
+    }
+
+    // /api/state/sync → D1 native
+    if (url.pathname === "/api/state/sync" && request.method === "POST") {
+      return handleSyncState(request, env.DB);
+    }
+
+    // /api/* → backend worker (agent/chat, apple-music, actions)
     if (url.pathname.startsWith("/api/")) {
       const backendPath =
         url.pathname === "/api/health"
@@ -179,16 +219,20 @@ async function handleProfile(request: Request, env: Env): Promise<Response> {
 
     const now = Date.now();
 
-    // Upsert: try update, if no rows affected, insert
-    const existing = await db
-      .select()
-      .from(schema.profile)
-      .where(eq(schema.profile.id, body.userId));
-
-    if (existing.length > 0) {
-      await db
-        .update(schema.profile)
-        .set({
+    // Single upsert via INSERT ... ON CONFLICT — 1 query instead of 3
+    await db
+      .insert(schema.profile)
+      .values({
+        id: body.userId,
+        displayName: body.displayName ?? null,
+        avatarUrl: body.avatarUrl ?? null,
+        appleMusicToken: body.appleMusicToken ?? null,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: schema.profile.id,
+        set: {
           ...(body.displayName !== undefined && {
             displayName: body.displayName,
           }),
@@ -197,18 +241,8 @@ async function handleProfile(request: Request, env: Env): Promise<Response> {
             appleMusicToken: body.appleMusicToken,
           }),
           updatedAt: now,
-        })
-        .where(eq(schema.profile.id, body.userId));
-    } else {
-      await db.insert(schema.profile).values({
-        id: body.userId,
-        displayName: body.displayName ?? null,
-        avatarUrl: body.avatarUrl ?? null,
-        appleMusicToken: body.appleMusicToken ?? null,
-        createdAt: now,
-        updatedAt: now,
+        },
       });
-    }
 
     const [updated] = await db
       .select()
