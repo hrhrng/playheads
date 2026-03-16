@@ -265,6 +265,7 @@ export default function useAppleMusic({
           }
 
           try {
+            pendingQueueRef.current = null;
             await musicKit.setQueue({ song: targetTrack.id, startPlaying: true } as any);
           } catch (e) {
             console.error('[Agent] play_track error:', e);
@@ -500,6 +501,7 @@ export default function useAppleMusic({
                   for (let i = idx + 1; i < playlist.length; i++) {
                     if (!playlist[i]?.id) continue;
                     try {
+                      pendingQueueRef.current = null;
                       await mk.setQueue({ song: playlist[i].id, startPlaying: true } as any);
                       return;
                     } catch (err: any) {
@@ -741,6 +743,7 @@ export default function useAppleMusic({
     startPlaying = true
   ): Promise<void> => {
     if (!musicKit) return;
+    pendingQueueRef.current = null;
     try {
       playerReadyRef.current = true;
       await musicKit.setQueue({ items: items as any });
@@ -761,6 +764,7 @@ export default function useAppleMusic({
 
   const playTrack = useCallback(async (index: number): Promise<void> => {
     if (!musicKit) return;
+    pendingQueueRef.current = null;
     try {
       const targetTrack = playingPlaylistRef.current[index];
 
