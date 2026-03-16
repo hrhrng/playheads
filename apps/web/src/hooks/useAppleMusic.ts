@@ -562,7 +562,9 @@ export default function useAppleMusic({
 
       if (current_track?.id) {
         try {
-          await musicKit.setQueue({ song: current_track.id, startPlaying: is_playing } as any);
+          // Never auto-play on restore — browsers block play() without
+          // user interaction. Just load the queue so it's ready.
+          await musicKit.setQueue({ song: current_track.id, startPlaying: false } as any);
           if (playback_position && playback_position > 0) {
             musicKit.seekToTime(playback_position);
           }
