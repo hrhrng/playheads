@@ -692,7 +692,13 @@ export default function useAppleMusic({
     pendingQueueRef.current = null;
     isRestoringRef.current = true;
     try {
-      await musicKit.setQueue({ song: pending.songId, startPlaying: true, startTime: pending.startTime } as any);
+      // Load the song without auto-playing to avoid the brief
+      // play-from-beginning before seeking to the saved position.
+      await musicKit.setQueue({ song: pending.songId } as any);
+      if (pending.startTime && pending.startTime > 0) {
+        await musicKit.seekToTime(pending.startTime);
+      }
+      await musicKit.play();
     } finally {
       isRestoringRef.current = false;
       restoreFinishedAtRef.current = Date.now();
