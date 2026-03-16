@@ -421,9 +421,9 @@ export default function useAppleMusic({
         const mk = await window.MusicKit.configure(configOptions as MusicKitConfig) as MusicKitInstance;
         mkInstance = mk;
 
-        // Force silent: disable autoplay and stop whatever MusicKit
-        // may have auto-restored from its internal persistence.
-        mk.autoplay = false;
+        // Stop whatever MusicKit may have auto-restored from its
+        // internal persistence. The playerReadyRef gate ensures all
+        // events from this stop are ignored.
         try { await mk.stop(); } catch (_) {}
         console.log('[MusicKit] Configured (silent), isAuthorized:', mk.isAuthorized);
 
