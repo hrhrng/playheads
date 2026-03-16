@@ -99,6 +99,7 @@ export default function useAppleMusic({
   // (from backend checkpoint) has completed.
   const playerReadyRef = useRef(false);
   const isRestoringRef = useRef(false);
+  const restoreFinishedAtRef = useRef(0);
 
   // Generate a fallback UUID for anonymous sessions
   const generateUUID = (): string => {
@@ -511,6 +512,9 @@ export default function useAppleMusic({
         on('playbackTimeDidChange', (e: any) => {
           if (!playerReadyRef.current) return;
           if (isRestoringRef.current) return;
+          // After restore, MusicKit may asynchronously fire time=0 events.
+          // Suppress zero-time updates for a short window after restore completes.
+          if (e.currentPlaybackTime === 0 && Date.now() - restoreFinishedAtRef.current < 2000) return;
           setPlaybackTime({ current: e.currentPlaybackTime, total: e.currentPlaybackDuration });
         });
 
@@ -611,6 +615,7 @@ export default function useAppleMusic({
           }
         } finally {
           isRestoringRef.current = false;
+          restoreFinishedAtRef.current = Date.now();
         }
       }
 
