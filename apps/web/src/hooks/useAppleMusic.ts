@@ -350,6 +350,10 @@ export default function useAppleMusic({
     // won't receive it, causing auth loss when the developer token changes.
     if (!isTokenChecked) return;
 
+    // Track event listeners and instance so we can clean up properly
+    const listeners: Array<[string, (...args: any[]) => void]> = [];
+    let mkInstance: MusicKitInstance | null = null;
+
     const initMusicKit = async (): Promise<void> => {
       try {
         if (!window.MusicKit) {
@@ -398,7 +402,22 @@ export default function useAppleMusic({
         }
 
         const mk = await window.MusicKit.configure(configOptions as MusicKitConfig) as MusicKitInstance;
+        mkInstance = mk;
         console.log('[MusicKit] Configured successfully, isAuthorized:', mk.isAuthorized);
+
+        // Stop any auto-resumed playback from the previous page session.
+        // MusicKit may restore its internal state on configure(), causing
+        // "ghost" playback that overlaps with the app's own restore logic.
+        try {
+          const autoResumedState = (mk as any).playbackState;
+          const isAutoPlaying = autoResumedState === 2 || autoResumedState === 'playing';
+          if (isAutoPlaying || mk.nowPlayingItem) {
+            console.log('[MusicKit] Stopping auto-resumed playback from previous session');
+            await mk.stop();
+          }
+        } catch (e) {
+          console.warn('[MusicKit] Could not stop auto-resumed playback:', e);
+        }
 
         setMusicKit(mk);
         setIsAuthorized(mk.isAuthorized);
@@ -407,8 +426,13 @@ export default function useAppleMusic({
           setQueueState([...mk.queue.items]);
         }
 
-        // Event Listeners
-        mk.addEventListener('authorizationStatusDidChange', () => {
+        // Event Listeners — store references so we can remove them on cleanup
+        const on = (event: string, handler: (...args: any[]) => void) => {
+          mk.addEventListener(event, handler);
+          listeners.push([event, handler]);
+        };
+
+        on('authorizationStatusDidChange', () => {
           const wasAuthorized = isAuthorized;
           const nowAuthorized = mk.isAuthorized;
 
@@ -420,14 +444,14 @@ export default function useAppleMusic({
           }
         });
 
-        mk.addEventListener('mediaItemDidChange', (event: any) => {
+        on('mediaItemDidChange', (event: any) => {
           if (event.item) {
             setCurrentTrack(event.item);
             setPlaybackTime({ current: 0, total: 0 });
           }
         });
 
-        mk.addEventListener('nowPlayingItemDidChange', () => {
+        on('nowPlayingItemDidChange', () => {
           const item = mk.nowPlayingItem;
           if (item) {
             setCurrentTrack(item);
@@ -440,7 +464,7 @@ export default function useAppleMusic({
           }
         });
 
-        mk.addEventListener('playbackStateDidChange', (event: any) => {
+        on('playbackStateDidChange', (event: any) => {
           const state = event.state;
           const isPlayingNow = state === 'playing' || state === 2;
           const isPausedNow = state === 'paused' || state === 3;
@@ -499,11 +523,11 @@ export default function useAppleMusic({
           }
         });
 
-        mk.addEventListener('queueItemsDidChange', () => {
+        on('queueItemsDidChange', () => {
           setQueueState([...mk.queue.items]);
         });
 
-        mk.addEventListener('playbackTimeDidChange', (event: any) => {
+        on('playbackTimeDidChange', (event: any) => {
           setPlaybackTime({
             current: event.currentPlaybackTime,
             total: event.currentPlaybackDuration
@@ -525,6 +549,14 @@ export default function useAppleMusic({
 
     return () => {
       document.removeEventListener('musickitloaded', initMusicKit);
+      // Clean up MusicKit instance: stop playback and remove event listeners
+      // to prevent ghost playback on re-initialization (e.g. hot-reload, re-mount).
+      if (mkInstance) {
+        try { mkInstance.stop(); } catch (_) { /* ignore */ }
+        listeners.forEach(([event, handler]) => {
+          try { mkInstance!.removeEventListener(event, handler); } catch (_) { /* ignore */ }
+        });
+      }
     };
   }, [isTokenChecked, storedMusicUserToken]);
 
