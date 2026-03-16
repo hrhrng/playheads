@@ -100,6 +100,9 @@ export default function useAppleMusic({
   const playerReadyRef = useRef(false);
   const isRestoringRef = useRef(false);
   const restoreFinishedAtRef = useRef(0);
+  // Deferred queue: restore only sets React state, actual MusicKit queue
+  // is set up lazily when the user presses play.
+  const pendingQueueRef = useRef<{ songId: string; startTime?: number } | null>(null);
 
   // Generate a fallback UUID for anonymous sessions
   const generateUUID = (): string => {
@@ -572,50 +575,33 @@ export default function useAppleMusic({
       }
 
       if (current_track?.id) {
-        try {
-          isRestoringRef.current = true;
-          const alreadyPlaying = musicKit.nowPlayingItem?.id === current_track.id;
+        const alreadyPlaying = musicKit.nowPlayingItem?.id === current_track.id;
 
-          if (!alreadyPlaying) {
-            // Restore queue and position only — never auto-play on page load.
-            // The user must tap play to resume. This prevents ghost background
-            // playback and browser autoplay policy issues.
-            const startTime = (playback_position && playback_position > 0) ? playback_position : undefined;
-            await musicKit.setQueue({ song: current_track.id, startPlaying: false, startTime } as any);
-          }
+        if (!alreadyPlaying) {
+          // Don't touch MusicKit here — just stash the intent. The actual
+          // setQueue call happens lazily when the user presses play.
+          const startTime = (playback_position && playback_position > 0) ? playback_position : undefined;
+          pendingQueueRef.current = { songId: current_track.id, startTime };
+        }
 
-          // Update React state for the UI.
-          if (musicKit.nowPlayingItem) {
-            setCurrentTrack(musicKit.nowPlayingItem);
-          } else {
-            // Fallback: use backend data directly
-            setCurrentTrack({
-              id: current_track.id,
-              name: current_track.name,
-              artistName: current_track.artist,
-              albumName: current_track.album,
-              artworkURL: current_track.artwork_url,
-              artwork: current_track.artwork_url ? { url: current_track.artwork_url } : undefined,
-              duration: current_track.duration || 0,
-            } as any);
-          }
+        // Set React state so the UI shows the correct track & progress
+        // immediately, without any MusicKit events interfering.
+        setCurrentTrack({
+          id: current_track.id,
+          name: current_track.name,
+          artistName: current_track.artist,
+          albumName: current_track.album,
+          artworkURL: current_track.artwork_url,
+          artwork: current_track.artwork_url ? { url: current_track.artwork_url } : undefined,
+          duration: current_track.duration || 0,
+        } as any);
 
-          if (!alreadyPlaying) {
-            setPlaybackTime({
-              current: playback_position || 0,
-              total: current_track.duration || 0,
-            });
-          }
-        } catch (restoreErr) {
-          const classified = classifyError(restoreErr);
-          if (classified.category === ErrorCategory.AUTH_EXPIRED) {
-            handleAuthLost();
-          } else {
-            console.error('[Restore] Failed:', restoreErr);
-          }
-        } finally {
-          isRestoringRef.current = false;
-          restoreFinishedAtRef.current = Date.now();
+        if (!alreadyPlaying) {
+          setPlaybackTime({
+            current: playback_position || 0,
+            total: current_track.duration || 0,
+          });
+          setIsPlaying(false);
         }
       }
 
@@ -673,11 +659,28 @@ export default function useAppleMusic({
   // ==========================================================================
   // Playback Controls (with sync)
   // ==========================================================================
+  const flushPendingQueue = useCallback(async () => {
+    const pending = pendingQueueRef.current;
+    if (!pending || !musicKit) return;
+    pendingQueueRef.current = null;
+    isRestoringRef.current = true;
+    try {
+      await musicKit.setQueue({ song: pending.songId, startPlaying: true, startTime: pending.startTime } as any);
+    } finally {
+      isRestoringRef.current = false;
+      restoreFinishedAtRef.current = Date.now();
+    }
+  }, [musicKit]);
+
   const play = useCallback(async (): Promise<void> => {
     if (!musicKit) return;
     try {
       playerReadyRef.current = true;
-      await musicKit.play();
+      if (pendingQueueRef.current) {
+        await flushPendingQueue();
+      } else {
+        await musicKit.play();
+      }
       await syncMusicKitState();
     } catch (e) {
       const classified = classifyError(e);
@@ -687,7 +690,7 @@ export default function useAppleMusic({
         showErrorToast(e, 'playback');
       }
     }
-  }, [musicKit, syncMusicKitState, handleAuthLost]);
+  }, [musicKit, flushPendingQueue, syncMusicKitState, handleAuthLost]);
 
   const pause = useCallback(async (): Promise<void> => {
     if (!musicKit) return;
@@ -707,7 +710,11 @@ export default function useAppleMusic({
   const togglePlay = useCallback(async (): Promise<void> => {
     if (!musicKit) return;
     try {
-      isPlaying ? await musicKit.pause() : await musicKit.play();
+      if (!isPlaying && pendingQueueRef.current) {
+        await flushPendingQueue();
+      } else {
+        isPlaying ? await musicKit.pause() : await musicKit.play();
+      }
       await syncMusicKitState();
     } catch (e) {
       const classified = classifyError(e);
@@ -717,7 +724,7 @@ export default function useAppleMusic({
         showErrorToast(e, 'playback');
       }
     }
-  }, [musicKit, isPlaying, syncMusicKitState, handleAuthLost]);
+  }, [musicKit, isPlaying, flushPendingQueue, syncMusicKitState, handleAuthLost]);
 
   const setQueue = useCallback(async (
     items: (string | Track)[],
