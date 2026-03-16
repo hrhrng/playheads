@@ -9,11 +9,11 @@ export const prerender = true;
 const appUrl = import.meta.env.PUBLIC_APP_URL || '/';
 ---
 
-<Layout title="The Playheads — Return to Music">
+<Layout title="The Playheads — AI Music Companion | Discover Music in a New Way">
   <!-- Nav -->
-  <nav class="sticky top-0 z-50 backdrop-blur-lg bg-air-50/80 border-b border-air-100/60">
+  <nav class="sticky top-0 z-50 backdrop-blur-lg bg-air-50/80 border-b border-air-100/60" aria-label="Main navigation">
     <div class="flex items-center justify-between px-6 py-3 max-w-5xl mx-auto">
-      <a href="/" class="text-sm font-semibold tracking-tight">The Playheads</a>
+      <a href="/" class="text-sm font-semibold tracking-tight" aria-label="The Playheads - Home">The Playheads</a>
       <div class="flex items-center gap-6">
         <a href="#features" class="text-sm text-air-400 hover:text-air-900 transition-colors hidden sm:block">Features</a>
         <a
@@ -27,8 +27,10 @@ const appUrl = import.meta.env.PUBLIC_APP_URL || '/';
     </div>
   </nav>
 
-  <Hero />
-  <Features />
+  <main>
+    <Hero />
+    <Features />
+  </main>
   <Footer />
 </Layout>
 
