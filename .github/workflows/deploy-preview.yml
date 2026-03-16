@@ -25,7 +25,7 @@ jobs:
       - name: Derive branch slug
         id: branch
         run: |
-          SLUG=$(echo "${GITHUB_REF_NAME}" | sed 's/[^a-zA-Z0-9]/-/g' | sed 's/-$//')
+          SLUG=$(echo "${GITHUB_REF_NAME}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/-$//')
           echo "slug=$SLUG" >> "$GITHUB_OUTPUT"
 
       - name: Install dependencies
