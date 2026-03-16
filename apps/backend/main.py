@@ -281,12 +281,13 @@ async def get_state(session_id: Optional[str] = None, user_id: Optional[str] = N
     if not session_id:
          return StateResponse(session_id="default")
 
-    # Get session (returns None if not exists)
+    # Get session (returns None if not exists or state row missing)
     session = await store.get_session(None, session_id, user_id) if user_id else None
 
-    # If session not found, raise 404
+    # Return empty state if session not found — avoids 404 for newly created
+    # conversations that don't have a conversationState row yet
     if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+        return StateResponse(session_id=session_id)
 
     return StateResponse(
         session_id=session.session_id,
