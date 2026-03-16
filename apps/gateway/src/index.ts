@@ -3,6 +3,15 @@ import { drizzle } from "drizzle-orm/d1";
 import { schema } from "@playheads/auth";
 import { eq } from "drizzle-orm";
 import { hasSessionCookie } from "./session";
+import {
+  handleListConversations,
+  handleCreateConversation,
+  handleDeleteConversation,
+  handleUpdateConversation,
+  handleCreateSession,
+  handleGetState,
+  handleSyncState,
+} from "./d1-handlers";
 
 interface Env {
   WEB: Fetcher;
@@ -75,7 +84,38 @@ export default {
       return handleProfile(request, env);
     }
 
-    // /api/* → backend worker
+    // /api/conversations/* → D1 native (no Python needed)
+    if (url.pathname === "/api/conversations" && request.method === "GET") {
+      return handleListConversations(request, env.DB);
+    }
+    if (url.pathname === "/api/conversations/create" && request.method === "POST") {
+      return handleCreateConversation(request, env.DB);
+    }
+    if (url.pathname.startsWith("/api/conversations/") && request.method === "DELETE") {
+      const id = url.pathname.split("/api/conversations/")[1];
+      return handleDeleteConversation(id, request, env.DB);
+    }
+    if (url.pathname.startsWith("/api/conversations/") && request.method === "PATCH") {
+      const id = url.pathname.split("/api/conversations/")[1];
+      return handleUpdateConversation(id, request, env.DB);
+    }
+
+    // /api/session/create → D1 native
+    if (url.pathname === "/api/session/create" && request.method === "POST") {
+      return handleCreateSession(request, env.DB);
+    }
+
+    // /api/state → D1 native
+    if (url.pathname === "/api/state" && request.method === "GET") {
+      return handleGetState(request, env.DB);
+    }
+
+    // /api/state/sync → D1 native
+    if (url.pathname === "/api/state/sync" && request.method === "POST") {
+      return handleSyncState(request, env.DB);
+    }
+
+    // /api/* → backend worker (agent/chat, apple-music, actions)
     if (url.pathname.startsWith("/api/")) {
       const backendPath =
         url.pathname === "/api/health"
