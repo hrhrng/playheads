@@ -692,13 +692,10 @@ export default function useAppleMusic({
     pendingQueueRef.current = null;
     isRestoringRef.current = true;
     try {
-      // Load the song without auto-playing to avoid the brief
-      // play-from-beginning before seeking to the saved position.
-      await musicKit.setQueue({ song: pending.songId } as any);
-      if (pending.startTime && pending.startTime > 0) {
-        await musicKit.seekToTime(pending.startTime);
-      }
-      await musicKit.play();
+      // Don't pass startTime — MusicKit can't seek before playback is
+      // ready, which causes the song to play from the beginning first,
+      // then seek, resulting in audible "double play".
+      await musicKit.setQueue({ song: pending.songId, startPlaying: true } as any);
     } finally {
       isRestoringRef.current = false;
       restoreFinishedAtRef.current = Date.now();
