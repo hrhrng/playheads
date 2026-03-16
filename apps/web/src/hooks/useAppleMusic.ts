@@ -397,17 +397,25 @@ export default function useAppleMusic({
           return;
         }
 
-        // ── Configure MusicKit as a silent DRM engine ──────────────────
-        // MusicKit is ONLY used to: (1) authenticate, (2) decode DRM audio,
-        // (3) search the catalog. All playback state (playlist, current
-        // track, isPlaying, position) is owned by the app, not MusicKit.
-        //
-        // On init we force MusicKit into a fully silent state. Event
-        // handlers are gated behind playerReadyRef — nothing from MusicKit
-        // can touch app state until the app's own restore completes.
+        // ── Kill any pre-existing audio BEFORE configure ─────────────
+        // MusicKit.configure() returns a singleton. If the previous page
+        // session left it playing, the same internal <audio> element is
+        // still alive and streaming. We must destroy it BEFORE configure
+        // so there's no pending play() promise to conflict with.
         playerReadyRef.current = false;
 
-        console.log('[MusicKit] Configuring MusicKit (silent mode)...');
+        // Destroy every media element in the DOM — this is the nuclear
+        // option but it's the only reliable way. No play() is in flight
+        // yet (we haven't called configure), so load() won't conflict.
+        document.querySelectorAll('audio, video').forEach(el => {
+          const media = el as HTMLMediaElement;
+          media.pause();
+          media.removeAttribute('src');
+          media.load();
+          media.remove();
+        });
+
+        console.log('[MusicKit] Configuring MusicKit...');
         const configOptions: MusicKitConfig & { musicUserToken?: string } = {
           developerToken: developerTokenRef.current!,
           app: { name: 'Playhead', build: '1.0.0' }
@@ -421,11 +429,10 @@ export default function useAppleMusic({
         const mk = await window.MusicKit.configure(configOptions as MusicKitConfig) as MusicKitInstance;
         mkInstance = mk;
 
-        // Stop whatever MusicKit may have auto-restored from its
-        // internal persistence. The playerReadyRef gate ensures all
-        // events from this stop are ignored.
+        // Stop the fresh instance — configure() may have already kicked
+        // off playback from its own persistence layer.
         try { await mk.stop(); } catch (_) {}
-        console.log('[MusicKit] Configured (silent), isAuthorized:', mk.isAuthorized);
+        console.log('[MusicKit] Configured (clean), isAuthorized:', mk.isAuthorized);
 
         setMusicKit(mk);
         setIsAuthorized(mk.isAuthorized);
