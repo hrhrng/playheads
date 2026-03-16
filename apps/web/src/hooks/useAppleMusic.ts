@@ -403,11 +403,12 @@ export default function useAppleMusic({
         // restoreStateFromBackend() is the single source of truth.
         playerReadyRef.current = false;
         try {
-          // Clear all MusicKit localStorage keys (including media-user-token).
-          // The app stores the auth token server-side (/api/profile) and
-          // passes it to configure() via storedMusicUserToken — the
-          // localStorage copy is MusicKit's own redundant cache.
+          // Clear MusicKit localStorage keys, but keep media-user-token.
+          // MusicKit relies on it internally for isAuthorized state —
+          // clearing it forces a re-login even if we pass musicUserToken
+          // to configure().
           Object.keys(localStorage).forEach(key => {
+            if (key.includes('media-user-token')) return; // preserve auth
             if (key.startsWith('music.') || key.startsWith('mk-')) {
               localStorage.removeItem(key);
             }
