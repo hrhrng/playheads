@@ -319,11 +319,20 @@ async def sync_state(request: SyncRequest):
 
     import json as _json
 
-    # Permission check
-    rows = await d1_client.query(
-        'SELECT "id" FROM "conversation" WHERE "id" = ? AND "userId" = ?',
-        [request.session_id, request.user_id]
-    )
+    # Batch permission check + context read in a single HTTP round-trip
+    results = await d1_client.batch([
+        {
+            "sql": 'SELECT "id" FROM "conversation" WHERE "id" = ? AND "userId" = ?',
+            "params": [request.session_id, request.user_id],
+        },
+        {
+            "sql": 'SELECT "context" FROM "conversationState" WHERE "conversationId" = ?',
+            "params": [request.session_id],
+        },
+    ])
+    rows = results[0]
+    existing = results[1]
+
     if not rows:
         return {"status": "no_session", "session_id": request.session_id}
 
@@ -338,11 +347,7 @@ async def sync_state(request: SyncRequest):
     if request.playback_position is not None:
         context_update["playback_position"] = request.playback_position
 
-    # Read-merge-write to avoid clobbering unrelated fields
-    existing = await d1_client.query(
-        'SELECT "context" FROM "conversationState" WHERE "conversationId" = ?',
-        [request.session_id]
-    )
+    # Merge with existing context
     existing_context = _json.loads((existing[0] or {}).get("context", "{}")) if existing else {}
     merged_context = {**existing_context, **context_update}
 
@@ -501,15 +506,17 @@ async def delete_conversation(conversation_id: str, user_id: str):
     if not rows:
         raise HTTPException(404, "Conversation not found or access denied")
 
-    # Delete state first, then conversation
-    await d1_client.execute(
-        'DELETE FROM "conversationState" WHERE "conversationId" = ?',
-        [conversation_id]
-    )
-    await d1_client.execute(
-        'DELETE FROM "conversation" WHERE "id" = ?',
-        [conversation_id]
-    )
+    # Batch delete state + conversation in a single HTTP round-trip
+    await d1_client.batch([
+        {
+            "sql": 'DELETE FROM "conversationState" WHERE "conversationId" = ?',
+            "params": [conversation_id],
+        },
+        {
+            "sql": 'DELETE FROM "conversation" WHERE "id" = ?',
+            "params": [conversation_id],
+        },
+    ])
 
     return {"success": True, "deleted": conversation_id}
 

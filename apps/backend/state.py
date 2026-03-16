@@ -89,33 +89,31 @@ class SessionStore:
     """D1 REST API backed session store."""
 
     async def get_session(self, db, session_id: str, user_id: Optional[str] = None) -> Optional[SessionState]:
-        """Get existing session from D1. `db` param kept for API compat but unused."""
+        """Get existing session from D1. `db` param kept for API compat but unused.
+
+        Uses D1 batch API to run ownership check + state fetch in a single HTTP round-trip.
+        """
         t0 = time.perf_counter()
         try:
             if not session_id:
                 return None
 
-            # Check conversation ownership
+            # Batch both queries into a single HTTP request
             if user_id:
-                rows = await d1_client.query(
-                    'SELECT "id" FROM "conversation" WHERE "id" = ? AND "userId" = ?',
-                    [session_id, user_id]
-                )
+                conv_stmt = {"sql": 'SELECT "id" FROM "conversation" WHERE "id" = ? AND "userId" = ?', "params": [session_id, user_id]}
             else:
-                rows = await d1_client.query(
-                    'SELECT "id" FROM "conversation" WHERE "id" = ?',
-                    [session_id]
-                )
+                conv_stmt = {"sql": 'SELECT "id" FROM "conversation" WHERE "id" = ?', "params": [session_id]}
+
+            state_stmt = {"sql": 'SELECT "messages", "context" FROM "conversationState" WHERE "conversationId" = ?', "params": [session_id]}
+
+            results = await d1_client.batch([conv_stmt, state_stmt])
+            rows = results[0]
+            state_rows = results[1]
 
             if not rows:
                 log.info("⏱ get_session: %.0fms (not found)", (time.perf_counter() - t0) * 1000)
                 return None
 
-            # Get conversation state
-            state_rows = await d1_client.query(
-                'SELECT "messages", "context" FROM "conversationState" WHERE "conversationId" = ?',
-                [session_id]
-            )
             log.info("⏱ get_session: %.0fms (found=%s)", (time.perf_counter() - t0) * 1000, len(state_rows) > 0)
 
             if not state_rows:
@@ -132,23 +130,26 @@ class SessionStore:
             return None
 
     async def create_session(self, db, session_id: str, user_id: str) -> SessionState:
-        """Create new session via D1 REST. `db` param kept for API compat but unused."""
+        """Create new session via D1 REST. `db` param kept for API compat but unused.
+
+        Uses D1 batch API to insert conversation + state in a single HTTP round-trip.
+        """
         t0 = time.perf_counter()
         try:
             now = int(time.time() * 1000)
-
-            # Insert conversation (ignore if exists)
-            await d1_client.execute(
-                'INSERT OR IGNORE INTO "conversation" ("id", "userId", "messageCount", "isPinned", "isArchived", "createdAt", "updatedAt") VALUES (?, ?, 0, 0, 0, ?, ?)',
-                [session_id, user_id, now, now]
-            )
-
-            # Insert conversation state (ignore if exists)
             state_id = str(uuid.uuid4())
-            await d1_client.execute(
-                'INSERT OR IGNORE INTO "conversationState" ("id", "conversationId", "messages", "context", "createdAt", "updatedAt") VALUES (?, ?, \'[]\', \'{}\', ?, ?)',
-                [state_id, session_id, now, now]
-            )
+
+            # Batch both inserts into a single HTTP request
+            await d1_client.batch([
+                {
+                    "sql": 'INSERT OR IGNORE INTO "conversation" ("id", "userId", "messageCount", "isPinned", "isArchived", "createdAt", "updatedAt") VALUES (?, ?, 0, 0, 0, ?, ?)',
+                    "params": [session_id, user_id, now, now],
+                },
+                {
+                    "sql": 'INSERT OR IGNORE INTO "conversationState" ("id", "conversationId", "messages", "context", "createdAt", "updatedAt") VALUES (?, ?, \'[]\', \'{}\', ?, ?)',
+                    "params": [state_id, session_id, now, now],
+                },
+            ])
 
             log.info("⏱ create_session: %.0fms", (time.perf_counter() - t0) * 1000)
             return SessionState(session_id=session_id, last_sync=datetime.now())
@@ -213,17 +214,17 @@ class SessionStore:
             now = int(time.time() * 1000)
             messages_json = json.dumps(messages_data)
 
-            # Update conversation state (messages only, not context)
-            await d1_client.execute(
-                'UPDATE "conversationState" SET "messages" = ?, "updatedAt" = ? WHERE "conversationId" = ?',
-                [messages_json, now, state.session_id]
-            )
-
-            # Update conversation metadata
-            await d1_client.execute(
-                'UPDATE "conversation" SET "messageCount" = ?, "lastMessagePreview" = ?, "lastMessageAt" = ?, "updatedAt" = ? WHERE "id" = ?',
-                [message_count, last_message_preview, last_message_at, now, state.session_id]
-            )
+            # Batch both updates into a single HTTP request
+            await d1_client.batch([
+                {
+                    "sql": 'UPDATE "conversationState" SET "messages" = ?, "updatedAt" = ? WHERE "conversationId" = ?',
+                    "params": [messages_json, now, state.session_id],
+                },
+                {
+                    "sql": 'UPDATE "conversation" SET "messageCount" = ?, "lastMessagePreview" = ?, "lastMessageAt" = ?, "updatedAt" = ? WHERE "id" = ?',
+                    "params": [message_count, last_message_preview, last_message_at, now, state.session_id],
+                },
+            ])
 
             log.info("⏱ update_session: %.0fms (%d msgs)", (time.perf_counter() - t0) * 1000, len(messages_data))
         except Exception as e:
