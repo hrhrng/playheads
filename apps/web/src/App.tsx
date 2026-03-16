@@ -145,7 +145,7 @@ function App() {
       }
       playlistSyncReady.current = true;
     })();
-    return () => { cancelled = true; };
+    return () => { cancelled = true; initialRestoreDone.current = false; };
   }, [isAppleMusicAuthorized, isInitializing, activeSessionId, playingSessionId, restoreStateFromBackend, updatePlayingPlaylist]);
 
   // ============================================================================

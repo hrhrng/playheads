@@ -19,9 +19,6 @@ import type {
   AgentAction
 } from '../types/index.d';
 
-// Module-level: the single MusicKit instance (survives React re-mounts)
-let sharedMkInstance: MusicKitInstance | null = null;
-
 interface UseAppleMusicParams {
   userId: string | null;
   activeSessionId: string | null;
@@ -362,7 +359,6 @@ export default function useAppleMusic({
     // Track event listeners and instance so we can clean up properly
     const listeners: Array<[string, (...args: any[]) => void]> = [];
     let mkInstance: MusicKitInstance | null = null;
-    let cancelled = false;
 
     const initMusicKit = async (): Promise<void> => {
       try {
@@ -426,26 +422,15 @@ export default function useAppleMusic({
           }
         } catch (_) { /* storage access may be restricted */ }
 
-        // Reuse the singleton if already configured (StrictMode re-mount)
-        let mk: MusicKitInstance;
-        if (sharedMkInstance) {
-          mk = sharedMkInstance;
-        } else {
-          mk = await window.MusicKit.configure({
-            developerToken: developerTokenRef.current!,
-            app: { name: 'Playhead', build: '1.0.0' }
-          } as MusicKitConfig) as MusicKitInstance;
-          sharedMkInstance = mk;
-
-          // Stop any auto-restored playback immediately — MusicKit may
-          // resume from its own persistence despite our cleanup above.
-          try { mk.stop(); } catch (_) { /* ignore */ }
-        }
+        const mk = await window.MusicKit.configure({
+          developerToken: developerTokenRef.current!,
+          app: { name: 'Playhead', build: '1.0.0' }
+        } as MusicKitConfig) as MusicKitInstance;
         mkInstance = mk;
 
-        // If cleanup already ran (StrictMode), bail out — the next
-        // mount will re-run initMusicKit and pick up sharedMkInstance.
-        if (cancelled) return;
+        // Stop any auto-restored playback immediately — MusicKit may
+        // resume from its own persistence despite our cleanup above.
+        try { mk.stop(); } catch (_) { /* ignore */ }
 
         // Restore auth from server-side token by setting the instance
         // property directly. This avoids hacking localStorage keys.
@@ -542,12 +527,12 @@ export default function useAppleMusic({
     }
 
     return () => {
-      cancelled = true;
       document.removeEventListener('musickitloaded', initMusicKit);
       // Gate closed — no more events processed
       playerReadyRef.current = false;
-      // Remove listeners but DON'T stop — the shared instance survives re-mounts
+      // Stop playback and remove listeners
       if (mkInstance) {
+        try { mkInstance.stop(); } catch (_) { /* ignore */ }
         listeners.forEach(([event, handler]) => {
           try { mkInstance!.removeEventListener(event, handler); } catch (_) { /* ignore */ }
         });
