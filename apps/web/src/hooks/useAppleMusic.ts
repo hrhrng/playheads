@@ -491,12 +491,7 @@ export default function useAppleMusic({
 
           const playing = state === 'playing' || state === 2;
           const paused  = state === 'paused'  || state === 3;
-          // Only update isPlaying for definitive states. Transitional states
-          // (loading/1, seeking/8, waiting/6) must NOT flip isPlaying to false,
-          // otherwise the UI flashes back to "paused" during seek transitions
-          // after restore, causing users to click again and create duplicate audio.
-          if (playing) setIsPlaying(true);
-          else if (paused) setIsPlaying(false);
+          setIsPlaying(playing);
           if (mk.nowPlayingItem) {
             setCurrentTrack(mk.nowPlayingItem);
             if (playing) lastPlayingTrackIdRef.current = mk.nowPlayingItem.id;
@@ -706,7 +701,7 @@ export default function useAppleMusic({
   }, [musicKit]);
 
   const play = useCallback(async (): Promise<void> => {
-    if (!musicKit || isFlushingRef.current) return;
+    if (!musicKit) return;
     console.log('[MK] play() called, pending:', !!pendingQueueRef.current, 'mkState:', musicKit.playbackState);
     try {
       playerReadyRef.current = true;
@@ -745,7 +740,7 @@ export default function useAppleMusic({
   }, [musicKit, syncMusicKitState, handleAuthLost]);
 
   const togglePlay = useCallback(async (): Promise<void> => {
-    if (!musicKit || isFlushingRef.current) return;
+    if (!musicKit) return;
     console.log('[MK] togglePlay() called, mkState:', musicKit.playbackState, 'pending:', !!pendingQueueRef.current);
     try {
       // Read real MusicKit state, not stale React closure
