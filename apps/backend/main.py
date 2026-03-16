@@ -381,45 +381,6 @@ async def create_session(request: CreateSessionRequest):
     }
 
 
-@app.post("/action/{action}")
-async def execute_action(action: str, index: Optional[int] = None, query: Optional[str] = None, session_id: Optional[str] = None, db: AsyncSession = Depends(get_db)):
-    """Execute a direct action (play, pause, skip, etc.)."""
-    from apps.backend.state import store
-    
-    if not session_id:
-        return {"error": "Session ID required"}
-        
-    session = await store.get_session(db, session_id)
-    
-    if action == "play" and index is not None:
-        if 0 <= index < len(session.playlist):
-            track = session.playlist[index]
-            return {"action": "play", "index": index, "track": track.model_dump()}
-        return {"error": "Invalid index"}
-    
-    elif action == "skip_next":
-        if session.current_track and session.playlist:
-            current_idx = next(
-                (i for i, t in enumerate(session.playlist) if t.id == session.current_track.id),
-                -1
-            )
-            next_idx = current_idx + 1
-            if next_idx < len(session.playlist):
-                return {"action": "play", "index": next_idx}
-        return {"action": "play", "index": 0}
-    
-    elif action == "skip_prev":
-        if session.current_track and session.playlist:
-            current_idx = next(
-                (i for i, t in enumerate(session.playlist) if t.id == session.current_track.id),
-                0
-            )
-            prev_idx = max(0, current_idx - 1)
-            return {"action": "play", "index": prev_idx}
-        return {"action": "play", "index": 0}
-    
-    return {"error": f"Unknown action: {action}"}
-
 # =============================================================================
 # Conversations List
 # =============================================================================
