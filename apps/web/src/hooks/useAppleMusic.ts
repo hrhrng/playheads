@@ -390,7 +390,31 @@ export default function useAppleMusic({
           return;
         }
 
-        console.log('[MusicKit] Configuring MusicKit...');
+        // ── Nuke any pre-existing MusicKit instance ──────────────────────
+        // On page refresh MusicKit SDK may auto-restore playback from its
+        // internal persistence (IndexedDB / MediaSession). We destroy
+        // everything first so our own restore is the single source of truth.
+        console.log('[MusicKit] Destroying previous instance (if any)...');
+        try {
+          // Grab the old singleton before configure() overwrites it
+          const old = (window.MusicKit as any).getInstance?.() as MusicKitInstance | null;
+          if (old) {
+            try { await old.stop(); } catch (_) {}
+            try { await old.setQueue({ songs: [] } as any); } catch (_) {}
+          }
+        } catch (_) {}
+
+        // Kill ALL media elements in the DOM — MusicKit injects hidden
+        // <audio> tags that can keep streaming even after stop().
+        document.querySelectorAll('audio, video').forEach(el => {
+          const media = el as HTMLMediaElement;
+          media.pause();
+          media.removeAttribute('src');
+          media.load(); // abort any in-flight network request
+        });
+
+        // ── Create fresh instance ────────────────────────────────────────
+        console.log('[MusicKit] Configuring fresh MusicKit instance...');
         const configOptions: MusicKitConfig & { musicUserToken?: string } = {
           developerToken: developerTokenRef.current!,
           app: { name: 'Playhead', build: '1.0.0' }
@@ -405,26 +429,14 @@ export default function useAppleMusic({
         mkInstance = mk;
         console.log('[MusicKit] Configured successfully, isAuthorized:', mk.isAuthorized);
 
-        // Stop any auto-resumed playback from the previous page session.
-        // MusicKit may restore its internal state on configure(), causing
-        // "ghost" playback that overlaps with the app's own restore logic.
-        try {
-          const autoResumedState = (mk as any).playbackState;
-          const isAutoPlaying = autoResumedState === 2 || autoResumedState === 'playing';
-          if (isAutoPlaying || mk.nowPlayingItem) {
-            console.log('[MusicKit] Stopping auto-resumed playback from previous session');
-            await mk.stop();
-          }
-        } catch (e) {
-          console.warn('[MusicKit] Could not stop auto-resumed playback:', e);
-        }
+        // Even after a fresh configure(), stop + clear queue once more to be
+        // absolutely sure no residual playback slips through.
+        try { await mk.stop(); } catch (_) {}
+        try { await mk.setQueue({ songs: [] } as any); } catch (_) {}
 
         setMusicKit(mk);
         setIsAuthorized(mk.isAuthorized);
-
-        if (mk.queue?.items) {
-          setQueueState([...mk.queue.items]);
-        }
+        setQueueState([]);
 
         // Event Listeners — store references so we can remove them on cleanup
         const on = (event: string, handler: (...args: any[]) => void) => {
@@ -549,14 +561,22 @@ export default function useAppleMusic({
 
     return () => {
       document.removeEventListener('musickitloaded', initMusicKit);
-      // Clean up MusicKit instance: stop playback and remove event listeners
-      // to prevent ghost playback on re-initialization (e.g. hot-reload, re-mount).
+      // Aggressively tear down MusicKit: stop, clear queue, remove listeners,
+      // and kill any orphaned media elements to prevent ghost audio.
       if (mkInstance) {
         try { mkInstance.stop(); } catch (_) { /* ignore */ }
+        try { mkInstance.setQueue({ songs: [] } as any); } catch (_) { /* ignore */ }
         listeners.forEach(([event, handler]) => {
           try { mkInstance!.removeEventListener(event, handler); } catch (_) { /* ignore */ }
         });
       }
+      // Kill all media elements to ensure no ghost audio survives
+      document.querySelectorAll('audio, video').forEach(el => {
+        const media = el as HTMLMediaElement;
+        media.pause();
+        media.removeAttribute('src');
+        media.load();
+      });
     };
   }, [isTokenChecked, storedMusicUserToken]);
 
