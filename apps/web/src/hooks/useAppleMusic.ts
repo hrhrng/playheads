@@ -905,6 +905,7 @@ export default function useAppleMusic({
       if (nextTrack?.id) {
         const wasPlaying = (musicKit.playbackState as any) === 2 || (musicKit.playbackState as any) === 'playing';
         lastPlayingTrackIdRef.current = nextTrack.id;
+        pendingQueueRef.current = null; // Clear pending restore so play() uses the new track
         await musicKit.setQueue({ song: nextTrack.id, startPlaying: false } as any);
         // Update UI immediately with playlist data (includes artwork)
         setCurrentTrack(musicKit.nowPlayingItem || {
@@ -947,6 +948,7 @@ export default function useAppleMusic({
       if (prevTrack?.id) {
         const wasPlaying = (musicKit.playbackState as any) === 2 || (musicKit.playbackState as any) === 'playing';
         lastPlayingTrackIdRef.current = prevTrack.id;
+        pendingQueueRef.current = null; // Clear pending restore so play() uses the new track
         await musicKit.setQueue({ song: prevTrack.id, startPlaying: false } as any);
         setCurrentTrack(musicKit.nowPlayingItem || {
           id: prevTrack.id,
