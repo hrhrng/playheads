@@ -147,6 +147,7 @@ export const ChatInterface = ({
 
   // Shared: trigger skip based on direction
   const triggerSkip = useCallback((dy: number) => {
+    console.log('[triggerSkip] dy:', dy, 'hasNext:', !!onSkipNextRef.current, 'hasPrev:', !!onSkipPrevRef.current);
     if (dy < 0 && onSkipNextRef.current) {
       onSkipNextRef.current();
     } else if (dy > 0 && onSkipPrevRef.current) {
