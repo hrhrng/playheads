@@ -13,13 +13,8 @@ export interface Env {
   DB: D1Database;
 
   // LLM configuration
-  LLM_PROVIDER: string; // "anthropic" | "openai"
+  ANTHROPIC_API_KEY: string;
   ANTHROPIC_MODEL: string;
-
-  // Cloudflare AI Gateway (via ai-gateway-provider)
-  CLOUDFLARE_ACCOUNT_ID: string;
-  AI_GATEWAY_ID: string;
-  CF_AIG_TOKEN: string;
 
   // Apple Music
   APPLE_MUSIC_TEAM_ID: string;
