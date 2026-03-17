@@ -19,7 +19,7 @@ jobs:
           echo "Cutoff: $CUTOFF (older than ${MAX_AGE_DAYS} days)"
 
           # Production worker names — never delete these
-          PROD_NAMES='["playheads-gateway","playheads-web","playheads-landing","playheads-backend","playheads-admin","playheads-gateway-preview"]'
+          PROD_NAMES='["playheads-gateway","playheads-web","playheads-landing","playheads-backend","playheads-admin","playheads-agent","playheads-gateway-preview"]'
 
           # Fetch all workers
           WORKERS=$(curl -s \
