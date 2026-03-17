@@ -110,43 +110,71 @@ export const ChatInterface = ({
   // Note: Removed initial warning toast as connection handling is now done via overlay and actionable toasts
 
   // Swipe gesture handling for skip next/prev (only in player mode)
+  // Uses native listeners with { passive: false } so we can preventDefault on
+  // vertical swipes to stop browser pull-to-refresh / overscroll.
+  const swipeTargetRef = useRef<HTMLDivElement>(null);
   const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
   const touchMovedRef = useRef(false);
 
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    if (showHistory) return;
-    // Ignore touches on interactive elements (buttons, sliders, inputs)
-    const tag = (e.target as HTMLElement).closest('button, input, [role="slider"], .rc-slider');
-    if (tag) return;
-    touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, time: Date.now() };
-    touchMovedRef.current = false;
-  }, [showHistory]);
+  // Store latest callbacks in refs so the native listener always sees current values
+  const showHistoryRef = useRef(showHistory);
+  showHistoryRef.current = showHistory;
+  const onSkipNextRef = useRef(onSkipNext);
+  onSkipNextRef.current = onSkipNext;
+  const onSkipPrevRef = useRef(onSkipPrev);
+  onSkipPrevRef.current = onSkipPrev;
 
-  const handleTouchMove = useCallback(() => {
-    touchMovedRef.current = true;
-  }, []);
+  useEffect(() => {
+    const el = swipeTargetRef.current;
+    if (!el) return;
 
-  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
-    if (showHistory || !touchStartRef.current || !touchMovedRef.current) {
+    const onTouchStart = (e: TouchEvent) => {
+      if (showHistoryRef.current) return;
+      const target = e.target as HTMLElement;
+      if (target.closest('button, input, [role="slider"], .rc-slider')) return;
+      touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, time: Date.now() };
+      touchMovedRef.current = false;
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      touchMovedRef.current = true;
+      if (touchStartRef.current) {
+        const dx = Math.abs(e.touches[0].clientX - touchStartRef.current.x);
+        const dy = Math.abs(e.touches[0].clientY - touchStartRef.current.y);
+        if (dy > 10 && dy > dx) {
+          e.preventDefault(); // block browser overscroll
+        }
+      }
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      if (showHistoryRef.current || !touchStartRef.current || !touchMovedRef.current) {
+        touchStartRef.current = null;
+        return;
+      }
+      const dx = e.changedTouches[0].clientX - touchStartRef.current.x;
+      const dy = e.changedTouches[0].clientY - touchStartRef.current.y;
+      const elapsed = Date.now() - touchStartRef.current.time;
       touchStartRef.current = null;
-      return;
-    }
-    const deltaX = e.changedTouches[0].clientX - touchStartRef.current.x;
-    const deltaY = e.changedTouches[0].clientY - touchStartRef.current.y;
-    const elapsed = Date.now() - touchStartRef.current.time;
-    touchStartRef.current = null;
 
-    // Require: vertical > 60px, within 400ms, and mostly vertical (not diagonal)
-    if (Math.abs(deltaY) < 60 || elapsed > 400 || Math.abs(deltaX) > Math.abs(deltaY) * 0.5) return;
+      if (Math.abs(dy) < 60 || elapsed > 400 || Math.abs(dx) > Math.abs(dy) * 0.5) return;
 
-    if (deltaY < 0 && onSkipNext) {
-      // Swipe up → next track
-      onSkipNext();
-    } else if (deltaY > 0 && onSkipPrev) {
-      // Swipe down → previous track
-      onSkipPrev();
-    }
-  }, [showHistory, onSkipNext, onSkipPrev]);
+      if (dy < 0 && onSkipNextRef.current) {
+        onSkipNextRef.current();
+      } else if (dy > 0 && onSkipPrevRef.current) {
+        onSkipPrevRef.current();
+      }
+    };
+
+    el.addEventListener('touchstart', onTouchStart, { passive: true });
+    el.addEventListener('touchmove', onTouchMove, { passive: false });
+    el.addEventListener('touchend', onTouchEnd, { passive: true });
+    return () => {
+      el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('touchmove', onTouchMove);
+      el.removeEventListener('touchend', onTouchEnd);
+    };
+  }, []); // stable — uses refs for changing values
 
   // Wrap sendMessage — allow chatting without Apple Music auth;
   // playback errors are caught at the MusicKit layer with reconnect prompts.
@@ -214,10 +242,8 @@ export const ChatInterface = ({
 
         {/* Record Player - Always Visible, swipe up/down for next/prev */}
         <div
+          ref={swipeTargetRef}
           className="absolute inset-0 flex items-center justify-center pb-20"
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
         >
           <div className="relative z-10 w-full max-w-xl px-8">
             <RecordPlayer
