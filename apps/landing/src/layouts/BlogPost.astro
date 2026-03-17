@@ -1,0 +1,90 @@
+---
+import Layout from './Layout.astro';
+
+interface Props {
+  title: string;
+  description: string;
+  pubDate: Date;
+  updatedDate?: Date;
+  tags?: string[];
+}
+
+const { title, description, pubDate, updatedDate, tags = [] } = Astro.props;
+const siteUrl = 'https://playheads.ai';
+const formattedDate = pubDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+const formattedUpdatedDate = updatedDate?.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+---
+
+<Layout title={`${title} | The Playheads Blog`} description={description}>
+  <nav class="sticky top-0 z-50 backdrop-blur-lg bg-air-50/80 border-b border-air-100/60" aria-label="Main navigation">
+    <div class="flex items-center justify-between px-6 py-3 max-w-5xl mx-auto">
+      <a href="/" class="text-sm font-semibold tracking-tight" aria-label="The Playheads - Home">The Playheads</a>
+      <div class="flex items-center gap-6">
+        <a href="/blog" class="text-sm text-air-400 hover:text-air-900 transition-colors">Blog</a>
+      </div>
+    </div>
+  </nav>
+
+  <main>
+    <article class="px-6 pt-12 pb-16 max-w-2xl mx-auto">
+      <header class="mb-10">
+        <div class="flex items-center gap-2 text-xs text-air-400 font-mono mb-4">
+          <time datetime={pubDate.toISOString()}>{formattedDate}</time>
+          {updatedDate && <span>· Updated {formattedUpdatedDate}</span>}
+        </div>
+        <h1 class="text-2xl sm:text-3xl font-semibold tracking-tight leading-tight mb-4">{title}</h1>
+        <p class="text-air-500 text-sm leading-relaxed">{description}</p>
+        {tags.length > 0 && (
+          <div class="flex flex-wrap gap-2 mt-4">
+            {tags.map(tag => (
+              <span class="text-xs font-mono px-2 py-0.5 rounded-full bg-air-100 text-air-500">{tag}</span>
+            ))}
+          </div>
+        )}
+      </header>
+
+      <div class="prose prose-sm max-w-none
+        prose-headings:font-semibold prose-headings:tracking-tight
+        prose-h2:text-lg prose-h2:mt-10 prose-h2:mb-4
+        prose-h3:text-base prose-h3:mt-8 prose-h3:mb-3
+        prose-p:text-air-500 prose-p:leading-relaxed prose-p:mb-4
+        prose-a:text-air-900 prose-a:underline prose-a:underline-offset-2
+        prose-strong:text-air-900 prose-strong:font-semibold
+        prose-ul:text-air-500 prose-ul:leading-relaxed
+        prose-ol:text-air-500 prose-ol:leading-relaxed
+        prose-li:mb-1
+        prose-blockquote:border-air-200 prose-blockquote:text-air-400
+      ">
+        <slot />
+      </div>
+
+      <footer class="mt-16 pt-8 border-t border-air-100">
+        <a href="/blog" class="text-sm text-air-400 hover:text-air-900 transition-colors">&larr; Back to all posts</a>
+      </footer>
+    </article>
+  </main>
+
+  <!-- Article JSON-LD -->
+  <script type="application/ld+json" set:html={JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    "headline": title,
+    "description": description,
+    "datePublished": pubDate.toISOString(),
+    "dateModified": (updatedDate || pubDate).toISOString(),
+    "author": {
+      "@type": "Organization",
+      "name": "The Playheads"
+    },
+    "publisher": {
+      "@type": "Organization",
+      "name": "The Playheads",
+      "url": siteUrl
+    },
+    "mainEntityOfPage": {
+      "@type": "WebPage",
+      "@id": `${siteUrl}${Astro.url.pathname}`
+    },
+    "keywords": tags.join(', ')
+  })} />
+</Layout>
