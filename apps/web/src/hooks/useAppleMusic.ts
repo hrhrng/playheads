@@ -896,7 +896,10 @@ export default function useAppleMusic({
     startTransition();
     try {
       const playlist = playingPlaylistRef.current;
-      const currentId = musicKit.nowPlayingItem?.id || lastPlayingTrackIdRef.current;
+      const mkId = musicKit.nowPlayingItem?.id;
+      const lastId = lastPlayingTrackIdRef.current;
+      const currentId = mkId || lastId;
+      console.log('[skipNext]', { mkId, lastId, currentId, playlistLen: playlist.length, playlistIds: playlist.map(t => t.id) });
       if (!currentId || playlist.length === 0) return;
 
       const currentIdx = playlist.findIndex(t => t.id === currentId);
@@ -923,7 +926,10 @@ export default function useAppleMusic({
     startTransition();
     try {
       const playlist = playingPlaylistRef.current;
-      const currentId = musicKit.nowPlayingItem?.id || lastPlayingTrackIdRef.current;
+      const mkId = musicKit.nowPlayingItem?.id;
+      const lastId = lastPlayingTrackIdRef.current;
+      const currentId = mkId || lastId;
+      console.log('[skipPrev]', { mkId, lastId, currentId, playlistLen: playlist.length, playlistIds: playlist.map(t => t.id) });
       if (!currentId || playlist.length === 0) return;
 
       const currentIdx = playlist.findIndex(t => t.id === currentId);
