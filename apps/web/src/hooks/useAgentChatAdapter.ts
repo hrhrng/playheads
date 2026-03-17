@@ -4,12 +4,12 @@
  *
  * Player control tools (play_track, add_to_queue, skip_next,
  * remove_from_playlist) are registered as client tools so they
- * execute directly against MusicKit JS on the frontend.
+ * execute directly against MusicKit JS on the frontend via
+ * the onToolCall callback.
  */
-import { useMemo, useCallback, useEffect, useRef } from "react";
+import { useMemo, useCallback, useRef } from "react";
 import { useAgent } from "agents/react";
 import { useAgentChat } from "@cloudflare/ai-chat/react";
-import { isToolUIPart, getToolName } from "ai";
 import type { UIMessage } from "ai";
 import type { Message, MessagePart } from "../types/chat";
 
@@ -99,8 +99,10 @@ function mapUIMessagesToMessages(uiMessages: UIMessage[]): Message[] {
 
 /**
  * Build client tool definitions for player control.
- * These tools execute on the frontend via MusicKit JS; their schemas
- * are automatically sent to the server by useAgentChat.
+ * The `execute` functions are called from the onToolCall callback.
+ * The schemas (description + parameters) are automatically sent to the
+ * server by useAgentChat's prepareBody so createToolsFromClientSchemas
+ * can register stubs on the server side.
  */
 function buildClientTools(actions: MusicActions) {
   return {
@@ -190,116 +192,65 @@ export function useAgentChatAdapter({
     [musicActions]
   );
 
-  // Ref for stable access to client tools in effects
+  // Ref for stable access to client tools in onToolCall callback
   const clientToolsRef = useRef(clientTools);
   clientToolsRef.current = clientTools;
+
+  // onToolCall callback — the official Cloudflare Agents API for client-side tools.
+  // When the AI calls a tool that has no `execute` on the server (created via
+  // createToolsFromClientSchemas), the stream pauses and this callback fires.
+  // We execute the tool on the frontend and call addToolOutput to resume.
+  const handleToolCall = useCallback(
+    async ({
+      toolCall,
+      addToolOutput,
+    }: {
+      toolCall: { toolCallId: string; toolName: string; input: unknown };
+      addToolOutput: (opts: {
+        toolCallId: string;
+        output: unknown;
+        state?: "output-available" | "output-error";
+        errorText?: string;
+      }) => void;
+    }) => {
+      const tools = clientToolsRef.current;
+      if (!tools) return;
+
+      const tool = tools[toolCall.toolName as keyof ClientToolMap];
+      if (!tool) return;
+
+      let output: unknown;
+      try {
+        output = await tool.execute(toolCall.input as never);
+      } catch (error) {
+        output = `Error: ${error instanceof Error ? error.message : String(error)}`;
+      }
+
+      addToolOutput({
+        toolCallId: toolCall.toolCallId,
+        output,
+      });
+    },
+    []
+  );
 
   const {
     messages: uiMessages,
     sendMessage: agentSendMessage,
-    addToolOutput,
     clearHistory,
     status,
   } = useAgentChat({
     agent,
     body: { session_id: sessionId, user_id: userId },
+    // Pass tools so their schemas are sent to the server via prepareBody.
+    // The `execute` functions are not used by the library — we handle
+    // execution in onToolCall below.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     tools: clientTools as any,
-    // Disable the library's automatic resolution — we handle it ourselves
-    // because experimental_automaticToolResolution has race conditions that
-    // cause tool calls to hang without executing.
-    experimental_automaticToolResolution: false,
+    // Official API: stream pauses on client tools, this callback fires,
+    // we execute and call addToolOutput to resume.
+    onToolCall: handleToolCall,
   });
-
-  // ------------------------------------------------------------------
-  // Manual client tool resolution
-  // ------------------------------------------------------------------
-  const processedToolCallsRef = useRef(new Set<string>());
-  const isResolvingRef = useRef(false);
-
-  useEffect(() => {
-    if (!clientToolsRef.current) return;
-    if (isResolvingRef.current) return;
-
-    // Collect ALL pending tool calls across all messages (not just the last)
-    const pendingToolCalls: Array<{
-      toolCallId: string;
-      toolName: string;
-      input: unknown;
-    }> = [];
-
-    for (const msg of uiMessages) {
-      if (msg.role !== "assistant") continue;
-      for (const part of msg.parts) {
-        if (
-          isToolUIPart(part) &&
-          part.state === "input-available" &&
-          !processedToolCallsRef.current.has(part.toolCallId)
-        ) {
-          const toolName = getToolName(part);
-          const tool = clientToolsRef.current[toolName as keyof ClientToolMap];
-          if (tool) {
-            pendingToolCalls.push({
-              toolCallId: part.toolCallId,
-              toolName,
-              input: (part as unknown as { input?: unknown }).input,
-            });
-          }
-        }
-      }
-    }
-
-    if (pendingToolCalls.length === 0) return;
-
-    // Mark all as being processed to prevent re-entry
-    for (const tc of pendingToolCalls) {
-      processedToolCallsRef.current.add(tc.toolCallId);
-    }
-    isResolvingRef.current = true;
-
-    (async () => {
-      try {
-        for (const tc of pendingToolCalls) {
-          const tool = clientToolsRef.current?.[tc.toolName as keyof ClientToolMap];
-          if (!tool?.execute) continue;
-
-          let output: unknown;
-          try {
-            output = await tool.execute(tc.input as never);
-          } catch (error) {
-            output = `Error executing tool: ${error instanceof Error ? error.message : String(error)}`;
-          }
-
-          // Send result to server and update local UI state
-          addToolOutput({
-            toolCallId: tc.toolCallId,
-            toolName: tc.toolName,
-            output,
-          });
-        }
-      } finally {
-        isResolvingRef.current = false;
-      }
-    })();
-  }, [uiMessages, addToolOutput]);
-
-  // Clean up processed tool call IDs when messages change
-  useEffect(() => {
-    const currentIds = new Set<string>();
-    for (const msg of uiMessages) {
-      for (const part of msg.parts) {
-        if ("toolCallId" in part && (part as { toolCallId: string }).toolCallId) {
-          currentIds.add((part as { toolCallId: string }).toolCallId);
-        }
-      }
-    }
-    // Remove stale entries
-    for (const id of processedToolCallsRef.current) {
-      if (!currentIds.has(id)) {
-        processedToolCallsRef.current.delete(id);
-      }
-    }
-  }, [uiMessages]);
 
   // Map UIMessage[] → Message[]
   const messages = useMemo(
