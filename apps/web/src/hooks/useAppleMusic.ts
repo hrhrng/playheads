@@ -891,19 +891,16 @@ export default function useAppleMusic({
   }, [musicKit, syncMusicKitState, handleAuthLost]);
 
   const skipNext = useCallback(async (): Promise<void> => {
-    console.log('[skipNext] called', { hasMusicKit: !!musicKit, locked: playbackLockRef.current });
     if (!musicKit || playbackLockRef.current) return;
     playbackLockRef.current = true;
     startTransition();
     try {
       const playlist = playingPlaylistRef.current;
-      const currentId = musicKit.nowPlayingItem?.id;
-      console.log('[skipNext] currentId:', currentId, 'playlist.length:', playlist.length);
+      const currentId = musicKit.nowPlayingItem?.id || lastPlayingTrackIdRef.current;
       if (!currentId || playlist.length === 0) return;
 
       const currentIdx = playlist.findIndex(t => t.id === currentId);
       const nextTrack = playlist[currentIdx + 1];
-      console.log('[skipNext] currentIdx:', currentIdx, 'nextTrack:', nextTrack?.id);
       if (nextTrack?.id) {
         await musicKit.setQueue({ song: nextTrack.id, startPlaying: true } as any);
         await syncMusicKitState();
@@ -921,19 +918,16 @@ export default function useAppleMusic({
   }, [musicKit, syncMusicKitState, handleAuthLost, startTransition]);
 
   const skipPrev = useCallback(async (): Promise<void> => {
-    console.log('[skipPrev] called', { hasMusicKit: !!musicKit, locked: playbackLockRef.current });
     if (!musicKit || playbackLockRef.current) return;
     playbackLockRef.current = true;
     startTransition();
     try {
       const playlist = playingPlaylistRef.current;
-      const currentId = musicKit.nowPlayingItem?.id;
-      console.log('[skipPrev] currentId:', currentId, 'playlist.length:', playlist.length);
+      const currentId = musicKit.nowPlayingItem?.id || lastPlayingTrackIdRef.current;
       if (!currentId || playlist.length === 0) return;
 
       const currentIdx = playlist.findIndex(t => t.id === currentId);
       const prevTrack = playlist[currentIdx - 1];
-      console.log('[skipPrev] currentIdx:', currentIdx, 'prevTrack:', prevTrack?.id);
       if (prevTrack?.id) {
         await musicKit.setQueue({ song: prevTrack.id, startPlaying: true } as any);
         await syncMusicKitState();
