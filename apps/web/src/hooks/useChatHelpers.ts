@@ -13,7 +13,7 @@ import type { Message } from '../types/chat';
  * @param value - Current textarea value
  * @returns Textarea ref object
  */
-export function useAutoResizeTextarea(value: string): RefObject<HTMLTextAreaElement> {
+export function useAutoResizeTextarea(value: string): RefObject<HTMLTextAreaElement | null> {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -33,7 +33,7 @@ export function useAutoResizeTextarea(value: string): RefObject<HTMLTextAreaElem
  * @param messages - Array of messages to watch for changes
  * @returns End element ref object for scroll target
  */
-export function useAutoScroll(messages: Message[]): RefObject<HTMLDivElement> {
+export function useAutoScroll(messages: Message[]): RefObject<HTMLDivElement | null> {
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
