@@ -3,8 +3,7 @@
  * Ported from apps/backend/title_generator.py
  */
 import { generateText } from "ai";
-import { createAiGateway } from "ai-gateway-provider";
-import { createAnthropic } from "ai-gateway-provider/providers/anthropic";
+import { createAnthropic } from "@ai-sdk/anthropic";
 import type { Env } from "./types";
 
 const TITLE_PROMPT = `Based on this music conversation, generate a short, descriptive title (max 5 words).
@@ -33,15 +32,13 @@ export async function generateConversationTitle(
 
     const prompt = TITLE_PROMPT.replace("{conversation}", conversationText);
 
-    const aigateway = createAiGateway({
-      accountId: env.CLOUDFLARE_ACCOUNT_ID,
-      gateway: env.AI_GATEWAY_ID,
+    const anthropic = createAnthropic({
       apiKey: env.CF_AIG_TOKEN,
+      baseURL: `https://gateway.ai.cloudflare.com/v1/${env.CLOUDFLARE_ACCOUNT_ID}/${env.AI_GATEWAY_ID}/anthropic`,
     });
-    const anthropic = createAnthropic();
 
     const { text } = await generateText({
-      model: aigateway(anthropic("claude-haiku-4-5-20251001")),
+      model: anthropic("claude-haiku-4-5-20251001"),
       prompt,
       temperature: 0.7,
       maxTokens: 20,

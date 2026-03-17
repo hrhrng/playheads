@@ -9,8 +9,7 @@
  */
 import { AIChatAgent } from "@cloudflare/ai-chat";
 import { streamText, convertToModelMessages } from "ai";
-import { createAiGateway } from "ai-gateway-provider";
-import { createAnthropic } from "ai-gateway-provider/providers/anthropic";
+import { createAnthropic } from "@ai-sdk/anthropic";
 import { createMusicTools } from "./tools";
 import { generateAndUpdateTitle } from "./title";
 import type { Env, PlaybackState } from "./types";
@@ -105,13 +104,11 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
     });
 
     // Route through Cloudflare AI Gateway
-    const aigateway = createAiGateway({
-      accountId: this.env.CLOUDFLARE_ACCOUNT_ID,
-      gateway: this.env.AI_GATEWAY_ID,
+    const anthropic = createAnthropic({
       apiKey: this.env.CF_AIG_TOKEN,
+      baseURL: `https://gateway.ai.cloudflare.com/v1/${this.env.CLOUDFLARE_ACCOUNT_ID}/${this.env.AI_GATEWAY_ID}/anthropic`,
     });
-    const anthropic = createAnthropic();
-    const model = aigateway(anthropic(this.env.ANTHROPIC_MODEL || "claude-sonnet-4-6"));
+    const model = anthropic(this.env.ANTHROPIC_MODEL || "claude-sonnet-4-6");
 
     // Extract session context from custom body
     const sessionId = (options?.body as Record<string, unknown>)?.session_id as string | undefined;
