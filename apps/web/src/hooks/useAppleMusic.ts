@@ -611,6 +611,7 @@ export default function useAppleMusic({
       }
 
       if (current_track?.id) {
+        lastPlayingTrackIdRef.current = current_track.id;
         const alreadyPlaying = musicKit.nowPlayingItem?.id === current_track.id;
 
         if (!alreadyPlaying) {
@@ -896,14 +897,37 @@ export default function useAppleMusic({
     startTransition();
     try {
       const playlist = playingPlaylistRef.current;
-      const currentId = musicKit.nowPlayingItem?.id;
+      const currentId = musicKit.nowPlayingItem?.id || lastPlayingTrackIdRef.current;
       if (!currentId || playlist.length === 0) return;
 
       const currentIdx = playlist.findIndex(t => t.id === currentId);
       const nextTrack = playlist[currentIdx + 1];
       if (nextTrack?.id) {
-        await musicKit.setQueue({ song: nextTrack.id, startPlaying: true } as any);
-        await syncMusicKitState();
+        const wasPlaying = (musicKit.playbackState as any) === 2 || (musicKit.playbackState as any) === 'playing';
+        lastPlayingTrackIdRef.current = nextTrack.id;
+        pendingQueueRef.current = null; // Clear pending restore so play() uses the new track
+        await musicKit.setQueue({ song: nextTrack.id, startPlaying: false } as any);
+        // Update UI immediately with playlist data (includes artwork)
+        setCurrentTrack(musicKit.nowPlayingItem || {
+          id: nextTrack.id,
+          name: nextTrack.name,
+          artistName: nextTrack.artist,
+          albumName: nextTrack.album || '',
+          artworkURL: nextTrack.artwork_url || '',
+          artwork: nextTrack.artwork_url ? { url: nextTrack.artwork_url } : undefined,
+          duration: nextTrack.duration || 0,
+        } as any);
+        if (wasPlaying) {
+          try { await musicKit.play(); } catch { /* autoplay policy */ }
+        } else {
+          // Not auto-playing: clear transition so play button is enabled
+          setIsTransitioning(false);
+          if (transitionTimeoutRef.current) {
+            clearTimeout(transitionTimeoutRef.current);
+            transitionTimeoutRef.current = null;
+          }
+        }
+        syncMusicKitState().catch(() => {});
       }
     } catch (e) {
       const classified = classifyError(e);
@@ -923,14 +947,36 @@ export default function useAppleMusic({
     startTransition();
     try {
       const playlist = playingPlaylistRef.current;
-      const currentId = musicKit.nowPlayingItem?.id;
+      const currentId = musicKit.nowPlayingItem?.id || lastPlayingTrackIdRef.current;
       if (!currentId || playlist.length === 0) return;
 
       const currentIdx = playlist.findIndex(t => t.id === currentId);
       const prevTrack = playlist[currentIdx - 1];
       if (prevTrack?.id) {
-        await musicKit.setQueue({ song: prevTrack.id, startPlaying: true } as any);
-        await syncMusicKitState();
+        const wasPlaying = (musicKit.playbackState as any) === 2 || (musicKit.playbackState as any) === 'playing';
+        lastPlayingTrackIdRef.current = prevTrack.id;
+        pendingQueueRef.current = null; // Clear pending restore so play() uses the new track
+        await musicKit.setQueue({ song: prevTrack.id, startPlaying: false } as any);
+        setCurrentTrack(musicKit.nowPlayingItem || {
+          id: prevTrack.id,
+          name: prevTrack.name,
+          artistName: prevTrack.artist,
+          albumName: prevTrack.album || '',
+          artworkURL: prevTrack.artwork_url || '',
+          artwork: prevTrack.artwork_url ? { url: prevTrack.artwork_url } : undefined,
+          duration: prevTrack.duration || 0,
+        } as any);
+        if (wasPlaying) {
+          try { await musicKit.play(); } catch { /* autoplay policy */ }
+        } else {
+          // Not auto-playing: clear transition so play button is enabled
+          setIsTransitioning(false);
+          if (transitionTimeoutRef.current) {
+            clearTimeout(transitionTimeoutRef.current);
+            transitionTimeoutRef.current = null;
+          }
+        }
+        syncMusicKitState().catch(() => {});
       }
     } catch (e) {
       const classified = classifyError(e);

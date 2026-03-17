@@ -5,29 +5,6 @@ from langchain_openai import ChatOpenAI
 import os
 import asyncio
 
-# Cached LLM instance — avoid re-creating on every title generation
-_title_model: ChatOpenAI | None = None
-
-
-def _get_title_model() -> ChatOpenAI | None:
-    global _title_model
-    if _title_model is not None:
-        return _title_model
-
-    api_key = os.getenv('OPENAI_API_KEY')
-    base_url = os.getenv('OPENAI_BASE_URL')
-
-    if not api_key:
-        return None
-
-    _title_model = ChatOpenAI(
-        model="gpt-5-nano",
-        api_key=api_key,
-        base_url=base_url if base_url else None,
-        temperature=0.7
-    )
-    return _title_model
-
 
 async def generate_conversation_title(messages: list[dict], timeout: int = 15) -> str:
     """
@@ -41,13 +18,30 @@ async def generate_conversation_title(messages: list[dict], timeout: int = 15) -
         str: Generated title (max 50 chars) or default if generation fails
     """
     try:
-        model = _get_title_model()
-        if model is None:
+        api_key = os.getenv('OPENAI_API_KEY')
+        if not api_key:
             return "New Conversation"
 
+        base_url = os.getenv('OPENAI_BASE_URL')
+        model = ChatOpenAI(
+            model="gpt-5-nano",
+            api_key=api_key,
+            base_url=base_url if base_url else None,
+            temperature=0.7,
+        )
+
         # Build conversation context from first 5 messages
+        def _extract_text(m: dict) -> str:
+            if m.get('content'):
+                return m['content']
+            if m.get('parts'):
+                return " ".join(
+                    p.get('content', '') for p in m['parts'] if p.get('type') == 'text'
+                )
+            return ''
+
         conversation_text = "\n".join([
-            f"{m.get('role', 'unknown')}: {m.get('content', '')}"
+            f"{m.get('role', 'unknown')}: {_extract_text(m)}"
             for m in messages[:5]
         ])
 

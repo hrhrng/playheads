@@ -68,6 +68,16 @@ export class BackendContainer extends Container<Env> {
 }
 
 export default {
+  // Cron keep-alive: ping the container every 4 minutes so at least one stays warm
+  async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
+    try {
+      const container = getContainer(env.BACKEND);
+      await container.fetch(new Request("http://container/health"));
+    } catch (e) {
+      console.error("keep-alive ping failed:", e);
+    }
+  },
+
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     const start = Date.now();

@@ -87,6 +87,8 @@ function App() {
     syncPlaylistToBackend,
     restoreStateFromBackend,
     updatePlayingPlaylist,
+    skipNext,
+    skipPrev,
   } = useAppleMusic({
     userId: effectiveSession?.user.id || null,
     activeSessionId,
@@ -187,14 +189,18 @@ function App() {
     if (playlistSyncTimer.current) clearTimeout(playlistSyncTimer.current);
     playlistSyncTimer.current = setTimeout(() => {
       lastSyncedPlaylistRef.current = serialized;
-      updatePlayingPlaylist(activeSessionId, viewedPlaylist);
+      // Only update the playing playlist ref when viewing the conversation that owns playback.
+      // Otherwise, switching conversations overwrites playingSessionIdRef and breaks the binding.
+      if (!playingSessionId || playingSessionId === activeSessionId) {
+        updatePlayingPlaylist(activeSessionId, viewedPlaylist);
+      }
       syncPlaylistToBackend(viewedPlaylist);
     }, 500);
 
     return () => {
       if (playlistSyncTimer.current) clearTimeout(playlistSyncTimer.current);
     };
-  }, [viewedPlaylist, activeSessionId, effectiveSession?.user?.id, isLoadingHistory, syncPlaylistToBackend, updatePlayingPlaylist]);
+  }, [viewedPlaylist, activeSessionId, playingSessionId, effectiveSession?.user?.id, isLoadingHistory, syncPlaylistToBackend, updatePlayingPlaylist]);
 
   const startPlaybackFromConversation = useCallback(async (trackIndex: number) => {
     if (!activeSessionId) return;
@@ -275,6 +281,8 @@ function App() {
             onLogout={logout}
             onLinkApple={linkApple}
             onDisconnectApple={appleMusicLogout}
+            skipNext={skipNext}
+            skipPrev={skipPrev}
           />
         } />
 
@@ -307,6 +315,8 @@ function App() {
             isViewingPlayingConversation={isViewingPlayingConversation}
             onStartPlaybackFromConversation={startPlaybackFromConversation}
             playingSessionId={playingSessionId}
+            skipNext={skipNext}
+            skipPrev={skipPrev}
           />
         } />
       </Routes>
