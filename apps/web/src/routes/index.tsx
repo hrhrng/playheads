@@ -45,6 +45,8 @@ interface RouteComponentProps {
   isViewingPlayingConversation?: boolean;
   onStartPlaybackFromConversation?: (index: number) => void;
   playingSessionId?: string | null;
+  skipNext?: () => Promise<void>;
+  skipPrev?: () => Promise<void>;
 }
 
 /**
@@ -72,6 +74,8 @@ export function HomeRoute({
   onLogout,
   onLinkApple,
   onDisconnectApple,
+  skipNext,
+  skipPrev,
 }: RouteComponentProps) {
   const navigate = useNavigate();
 
@@ -124,6 +128,8 @@ export function HomeRoute({
         onMessageSent={fetchConversations}
         onSessionCreated={handleSessionCreated}
         onLinkApple={onLinkApple}
+        onSkipNext={skipNext}
+        onSkipPrev={skipPrev}
       />
     </AppLayout>
   );
@@ -160,6 +166,8 @@ export function ChatRoute({
   isViewingPlayingConversation = true,
   onStartPlaybackFromConversation,
   playingSessionId,
+  skipNext,
+  skipPrev,
 }: RouteComponentProps) {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -243,6 +251,8 @@ export function ChatRoute({
             ? () => navigate(`/chat/${playingSessionId}`)
             : undefined
         }
+        onSkipNext={skipNext}
+        onSkipPrev={skipPrev}
       />
     </AppLayout>
   );
