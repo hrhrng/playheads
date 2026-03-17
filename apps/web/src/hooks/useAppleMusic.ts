@@ -271,16 +271,8 @@ export default function useAppleMusic({
 
     try {
       pendingQueueRef.current = null;
-      // Try to find and play the track from the existing MusicKit queue first
-      const queueItems = (musicKit as any).queue?.items || [];
-      const queueIndex = queueItems.findIndex((item: any) => String(item.id) === String(targetTrack.id));
-      console.log('[MusicKit] play_track: targetId=%s, queueLength=%d, queueIndex=%d', targetTrack.id, queueItems.length, queueIndex);
-      if (queueIndex >= 0) {
-        await (musicKit as any).changeToMediaAtIndex(queueIndex);
-      } else {
-        // Fallback: set queue with songs array format
-        await musicKit.setQueue({ songs: [targetTrack.id], startPlaying: true } as any);
-      }
+      console.log('[MusicKit] setQueue({ song: %s, startPlaying: true })', targetTrack.id);
+      await musicKit.setQueue({ song: targetTrack.id, startPlaying: true } as any);
       syncMusicKitState();
       return `Now playing: ${targetTrack.name} by ${targetTrack.artist}`;
     } catch (e) {
