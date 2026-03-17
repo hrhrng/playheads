@@ -30,6 +30,7 @@ interface RouteComponentProps {
   isDJSpeaking: boolean;
   appleTrack: Track | null;
   isApplePlaying: boolean;
+  isAppleTransitioning: boolean;
   isAppleMusicAuthorized: boolean;
   toggleApple: () => void;
   playbackTime: PlaybackTime;
@@ -62,6 +63,7 @@ export function HomeRoute({
   isDJSpeaking,
   appleTrack,
   isApplePlaying,
+  isAppleTransitioning,
   isAppleMusicAuthorized,
   toggleApple,
   playbackTime,
@@ -114,6 +116,7 @@ export function HomeRoute({
         isDJSpeaking={isDJSpeaking}
         currentTrack={appleTrack}
         isPlaying={isApplePlaying}
+        isTransitioning={isAppleTransitioning}
         isAppleMusicAuthorized={isAppleMusicAuthorized}
         togglePlay={toggleApple}
         playbackTime={playbackTime}
@@ -144,6 +147,7 @@ export function ChatRoute({
   isDJSpeaking,
   appleTrack,
   isApplePlaying,
+  isAppleTransitioning,
   isAppleMusicAuthorized,
   toggleApple,
   playbackTime,
@@ -222,6 +226,7 @@ export function ChatRoute({
         isDJSpeaking={isDJSpeaking}
         currentTrack={appleTrack}
         isPlaying={isApplePlaying}
+        isTransitioning={isAppleTransitioning}
         isAppleMusicAuthorized={isAppleMusicAuthorized}
         togglePlay={toggleApple}
         playbackTime={playbackTime}

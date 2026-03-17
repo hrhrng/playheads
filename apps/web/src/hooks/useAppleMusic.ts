@@ -36,6 +36,7 @@ interface UseAppleMusicReturn {
   isAuthorized: boolean;
   currentTrack: Track | null;
   isPlaying: boolean;
+  isTransitioning: boolean;
   playbackTime: PlaybackTime;
   queue: Track[];
   sessionId: string;
@@ -82,6 +83,8 @@ export default function useAppleMusic({
   const [isAuthorized, setIsAuthorized] = useState<boolean>(false);
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  const [isTransitioning, setIsTransitioning] = useState<boolean>(false);
+  const transitionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [playbackTime, setPlaybackTime] = useState<PlaybackTime>({ current: 0, total: 0 });
   const playbackTimeRef = useRef<PlaybackTime>({ current: 0, total: 0 });
   const [queue, setQueueState] = useState<Track[]>([]);
@@ -89,9 +92,20 @@ export default function useAppleMusic({
   const developerTokenRef = useRef<string | null>(null);
   const isAdvancingRef = useRef(false);
   const lastPlayingTrackIdRef = useRef<string | null>(null);
-  const isRestoringRef = useRef(false);
   const playingPlaylistRef = useRef<FormattedTrack[]>([]);
   const playingSessionIdRef = useRef<string | null>(null);
+
+  // ── MusicKit decoupling gate ───────────────────────────────────────
+  // When false, ALL MusicKit event-driven state changes are ignored.
+  // This prevents MusicKit's internal auto-restore / stale events from
+  // polluting app state. Only set to true after the app's own restore
+  // (from backend checkpoint) has completed.
+  const playerReadyRef = useRef(false);
+  const isRestoringRef = useRef(false);
+  const restoreFinishedAtRef = useRef(0);
+  // Deferred queue: restore only sets React state, actual MusicKit queue
+  // is set up lazily when the user presses play.
+  const pendingQueueRef = useRef<{ songId: string; startTime?: number } | null>(null);
 
   // Generate a fallback UUID for anonymous sessions
   const generateUUID = (): string => {
@@ -254,6 +268,7 @@ export default function useAppleMusic({
           }
 
           try {
+            pendingQueueRef.current = null;
             await musicKit.setQueue({ song: targetTrack.id, startPlaying: true } as any);
           } catch (e) {
             console.error('[Agent] play_track error:', e);
@@ -350,6 +365,10 @@ export default function useAppleMusic({
     // won't receive it, causing auth loss when the developer token changes.
     if (!isTokenChecked) return;
 
+    // Track event listeners and instance so we can clean up properly
+    const listeners: Array<[string, (...args: any[]) => void]> = [];
+    let mkInstance: MusicKitInstance | null = null;
+
     const initMusicKit = async (): Promise<void> => {
       try {
         if (!window.MusicKit) {
@@ -386,128 +405,156 @@ export default function useAppleMusic({
           return;
         }
 
-        console.log('[MusicKit] Configuring MusicKit...');
-        const configOptions: MusicKitConfig & { musicUserToken?: string } = {
+        // ── Clear MusicKit's browser-persisted playback state ─────────
+        // MusicKit stores queue/playback state in the browser (localStorage
+        // / IndexedDB) and auto-restores it on configure(). We clear it
+        // so configure() starts with a blank slate — the app's own
+        // restoreStateFromBackend() is the single source of truth.
+        playerReadyRef.current = false;
+        // ── Clear MusicKit's browser-persisted playback state ─────────
+        // Clear localStorage keys (queue, playback, etc.) but NOT the
+        // media-user-token — we don't need to touch it at all.
+        // Auth is restored via mk.musicUserToken assignment below.
+        try {
+          Object.keys(localStorage).forEach(key => {
+            if (key.includes('media-user-token')) return; // preserve auth
+            if (key.startsWith('music.') || key.startsWith('mk-')) {
+              localStorage.removeItem(key);
+            }
+          });
+          // Clear MusicKit IndexedDB databases
+          const dbs = await (indexedDB.databases?.() ?? Promise.resolve([]));
+          for (const db of dbs) {
+            if (db.name && (db.name.includes('music') || db.name.includes('MusicKit'))) {
+              indexedDB.deleteDatabase(db.name);
+            }
+          }
+        } catch (_) { /* storage access may be restricted */ }
+
+        const mk = await window.MusicKit.configure({
           developerToken: developerTokenRef.current!,
           app: { name: 'Playhead', build: '1.0.0' }
-        };
+        } as MusicKitConfig) as MusicKitInstance;
+        mkInstance = mk;
 
-        if (storedMusicUserToken) {
-          configOptions.musicUserToken = storedMusicUserToken;
-          console.log('[MusicKit] Restoring authorization with stored user token');
+        // Stop any auto-restored playback immediately — MusicKit may
+        // resume from its own persistence despite our cleanup above.
+        try { mk.stop(); } catch (_) { /* ignore */ }
+
+        // Restore auth from server-side token by setting the instance
+        // property directly. This avoids hacking localStorage keys.
+        if (storedMusicUserToken && !mk.isAuthorized) {
+          (mk as any).musicUserToken = storedMusicUserToken;
         }
-
-        const mk = await window.MusicKit.configure(configOptions as MusicKitConfig) as MusicKitInstance;
-        console.log('[MusicKit] Configured successfully, isAuthorized:', mk.isAuthorized);
 
         setMusicKit(mk);
         setIsAuthorized(mk.isAuthorized);
+        setQueueState([]);
 
-        if (mk.queue?.items) {
-          setQueueState([...mk.queue.items]);
-        }
+        // ── Events ───────────────────────────────────────────────────────
+        const on = (event: string, handler: (...args: any[]) => void) => {
+          mk.addEventListener(event, handler);
+          listeners.push([event, handler]);
+        };
 
-        // Event Listeners
-        mk.addEventListener('authorizationStatusDidChange', () => {
-          const wasAuthorized = isAuthorized;
+        // Auth — always active
+        on('authorizationStatusDidChange', () => {
           const nowAuthorized = mk.isAuthorized;
-
+          if (isAuthorized && !nowAuthorized) handleAuthLost();
           setIsAuthorized(nowAuthorized);
-
-          // Detect authentication loss
-          if (wasAuthorized && !nowAuthorized) {
-            handleAuthLost();
-          }
         });
 
-        mk.addEventListener('mediaItemDidChange', (event: any) => {
-          if (event.item) {
-            setCurrentTrack(event.item);
-            setPlaybackTime({ current: 0, total: 0 });
-          }
+        // Playback — gated
+        on('mediaItemDidChange', (e: any) => {
+          if (!playerReadyRef.current) return;
+          if (e.item) { setCurrentTrack(e.item); }
         });
 
-        mk.addEventListener('nowPlayingItemDidChange', () => {
+        on('nowPlayingItemDidChange', () => {
+          if (!playerReadyRef.current) return;
           const item = mk.nowPlayingItem;
           if (item) {
             setCurrentTrack(item);
-            setPlaybackTime({ current: 0, total: 0 });
-            // Sync to backend when track auto-advances — but NOT during restore
-            // (restore reads from backend; syncing back would overwrite with stale viewedPlaylist)
-            if (!isRestoringRef.current) {
-              syncMusicKitStateRef.current();
-            }
+            syncMusicKitStateRef.current();
           }
         });
 
-        mk.addEventListener('playbackStateDidChange', (event: any) => {
-          const state = event.state;
-          const isPlayingNow = state === 'playing' || state === 2;
-          const isPausedNow = state === 'paused' || state === 3;
-          setIsPlaying(isPlayingNow);
-          if (mk.nowPlayingItem) {
-            setCurrentTrack(mk.nowPlayingItem);
-            // Track the last playing song so we know which song just ended
-            if (isPlayingNow) {
-              lastPlayingTrackIdRef.current = mk.nowPlayingItem.id;
+        on('playbackStateDidChange', (e: any) => {
+          if (!playerReadyRef.current) return;
+          const state = e.state;
+
+          console.log('[MK] playbackStateDidChange:', {
+            state,
+            nowPlayingId: mk.nowPlayingItem?.id,
+            nowPlayingTitle: (mk.nowPlayingItem as any)?.attributes?.name,
+            lastPlayingTrackId: lastPlayingTrackIdRef.current,
+            playlistLength: playingPlaylistRef.current.length,
+            isAdvancing: isAdvancingRef.current,
+          });
+
+          const playing = state === 'playing' || state === 2;
+          const paused  = state === 'paused'  || state === 3;
+          // Only update isPlaying for terminal states. Transitional states
+          // (seeking=8, loading=1, waiting=6) must NOT flip the UI.
+          if (playing || paused) {
+            setIsPlaying(playing);
+            setIsTransitioning(false);
+            if (transitionTimeoutRef.current) {
+              clearTimeout(transitionTimeoutRef.current);
+              transitionTimeoutRef.current = null;
             }
           }
-
-          // Sync on play/pause so the backend checkpoint reflects real playback state.
-          // Without this, pausing then refreshing would resume as "playing" (stale).
-          // Skip during restore to avoid writing back the state we just loaded.
-          if ((isPlayingNow || isPausedNow) && !isRestoringRef.current) {
-            syncMusicKitStateRef.current();
+          if (mk.nowPlayingItem) {
+            setCurrentTrack(mk.nowPlayingItem);
+            if (playing) lastPlayingTrackIdRef.current = mk.nowPlayingItem.id;
           }
+          if (playing || paused) syncMusicKitStateRef.current();
 
-          // Auto-advance: when a song ends, play the next track from our playlist
-          // Check both string and numeric values for robustness
-          const isCompleted = state === 'completed' || state === 10;
-          const isEnded = state === 'ended' || state === 5;
-
-          if ((isCompleted || isEnded) && !isAdvancingRef.current) {
+          // Auto-advance from OUR playlist
+          const ended = state === 'completed' || state === 10 || state === 'ended' || state === 5;
+          if (ended) {
             const playlist = playingPlaylistRef.current;
-            // nowPlayingItem may be null after single-song queue ends, use ref as fallback
+            const currentId = mk.nowPlayingItem?.id || lastPlayingTrackIdRef.current;
+            const idx = currentId ? playlist.findIndex(t => t.id === currentId) : -1;
+            console.log('[MK] Track ended:', {
+              currentId,
+              idx,
+              playlistLength: playlist.length,
+              isAdvancing: isAdvancingRef.current,
+              willAdvance: idx >= 0 && idx < playlist.length - 1 && !isAdvancingRef.current,
+            });
+          }
+          if (ended && !isAdvancingRef.current) {
+            const playlist = playingPlaylistRef.current;
             const currentId = mk.nowPlayingItem?.id || lastPlayingTrackIdRef.current;
             if (currentId && playlist.length > 0) {
-              const currentIdx = playlist.findIndex(t => t.id === currentId);
-              if (currentIdx >= 0 && currentIdx < playlist.length - 1) {
+              const idx = playlist.findIndex(t => t.id === currentId);
+              if (idx >= 0 && idx < playlist.length - 1) {
                 isAdvancingRef.current = true;
-                // Try next tracks, skipping any that fail to resolve
-                const tryPlay = async (startIdx: number) => {
-                  for (let i = startIdx; i < playlist.length; i++) {
-                    const track = playlist[i];
-                    if (!track?.id) continue;
+                (async () => {
+                  for (let i = idx + 1; i < playlist.length; i++) {
+                    if (!playlist[i]?.id) continue;
                     try {
-                      console.log('[AutoAdvance] Playing next:', track.id);
-                      await mk.setQueue({ song: track.id, startPlaying: true } as any);
-                      return; // success
-                    } catch (e: any) {
-                      const classified = classifyError(e);
-                      if (classified.category === ErrorCategory.AUTH_EXPIRED) {
-                        handleAuthLost();
-                        return;
-                      }
-                      console.warn(`[AutoAdvance] Skipping unresolvable track ${track.id}:`, e.message || e);
+                      pendingQueueRef.current = null;
+                      await mk.setQueue({ song: playlist[i].id, startPlaying: true } as any);
+                      return;
+                    } catch (err: any) {
+                      if (classifyError(err).category === ErrorCategory.AUTH_EXPIRED) { handleAuthLost(); return; }
                     }
                   }
-                  console.log('[AutoAdvance] No more playable tracks');
-                };
-                tryPlay(currentIdx + 1).finally(() => { isAdvancingRef.current = false; });
+                })().finally(() => { isAdvancingRef.current = false; });
               }
             }
           }
         });
 
-        mk.addEventListener('queueItemsDidChange', () => {
-          setQueueState([...mk.queue.items]);
-        });
-
-        mk.addEventListener('playbackTimeDidChange', (event: any) => {
-          setPlaybackTime({
-            current: event.currentPlaybackTime,
-            total: event.currentPlaybackDuration
-          });
+        on('playbackTimeDidChange', (e: any) => {
+          if (!playerReadyRef.current) return;
+          if (isRestoringRef.current) return;
+          // After restore, MusicKit may asynchronously fire time=0 events.
+          // Suppress zero-time updates for a short window after restore completes.
+          if (e.currentPlaybackTime === 0 && Date.now() - restoreFinishedAtRef.current < 2000) return;
+          setPlaybackTime({ current: e.currentPlaybackTime, total: e.currentPlaybackDuration });
         });
 
       } catch (err) {
@@ -525,103 +572,80 @@ export default function useAppleMusic({
 
     return () => {
       document.removeEventListener('musickitloaded', initMusicKit);
+      // Gate closed — no more events processed
+      playerReadyRef.current = false;
+      // Stop playback and remove listeners
+      if (mkInstance) {
+        try { mkInstance.stop(); } catch (_) { /* ignore */ }
+        listeners.forEach(([event, handler]) => {
+          try { mkInstance!.removeEventListener(event, handler); } catch (_) { /* ignore */ }
+        });
+      }
     };
   }, [isTokenChecked, storedMusicUserToken]);
 
   // ==========================================================================
-  // Restore state from backend checkpoint
-  //
-  // Two-phase restore:
-  //  1. Fetch checkpoint data from /state (always works, no auth needed)
-  //  2. Restore MusicKit queue from checkpoint (only if MusicKit is authorized)
-  //
-  // Phase 1 is always performed so that callers can use the returned playlist
-  // data regardless of Apple Music auth status. Phase 2 is best-effort.
+  // Restore playback from backend checkpoint (single source of truth).
+  // MusicKit's own persistence is cleared on init, so configure() starts
+  // with a blank slate and this function is the only thing that plays.
   // ==========================================================================
   const restoreStateFromBackend = useCallback(async (targetSessionId?: string): Promise<{ playlist?: FormattedTrack[]; current_track?: FormattedTrack | null; is_playing?: boolean; playback_position?: number } | null> => {
     const restoreId = targetSessionId || sessionId;
-    if (!restoreId) return null;
-
-    // Skip for anonymous sessions
-    if (restoreId === internalSessionId) {
-      console.log('[Restore] Anonymous session, skipping');
-      return null;
-    }
+    if (!restoreId) { playerReadyRef.current = true; return null; }
+    if (restoreId === internalSessionId) { playerReadyRef.current = true; return null; }
 
     try {
-      // Phase 1: Fetch checkpoint data (no MusicKit auth required)
       const url = userId
         ? `${API_BASE}/state?session_id=${restoreId}&user_id=${userId}`
         : `${API_BASE}/state?session_id=${restoreId}`;
 
-      console.log(`[Restore] Loading checkpoint for session: ${restoreId}`);
       const res = await fetch(url);
-
-      if (!res.ok) {
-        if (res.status === 404) {
-          console.log('[Restore] No checkpoint found (new session)');
-        } else {
-          console.error('[Restore] Failed to fetch checkpoint:', res.status);
-        }
-        return null;
-      }
+      if (!res.ok) { playerReadyRef.current = true; return null; }
 
       const data = await res.json();
-      const { playlist, current_track, is_playing, playback_position } = data;
+      const { current_track, is_playing, playback_position } = data;
 
-      // Phase 2: Restore MusicKit queue (requires auth)
-      // If MusicKit isn't authorized, still return the data so callers can
-      // use the playlist for display — just skip the playback restore.
       if (!musicKit || !musicKit.isAuthorized) {
-        console.log('[Restore] MusicKit not authorized, skipping playback restore (data still returned)');
+        playerReadyRef.current = true;
         return data;
       }
 
-      if (!playlist || playlist.length === 0) {
-        console.log('[Restore] Empty playlist in checkpoint');
-        return data;
-      }
-
-      // Validate track IDs (filter out null/undefined/invalid)
-      const validTrackIds = playlist
-        .map((t: FormattedTrack) => t.id)
-        .filter((id: string) => id && id !== 'undefined' && id !== 'null');
-
-      if (validTrackIds.length === 0) {
-        console.warn('[Restore] No valid track IDs in checkpoint');
-        return data;
-      }
-
-      console.log(`[Restore] Restoring from checkpoint (${validTrackIds.length} tracks in playlist)`);
-
-      // Only restore current track as single-song playback.
-      // Suppress sync during restore to avoid overwriting backend with stale data.
       if (current_track?.id) {
-        isRestoringRef.current = true;
-        try {
-          console.log(`[Restore] Restoring current track: ${current_track.id}`);
-          await musicKit.setQueue({ song: current_track.id, startPlaying: is_playing } as any);
+        const alreadyPlaying = musicKit.nowPlayingItem?.id === current_track.id;
 
-          if (playback_position && playback_position > 0) {
-            console.log(`[Restore] Seeking to ${playback_position}s`);
-            musicKit.seekToTime(playback_position);
-          }
-        } catch (restoreErr) {
-          const classified = classifyError(restoreErr);
-          if (classified.category === ErrorCategory.AUTH_EXPIRED) {
-            handleAuthLost();
-          } else {
-            console.error('[Restore] Failed to restore current track:', restoreErr);
-          }
-        } finally {
-          isRestoringRef.current = false;
+        if (!alreadyPlaying) {
+          // Don't touch MusicKit here — just stash the intent. The actual
+          // setQueue call happens lazily when the user presses play.
+          const startTime = (playback_position && playback_position > 0) ? playback_position : undefined;
+          pendingQueueRef.current = { songId: current_track.id, startTime };
+        }
+
+        // Set React state so the UI shows the correct track & progress
+        // immediately, without any MusicKit events interfering.
+        setCurrentTrack({
+          id: current_track.id,
+          name: current_track.name,
+          artistName: current_track.artist,
+          albumName: current_track.album,
+          artworkURL: current_track.artwork_url,
+          artwork: current_track.artwork_url ? { url: current_track.artwork_url } : undefined,
+          duration: current_track.duration || 0,
+        } as any);
+
+        if (!alreadyPlaying) {
+          setPlaybackTime({
+            current: playback_position || 0,
+            total: current_track.duration || 0,
+          });
+          setIsPlaying(false);
         }
       }
 
-      console.log('[Restore] State restored from checkpoint ✓');
+      playerReadyRef.current = true;
       return data;
     } catch (e) {
-      console.error('[Restore] Failed to restore from checkpoint:', e);
+      console.error('[Restore] Failed:', e);
+      playerReadyRef.current = true;
       return null;
     }
   }, [musicKit, sessionId, userId, internalSessionId]);
@@ -671,10 +695,45 @@ export default function useAppleMusic({
   // ==========================================================================
   // Playback Controls (with sync)
   // ==========================================================================
-  const play = useCallback(async (): Promise<void> => {
-    if (!musicKit) return;
+  const isFlushingRef = useRef(false);
+  const playbackLockRef = useRef(false);
+
+  const flushPendingQueue = useCallback(async () => {
+    const pending = pendingQueueRef.current;
+    if (!pending || !musicKit || isFlushingRef.current) return;
+    isFlushingRef.current = true;
+    pendingQueueRef.current = null;
+    isRestoringRef.current = true;
     try {
-      await musicKit.play();
+      await musicKit.setQueue({ song: pending.songId, startPlaying: true, startTime: pending.startTime } as any);
+    } finally {
+      isRestoringRef.current = false;
+      restoreFinishedAtRef.current = Date.now();
+      isFlushingRef.current = false;
+    }
+  }, [musicKit]);
+
+  // Mark a playback transition in progress. Cleared by playbackStateDidChange
+  // when MusicKit reaches a terminal state (playing/paused), or by a 5s safety timeout.
+  const startTransition = useCallback(() => {
+    setIsTransitioning(true);
+    if (transitionTimeoutRef.current) clearTimeout(transitionTimeoutRef.current);
+    transitionTimeoutRef.current = setTimeout(() => { setIsTransitioning(false); }, 5000);
+  }, []);
+
+  const play = useCallback(async (): Promise<void> => {
+    if (!musicKit || playbackLockRef.current) return;
+    playbackLockRef.current = true;
+    startTransition();
+    console.log('[MK] play() called, pending:', !!pendingQueueRef.current, 'mkState:', musicKit.playbackState);
+    try {
+      playerReadyRef.current = true;
+      if (pendingQueueRef.current) {
+        await flushPendingQueue();
+      } else {
+        await musicKit.play();
+      }
+      setIsPlaying(true);
       await syncMusicKitState();
     } catch (e) {
       const classified = classifyError(e);
@@ -683,13 +742,19 @@ export default function useAppleMusic({
       } else {
         showErrorToast(e, 'playback');
       }
+    } finally {
+      playbackLockRef.current = false;
     }
-  }, [musicKit, syncMusicKitState, handleAuthLost]);
+  }, [musicKit, flushPendingQueue, syncMusicKitState, handleAuthLost, startTransition]);
 
   const pause = useCallback(async (): Promise<void> => {
-    if (!musicKit) return;
+    if (!musicKit || playbackLockRef.current) return;
+    playbackLockRef.current = true;
+    startTransition();
+    console.log('[MK] pause() called, mkState:', musicKit.playbackState);
     try {
       await musicKit.pause();
+      setIsPlaying(false);
       await syncMusicKitState();
     } catch (e) {
       const classified = classifyError(e);
@@ -698,13 +763,30 @@ export default function useAppleMusic({
       } else {
         showErrorToast(e, 'playback');
       }
+    } finally {
+      playbackLockRef.current = false;
     }
-  }, [musicKit, syncMusicKitState, handleAuthLost]);
+  }, [musicKit, syncMusicKitState, handleAuthLost, startTransition]);
 
   const togglePlay = useCallback(async (): Promise<void> => {
-    if (!musicKit) return;
+    if (!musicKit || playbackLockRef.current) return;
+    playbackLockRef.current = true;
+    startTransition();
+    console.log('[MK] togglePlay() called, mkState:', musicKit.playbackState, 'pending:', !!pendingQueueRef.current);
     try {
-      isPlaying ? await musicKit.pause() : await musicKit.play();
+      // Read real MusicKit state, not stale React closure
+      const currentlyPlaying = musicKit.playbackState === 'playing' || (musicKit.playbackState as any) === 2;
+
+      if (!currentlyPlaying && pendingQueueRef.current) {
+        await flushPendingQueue();
+        setIsPlaying(true);
+      } else if (currentlyPlaying) {
+        await musicKit.pause();
+        setIsPlaying(false);
+      } else {
+        await musicKit.play();
+        setIsPlaying(true);
+      }
       await syncMusicKitState();
     } catch (e) {
       const classified = classifyError(e);
@@ -713,15 +795,21 @@ export default function useAppleMusic({
       } else {
         showErrorToast(e, 'playback');
       }
+    } finally {
+      playbackLockRef.current = false;
     }
-  }, [musicKit, isPlaying, syncMusicKitState, handleAuthLost]);
+  }, [musicKit, flushPendingQueue, syncMusicKitState, handleAuthLost, startTransition]);
 
   const setQueue = useCallback(async (
     items: (string | Track)[],
     startPlaying = true
   ): Promise<void> => {
-    if (!musicKit) return;
+    if (!musicKit || playbackLockRef.current) return;
+    playbackLockRef.current = true;
+    startTransition();
+    pendingQueueRef.current = null;
     try {
+      playerReadyRef.current = true;
       await musicKit.setQueue({ items: items as any });
       if (items.length > 0) setCurrentTrack(items[0] as Track);
       if (startPlaying) {
@@ -735,11 +823,16 @@ export default function useAppleMusic({
       } else {
         showErrorToast(e, 'queue management');
       }
+    } finally {
+      playbackLockRef.current = false;
     }
-  }, [musicKit, syncMusicKitState, handleAuthLost]);
+  }, [musicKit, syncMusicKitState, handleAuthLost, startTransition]);
 
   const playTrack = useCallback(async (index: number): Promise<void> => {
-    if (!musicKit) return;
+    if (!musicKit || playbackLockRef.current) return;
+    playbackLockRef.current = true;
+    startTransition();
+    pendingQueueRef.current = null;
     try {
       const targetTrack = playingPlaylistRef.current[index];
 
@@ -748,6 +841,7 @@ export default function useAppleMusic({
         return;
       }
 
+      playerReadyRef.current = true;
       await musicKit.setQueue({ song: targetTrack.id, startPlaying: true } as any);
       await syncMusicKitState();
     } catch (e) {
@@ -757,8 +851,10 @@ export default function useAppleMusic({
       } else {
         showErrorToast(e, 'playback');
       }
+    } finally {
+      playbackLockRef.current = false;
     }
-  }, [musicKit, syncMusicKitState, handleAuthLost]);
+  }, [musicKit, syncMusicKitState, handleAuthLost, startTransition]);
 
   const search = useCallback(async (
     term: string,
@@ -795,7 +891,9 @@ export default function useAppleMusic({
   }, [musicKit, syncMusicKitState, handleAuthLost]);
 
   const skipNext = useCallback(async (): Promise<void> => {
-    if (!musicKit) return;
+    if (!musicKit || playbackLockRef.current) return;
+    playbackLockRef.current = true;
+    startTransition();
     try {
       const playlist = playingPlaylistRef.current;
       const currentId = musicKit.nowPlayingItem?.id;
@@ -814,11 +912,15 @@ export default function useAppleMusic({
       } else {
         showErrorToast(e, 'playback');
       }
+    } finally {
+      playbackLockRef.current = false;
     }
-  }, [musicKit, syncMusicKitState, handleAuthLost]);
+  }, [musicKit, syncMusicKitState, handleAuthLost, startTransition]);
 
   const skipPrev = useCallback(async (): Promise<void> => {
-    if (!musicKit) return;
+    if (!musicKit || playbackLockRef.current) return;
+    playbackLockRef.current = true;
+    startTransition();
     try {
       const playlist = playingPlaylistRef.current;
       const currentId = musicKit.nowPlayingItem?.id;
@@ -837,8 +939,10 @@ export default function useAppleMusic({
       } else {
         showErrorToast(e, 'playback');
       }
+    } finally {
+      playbackLockRef.current = false;
     }
-  }, [musicKit, syncMusicKitState, handleAuthLost]);
+  }, [musicKit, syncMusicKitState, handleAuthLost, startTransition]);
 
   // Periodic sync every 10s while playing
   useEffect(() => {
@@ -854,6 +958,7 @@ export default function useAppleMusic({
     isAuthorized,
     currentTrack,
     isPlaying,
+    isTransitioning,
     playbackTime,
     queue,
     sessionId,

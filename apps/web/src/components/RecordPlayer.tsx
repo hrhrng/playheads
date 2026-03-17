@@ -13,6 +13,8 @@ interface RecordPlayerProps {
   currentTrack: Track | null;
   /** Whether playback is paused */
   isPaused: boolean;
+  /** Whether a playback transition is in progress */
+  isTransitioning?: boolean;
   /** Toggle play/pause */
   togglePlay: () => void;
   /** Current playback position and duration */
@@ -31,6 +33,7 @@ interface RecordPlayerProps {
 export const RecordPlayer = ({
   currentTrack,
   isPaused,
+  isTransitioning = false,
   togglePlay,
   playbackTime,
   onSeek,
@@ -108,7 +111,8 @@ export const RecordPlayer = ({
           {/* Play/Pause Overlay */}
           <button
             onClick={togglePlay}
-            className="absolute inset-0 flex items-center justify-center bg-black/20 hover:bg-black/40 transition-all opacity-0 group-hover:opacity-100 backdrop-blur-[2px]"
+            disabled={isTransitioning}
+            className="absolute inset-0 flex items-center justify-center bg-black/20 hover:bg-black/40 transition-all opacity-0 group-hover:opacity-100 backdrop-blur-[2px] disabled:pointer-events-none disabled:opacity-50"
           >
             <div className="w-20 h-20 rounded-full bg-white/20 backdrop-blur-md border border-white/30 flex items-center justify-center transform hover:scale-110 transition-transform">
               {isPaused ? (
