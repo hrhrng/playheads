@@ -13,6 +13,7 @@ export interface Env {
   DB: D1Database;
 
   // LLM configuration
+  ANTHROPIC_API_KEY: string;
   ANTHROPIC_MODEL: string;
 
   // Cloudflare AI Gateway

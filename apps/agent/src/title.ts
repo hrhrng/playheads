@@ -38,7 +38,7 @@ export async function generateConversationTitle(
       gateway: env.AI_GATEWAY_ID,
       apiKey: env.CF_AIG_TOKEN,
     });
-    const anthropic = createAnthropic();
+    const anthropic = createAnthropic({ apiKey: env.ANTHROPIC_API_KEY });
 
     const { text } = await generateText({
       model: aigateway(anthropic("claude-haiku-4-5-20251001")),
