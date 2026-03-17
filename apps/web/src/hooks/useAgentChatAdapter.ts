@@ -3,9 +3,11 @@
  * and maps UIMessage format to our app's Message format.
  *
  * Player control tools (play_track, add_to_queue, skip_next,
- * remove_from_playlist) are registered as client tools so they
- * execute directly against MusicKit JS on the frontend via
- * the onToolCall callback.
+ * remove_from_playlist) are defined on the SERVER without execute.
+ * When the AI calls them, the stream pauses and the onToolCall
+ * callback fires here to execute via MusicKit JS on the frontend.
+ *
+ * @see https://developers.cloudflare.com/agents/api-reference/chat-agents/#client-side-tools
  */
 import { useMemo, useCallback, useRef } from "react";
 import { useAgent } from "agents/react";
@@ -98,81 +100,33 @@ function mapUIMessagesToMessages(uiMessages: UIMessage[]): Message[] {
 }
 
 /**
- * Build client tool definitions for player control.
- * The `execute` functions are called from the onToolCall callback.
- * The schemas (description + parameters) are automatically sent to the
- * server by useAgentChat's prepareBody so createToolsFromClientSchemas
- * can register stubs on the server side.
+ * Dispatch a client-side tool call to the appropriate MusicKit action.
+ * Returns the string result that flows back to the AI.
  */
-function buildClientTools(actions: MusicActions) {
-  return {
-    play_track: {
-      description:
-        "Play a specific track from the playlist by its position number (1-indexed).",
-      parameters: {
-        type: "object" as const,
-        properties: {
-          index: {
-            type: "string" as const,
-            description: "Track position number starting from 1",
-          },
-        },
-        required: ["index"] as const,
-      },
-      execute: async (input: { index: string }) => {
-        const idx = parseInt(input.index);
-        if (isNaN(idx)) return "Please provide a valid track number.";
-        return await actions.playTrack(idx - 1);
-      },
-    },
-    add_to_queue: {
-      description:
-        "Add a track to the queue by its Apple Music ID (from search_music results).",
-      parameters: {
-        type: "object" as const,
-        properties: {
-          track_id: {
-            type: "string" as const,
-            description:
-              'Apple Music song ID (e.g. "12345" from search results)',
-          },
-        },
-        required: ["track_id"] as const,
-      },
-      execute: async (input: { track_id: string }) => {
-        return await actions.addToQueue(input.track_id);
-      },
-    },
-    skip_next: {
-      description: "Skip to the next track in the playlist.",
-      parameters: { type: "object" as const, properties: {} },
-      execute: async () => {
-        return await actions.skipNext();
-      },
-    },
-    remove_from_playlist: {
-      description:
-        "Remove a track from the playlist by its position number (1-indexed).",
-      parameters: {
-        type: "object" as const,
-        properties: {
-          index: {
-            type: "string" as const,
-            description: "Track position number starting from 1",
-          },
-        },
-        required: ["index"] as const,
-      },
-      execute: async (input: { index: string }) => {
-        const idx = parseInt(input.index);
-        if (isNaN(idx)) return "Please provide a valid track number.";
-        return await actions.removeTrack(idx - 1);
-      },
-    },
-  };
+async function executeClientTool(
+  toolName: string,
+  input: Record<string, unknown>,
+  actions: MusicActions
+): Promise<string> {
+  switch (toolName) {
+    case "add_to_queue":
+      return actions.addToQueue(input.track_id as string);
+    case "play_track": {
+      const idx = parseInt(input.index as string);
+      if (isNaN(idx)) return "Please provide a valid track number.";
+      return actions.playTrack(idx - 1);
+    }
+    case "skip_next":
+      return actions.skipNext();
+    case "remove_from_playlist": {
+      const idx = parseInt(input.index as string);
+      if (isNaN(idx)) return "Please provide a valid track number.";
+      return actions.removeTrack(idx - 1);
+    }
+    default:
+      return `Unknown client tool: ${toolName}`;
+  }
 }
-
-type ClientToolMap = ReturnType<typeof buildClientTools>;
 
 export function useAgentChatAdapter({
   sessionId,
@@ -186,20 +140,14 @@ export function useAgentChatAdapter({
     name: sessionId,
   });
 
-  // Build client tools from musicActions (stable reference via useMemo)
-  const clientTools = useMemo(
-    () => (musicActions ? buildClientTools(musicActions) : undefined),
-    [musicActions]
-  );
+  // Ref for stable access to musicActions in onToolCall callback
+  const musicActionsRef = useRef(musicActions);
+  musicActionsRef.current = musicActions;
 
-  // Ref for stable access to client tools in onToolCall callback
-  const clientToolsRef = useRef(clientTools);
-  clientToolsRef.current = clientTools;
-
-  // onToolCall callback — the official Cloudflare Agents API for client-side tools.
-  // When the AI calls a tool that has no `execute` on the server (created via
-  // createToolsFromClientSchemas), the stream pauses and this callback fires.
-  // We execute the tool on the frontend and call addToolOutput to resume.
+  // onToolCall — the official Cloudflare Agents API for client-side tools.
+  // Server defines tools WITHOUT execute. When the AI calls them, the
+  // stream pauses and this callback fires. We execute via MusicKit JS
+  // and call addToolOutput to resume.
   const handleToolCall = useCallback(
     async ({
       toolCall,
@@ -213,15 +161,22 @@ export function useAgentChatAdapter({
         errorText?: string;
       }) => void;
     }) => {
-      const tools = clientToolsRef.current;
-      if (!tools) return;
+      const actions = musicActionsRef.current;
+      if (!actions) {
+        addToolOutput({
+          toolCallId: toolCall.toolCallId,
+          output: "Music actions not available. Please try again.",
+        });
+        return;
+      }
 
-      const tool = tools[toolCall.toolName as keyof ClientToolMap];
-      if (!tool) return;
-
-      let output: unknown;
+      let output: string;
       try {
-        output = await tool.execute(toolCall.input as never);
+        output = await executeClientTool(
+          toolCall.toolName,
+          (toolCall.input ?? {}) as Record<string, unknown>,
+          actions
+        );
       } catch (error) {
         output = `Error: ${error instanceof Error ? error.message : String(error)}`;
       }
@@ -242,13 +197,8 @@ export function useAgentChatAdapter({
   } = useAgentChat({
     agent,
     body: { session_id: sessionId, user_id: userId },
-    // Pass tools so their schemas are sent to the server via prepareBody.
-    // The `execute` functions are not used by the library — we handle
-    // execution in onToolCall below.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    tools: clientTools as any,
-    // Official API: stream pauses on client tools, this callback fires,
-    // we execute and call addToolOutput to resume.
+    // Client-side tools are defined on the server WITHOUT execute.
+    // When the AI calls them, the stream pauses and this callback fires.
     onToolCall: handleToolCall,
   });
 
