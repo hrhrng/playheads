@@ -110,23 +110,34 @@ export const ChatInterface = ({
   // Note: Removed initial warning toast as connection handling is now done via overlay and actionable toasts
 
   // Swipe gesture handling for skip next/prev (only in player mode)
-  const touchStartRef = useRef<{ y: number; time: number } | null>(null);
-  const swipingRef = useRef(false);
+  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
+  const touchMovedRef = useRef(false);
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     if (showHistory) return;
-    touchStartRef.current = { y: e.touches[0].clientY, time: Date.now() };
-    swipingRef.current = false;
+    // Ignore touches on interactive elements (buttons, sliders, inputs)
+    const tag = (e.target as HTMLElement).closest('button, input, [role="slider"], .rc-slider');
+    if (tag) return;
+    touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, time: Date.now() };
+    touchMovedRef.current = false;
   }, [showHistory]);
 
+  const handleTouchMove = useCallback(() => {
+    touchMovedRef.current = true;
+  }, []);
+
   const handleTouchEnd = useCallback((e: React.TouchEvent) => {
-    if (showHistory || !touchStartRef.current) return;
+    if (showHistory || !touchStartRef.current || !touchMovedRef.current) {
+      touchStartRef.current = null;
+      return;
+    }
+    const deltaX = e.changedTouches[0].clientX - touchStartRef.current.x;
     const deltaY = e.changedTouches[0].clientY - touchStartRef.current.y;
     const elapsed = Date.now() - touchStartRef.current.time;
     touchStartRef.current = null;
 
-    // Require minimum 50px swipe within 500ms
-    if (Math.abs(deltaY) < 50 || elapsed > 500) return;
+    // Require: vertical > 60px, within 400ms, and mostly vertical (not diagonal)
+    if (Math.abs(deltaY) < 60 || elapsed > 400 || Math.abs(deltaX) > Math.abs(deltaY) * 0.5) return;
 
     if (deltaY < 0 && onSkipNext) {
       // Swipe up → next track
@@ -205,6 +216,7 @@ export const ChatInterface = ({
         <div
           className="absolute inset-0 flex items-center justify-center pb-20"
           onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
         >
           <div className="relative z-10 w-full max-w-xl px-8">
