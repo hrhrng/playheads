@@ -905,9 +905,19 @@ export default function useAppleMusic({
       if (nextTrack?.id) {
         const wasPlaying = (musicKit.playbackState as any) === 2 || (musicKit.playbackState as any) === 'playing';
         lastPlayingTrackIdRef.current = nextTrack.id;
-        await musicKit.setQueue({ song: nextTrack.id, startPlaying: wasPlaying } as any);
-        if (!wasPlaying) {
-          setCurrentTrack(musicKit.nowPlayingItem || { id: nextTrack.id, name: nextTrack.name, artistName: nextTrack.artist } as any);
+        await musicKit.setQueue({ song: nextTrack.id, startPlaying: false } as any);
+        // Update UI immediately with playlist data (includes artwork)
+        setCurrentTrack(musicKit.nowPlayingItem || {
+          id: nextTrack.id,
+          name: nextTrack.name,
+          artistName: nextTrack.artist,
+          albumName: nextTrack.album || '',
+          artworkURL: nextTrack.artwork_url || '',
+          artwork: nextTrack.artwork_url ? { url: nextTrack.artwork_url } : undefined,
+          duration: nextTrack.duration || 0,
+        } as any);
+        if (wasPlaying) {
+          try { await musicKit.play(); } catch { /* autoplay policy */ }
         }
         syncMusicKitState().catch(() => {});
       }
@@ -937,9 +947,18 @@ export default function useAppleMusic({
       if (prevTrack?.id) {
         const wasPlaying = (musicKit.playbackState as any) === 2 || (musicKit.playbackState as any) === 'playing';
         lastPlayingTrackIdRef.current = prevTrack.id;
-        await musicKit.setQueue({ song: prevTrack.id, startPlaying: wasPlaying } as any);
-        if (!wasPlaying) {
-          setCurrentTrack(musicKit.nowPlayingItem || { id: prevTrack.id, name: prevTrack.name, artistName: prevTrack.artist } as any);
+        await musicKit.setQueue({ song: prevTrack.id, startPlaying: false } as any);
+        setCurrentTrack(musicKit.nowPlayingItem || {
+          id: prevTrack.id,
+          name: prevTrack.name,
+          artistName: prevTrack.artist,
+          albumName: prevTrack.album || '',
+          artworkURL: prevTrack.artwork_url || '',
+          artwork: prevTrack.artwork_url ? { url: prevTrack.artwork_url } : undefined,
+          duration: prevTrack.duration || 0,
+        } as any);
+        if (wasPlaying) {
+          try { await musicKit.play(); } catch { /* autoplay policy */ }
         }
         syncMusicKitState().catch(() => {});
       }
