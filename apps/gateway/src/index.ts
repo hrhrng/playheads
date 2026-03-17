@@ -18,10 +18,12 @@ interface Env {
   LANDING: Fetcher;
   BACKEND: Fetcher;
   ADMIN: Fetcher;
+  AGENT: Fetcher;
   DB: D1Database;
   APP_HOSTNAME: string;
   ADMIN_HOSTNAME: string;
   PREVIEW_DOMAIN: string;
+  USE_NEW_AGENT: string;
   BETTER_AUTH_SECRET: string;
   BETTER_AUTH_URL: string;
   BETTER_AUTH_TRUSTED_ORIGINS: string;
@@ -135,6 +137,10 @@ export default {
         return fetch(backendReq);
       }
 
+      // Feature flag: route to new Cloudflare Agent or old Python backend
+      const useNewAgent = env.USE_NEW_AGENT === "true" && env.AGENT;
+      const backendService = useNewAgent ? env.AGENT : env.BACKEND;
+
       const backendReq = new Request(
         new URL(backendPath, "http://backend").toString(),
         {
@@ -144,7 +150,7 @@ export default {
         }
       );
 
-      const response = await env.BACKEND.fetch(backendReq);
+      const response = await backendService.fetch(backendReq);
       const latency = Date.now() - start;
 
       console.log(
@@ -154,6 +160,7 @@ export default {
           path: url.pathname,
           status: response.status,
           latency_ms: latency,
+          backend: useNewAgent ? "agent" : "python",
         })
       );
 

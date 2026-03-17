@@ -1,0 +1,30 @@
+name = "playheads-agent"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[durable_objects.bindings]]
+name = "MUSIC_AGENT"
+class_name = "MusicChatAgent"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["MusicChatAgent"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "playheads-db"
+database_id = "31cba35f-8e23-46eb-880f-19d667c0946b"
+
+[observability]
+enabled = true
+
+[observability.logs]
+enabled = true
+invocation_logs = true
+head_sampling_rate = 1
+
+[vars]
+LLM_PROVIDER = "anthropic"
+ANTHROPIC_MODEL = "claude-sonnet-4-6"
+APPLE_MUSIC_TOKEN_TTL_SECONDS = "3600"
