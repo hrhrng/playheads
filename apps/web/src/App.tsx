@@ -107,6 +107,7 @@ function App() {
 
   // Ensure the playing session is set before executing any agent action
   const ensurePlayingSession = useCallback(() => {
+    console.log('[App] ensurePlayingSession:', { activeSessionId, viewedPlaylist: useChatStore.getState().viewedPlaylist.length });
     if (activeSessionId) {
       setPlayingSessionId(activeSessionId);
       updatePlayingPlaylist(activeSessionId, useChatStore.getState().viewedPlaylist);

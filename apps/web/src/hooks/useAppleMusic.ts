@@ -279,17 +279,20 @@ export default function useAppleMusic({
   }, [musicKit, syncMusicKitState, handleAuthLost]);
 
   const agentAddToQueue = useCallback(async (trackId: string): Promise<string> => {
+    console.log('[MusicKit] agentAddToQueue called:', { trackId, hasMusicKit: !!musicKit });
     if (!musicKit) return 'Apple Music is not connected.';
     if (!trackId || trackId === 'undefined' || trackId === 'null') {
       return 'Invalid track ID.';
     }
 
     try {
+      console.log('[MusicKit] Calling playLater({ songs: [%s] })', trackId);
       await (musicKit as any).playLater({ songs: [trackId] });
+      console.log('[MusicKit] playLater succeeded, queue length:', musicKit.queue?.items?.length);
       syncMusicKitState();
       return `Added track ${trackId} to queue.`;
     } catch (e) {
-      console.error('[Agent] add_to_queue error:', e);
+      console.error('[MusicKit] add_to_queue error:', e);
       const classified = classifyError(e);
       if (classified.category === ErrorCategory.AUTH_EXPIRED) {
         handleAuthLost();

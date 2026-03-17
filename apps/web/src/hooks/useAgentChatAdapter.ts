@@ -167,7 +167,10 @@ export function useAgentChatAdapter({
 
   useEffect(() => {
     const actions = musicActionsRef.current;
-    if (!actions) return;
+    if (!actions) {
+      console.log('[ActionDispatch] No musicActions available');
+      return;
+    }
 
     for (const msg of uiMessages) {
       if (msg.role !== "assistant") continue;
@@ -178,15 +181,26 @@ export function useAgentChatAdapter({
           state: string;
           output?: unknown;
         };
+
+        console.log('[ActionDispatch] Tool part:', {
+          toolCallId: toolPart.toolCallId,
+          type: part.type,
+          state: toolPart.state,
+          outputType: typeof toolPart.output,
+          outputPreview: typeof toolPart.output === 'string' ? toolPart.output.slice(0, 200) : toolPart.output,
+        });
+
         // Only process completed tool calls, and only once
         if (toolPart.state !== "output-available") continue;
         if (processedActionIds.current.has(toolPart.toolCallId)) continue;
 
         const action = extractAction(toolPart.output);
+        console.log('[ActionDispatch] Extracted action:', action);
         if (!action) continue;
 
         // Mark as processed before dispatching (prevent double-execution)
         processedActionIds.current.add(toolPart.toolCallId);
+        console.log('[ActionDispatch] Dispatching:', action.type, action.data);
 
         // Update viewedPlaylist immediately (like old SSE handler)
         if (action.type === "add_to_queue" && action.data?.track_id) {
