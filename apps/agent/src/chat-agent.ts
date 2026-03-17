@@ -110,7 +110,7 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
       gateway: this.env.AI_GATEWAY_ID,
       apiKey: this.env.CF_AIG_TOKEN,
     });
-    const anthropic = createAnthropic({ apiKey: this.env.ANTHROPIC_API_KEY });
+    const anthropic = createAnthropic();
     const model = aigateway(anthropic(this.env.ANTHROPIC_MODEL || "claude-sonnet-4-6"));
 
     // Extract session context from custom body
