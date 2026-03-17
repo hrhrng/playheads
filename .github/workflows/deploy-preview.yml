@@ -180,13 +180,19 @@ jobs:
             [GOOGLE_CLIENT_SECRET]="${{ secrets.GOOGLE_CLIENT_SECRET }}"
             [RESEND_API_KEY]="${{ secrets.RESEND_API_KEY }}"
           )
+          FAILED=0
           for KEY in "${!SECRETS[@]}"; do
             VAL="${SECRETS[$KEY]}"
             if [ -n "$VAL" ]; then
-              echo "$VAL" | npx wrangler secret put "$KEY" --name "$WORKER" 2>/dev/null
-              echo "✓ $KEY"
+              if printf '%s' "$VAL" | npx wrangler secret put "$KEY" --name "$WORKER"; then
+                echo "✓ $KEY"
+              else
+                echo "✗ $KEY failed"
+                FAILED=1
+              fi
             fi
           done
+          if [ "$FAILED" -eq 1 ]; then exit 1; fi
 
       - name: Sync agent worker secrets
         env:
@@ -202,13 +208,19 @@ jobs:
             [APPLE_MUSIC_KEY_ID]="${{ secrets.APPLE_MUSIC_KEY_ID }}"
             [APPLE_MUSIC_PRIVATE_KEY]="${{ secrets.APPLE_MUSIC_PRIVATE_KEY }}"
           )
+          FAILED=0
           for KEY in "${!SECRETS[@]}"; do
             VAL="${SECRETS[$KEY]}"
             if [ -n "$VAL" ]; then
-              echo "$VAL" | npx wrangler secret put "$KEY" --name "$WORKER" 2>/dev/null
-              echo "✓ $KEY"
+              if printf '%s' "$VAL" | npx wrangler secret put "$KEY" --name "$WORKER"; then
+                echo "✓ $KEY"
+              else
+                echo "✗ $KEY failed"
+                FAILED=1
+              fi
             fi
           done
+          if [ "$FAILED" -eq 1 ]; then exit 1; fi
 
       - name: Sync secrets and variables to backend worker
         env:
@@ -219,15 +231,25 @@ jobs:
         run: |
           WORKER="playheads-backend-${{ steps.branch.outputs.slug }}"
           SKIP_KEYS='["GITHUB_TOKEN"]'
+          FAILED=0
           for KEY in $(echo "$ALL_SECRETS" | jq -r --argjson skip "$SKIP_KEYS" 'keys[] | select(. as $k | $skip | index($k) | not)'); do
             VAL=$(echo "$ALL_SECRETS" | jq -r --arg k "$KEY" '.[$k]')
             if [ -z "$VAL" ]; then continue; fi
-            echo "$VAL" | npx wrangler secret put "$KEY" --name "$WORKER" 2>/dev/null
-            echo "✓ secret $KEY"
+            if printf '%s' "$VAL" | npx wrangler secret put "$KEY" --name "$WORKER"; then
+              echo "✓ secret $KEY"
+            else
+              echo "✗ secret $KEY failed"
+              FAILED=1
+            fi
           done
           for KEY in $(echo "$ALL_VARS" | jq -r 'keys[]'); do
             VAL=$(echo "$ALL_VARS" | jq -r --arg k "$KEY" '.[$k]')
             if [ -z "$VAL" ]; then continue; fi
-            echo "$VAL" | npx wrangler secret put "$KEY" --name "$WORKER" 2>/dev/null
-            echo "✓ var $KEY"
+            if printf '%s' "$VAL" | npx wrangler secret put "$KEY" --name "$WORKER"; then
+              echo "✓ var $KEY"
+            else
+              echo "✗ var $KEY failed"
+              FAILED=1
+            fi
           done
+          if [ "$FAILED" -eq 1 ]; then exit 1; fi
