@@ -726,7 +726,7 @@ export default function useAppleMusic({
         showErrorToast(e, 'playback');
       }
     } finally {
-      playbackLockRef.current = false;
+      setTimeout(() => { playbackLockRef.current = false; }, 300);
     }
   }, [musicKit, flushPendingQueue, syncMusicKitState, handleAuthLost]);
 
@@ -746,7 +746,7 @@ export default function useAppleMusic({
         showErrorToast(e, 'playback');
       }
     } finally {
-      playbackLockRef.current = false;
+      setTimeout(() => { playbackLockRef.current = false; }, 300);
     }
   }, [musicKit, syncMusicKitState, handleAuthLost]);
 
@@ -777,7 +777,7 @@ export default function useAppleMusic({
         showErrorToast(e, 'playback');
       }
     } finally {
-      playbackLockRef.current = false;
+      setTimeout(() => { playbackLockRef.current = false; }, 300);
     }
   }, [musicKit, flushPendingQueue, syncMusicKitState, handleAuthLost]);
 
@@ -804,7 +804,7 @@ export default function useAppleMusic({
         showErrorToast(e, 'queue management');
       }
     } finally {
-      playbackLockRef.current = false;
+      setTimeout(() => { playbackLockRef.current = false; }, 300);
     }
   }, [musicKit, syncMusicKitState, handleAuthLost]);
 
@@ -831,7 +831,7 @@ export default function useAppleMusic({
         showErrorToast(e, 'playback');
       }
     } finally {
-      playbackLockRef.current = false;
+      setTimeout(() => { playbackLockRef.current = false; }, 300);
     }
   }, [musicKit, syncMusicKitState, handleAuthLost]);
 
@@ -891,7 +891,7 @@ export default function useAppleMusic({
         showErrorToast(e, 'playback');
       }
     } finally {
-      playbackLockRef.current = false;
+      setTimeout(() => { playbackLockRef.current = false; }, 300);
     }
   }, [musicKit, syncMusicKitState, handleAuthLost]);
 
@@ -917,7 +917,7 @@ export default function useAppleMusic({
         showErrorToast(e, 'playback');
       }
     } finally {
-      playbackLockRef.current = false;
+      setTimeout(() => { playbackLockRef.current = false; }, 300);
     }
   }, [musicKit, syncMusicKitState, handleAuthLost]);
 
