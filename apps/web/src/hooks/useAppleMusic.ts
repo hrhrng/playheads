@@ -255,20 +255,28 @@ export default function useAppleMusic({
   // ==========================================================================
 
   const agentPlayTrack = useCallback(async (index: number): Promise<string> => {
+    console.log('[MusicKit] agentPlayTrack called:', {
+      index,
+      hasMusicKit: !!musicKit,
+      playlistLength: playingPlaylistRef.current.length,
+      playlist: playingPlaylistRef.current.map(t => `${t.id}: ${t.name}`),
+    });
     if (!musicKit) return 'Apple Music is not connected.';
 
     const targetTrack = playingPlaylistRef.current[index];
     if (!targetTrack?.id) {
+      console.warn('[MusicKit] No track at index', index, 'playlist has', playingPlaylistRef.current.length, 'items');
       return `No track at position ${index + 1}.`;
     }
 
     try {
       pendingQueueRef.current = null;
+      console.log('[MusicKit] setQueue({ song: %s, startPlaying: true })', targetTrack.id);
       await musicKit.setQueue({ song: targetTrack.id, startPlaying: true } as any);
       syncMusicKitState();
       return `Now playing: ${targetTrack.name} by ${targetTrack.artist}`;
     } catch (e) {
-      console.error('[Agent] play_track error:', e);
+      console.error('[MusicKit] play_track error:', e);
       const classified = classifyError(e);
       if (classified.category === ErrorCategory.AUTH_EXPIRED) {
         handleAuthLost();
