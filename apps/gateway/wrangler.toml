@@ -39,4 +39,5 @@ head_sampling_rate = 1
 [vars]
 APP_HOSTNAME = ""
 ADMIN_HOSTNAME = ""
-USE_NEW_AGENT = "false"
+USE_NEW_AGENT = "true"
+

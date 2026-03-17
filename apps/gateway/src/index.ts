@@ -70,7 +70,9 @@ export default {
     }
 
     // /agents/* → agent worker (WebSocket + HTTP for useAgentChat)
-    if (url.pathname.startsWith("/agents/") && env.USE_NEW_AGENT === "true" && env.AGENT) {
+    // Always route when the AGENT binding exists — independent of USE_NEW_AGENT
+    // which only controls whether /api/* goes to agent vs Python backend.
+    if (url.pathname.startsWith("/agents/") && env.AGENT) {
       return env.AGENT.fetch(request);
     }
 
