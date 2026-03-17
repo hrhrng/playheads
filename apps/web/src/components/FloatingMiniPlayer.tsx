@@ -3,6 +3,7 @@ import type { Track } from '../types';
 interface FloatingMiniPlayerProps {
   currentTrack: Track | null;
   isPlaying: boolean;
+  isTransitioning?: boolean;
   onTogglePlay: () => void;
   conversationTitle: string;
   onNavigateToConversation: () => void;
@@ -11,6 +12,7 @@ interface FloatingMiniPlayerProps {
 export function FloatingMiniPlayer({
   currentTrack,
   isPlaying,
+  isTransitioning = false,
   onTogglePlay,
   conversationTitle,
   onNavigateToConversation,
@@ -40,7 +42,8 @@ export function FloatingMiniPlayer({
           e.stopPropagation();
           onTogglePlay();
         }}
-        className="w-8 h-8 rounded-full bg-gemini-text text-white flex items-center justify-center shrink-0 hover:bg-black transition-colors"
+        disabled={isTransitioning}
+        className="w-8 h-8 rounded-full bg-gemini-text text-white flex items-center justify-center shrink-0 hover:bg-black transition-colors disabled:opacity-50"
       >
         {isPlaying ? (
           <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" /></svg>

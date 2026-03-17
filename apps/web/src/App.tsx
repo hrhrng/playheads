@@ -73,6 +73,7 @@ function App() {
   const {
     currentTrack: appleTrack,
     isPlaying: isApplePlaying,
+    isTransitioning: isAppleTransitioning,
     isAuthorized: isAppleMusicAuthorized,
     togglePlay: toggleApple,
     queue: appleQueue,
@@ -264,6 +265,7 @@ function App() {
             isDJSpeaking={false}
             appleTrack={appleTrack}
             isApplePlaying={isApplePlaying}
+            isAppleTransitioning={isAppleTransitioning}
             isAppleMusicAuthorized={isAppleMusicAuthorized}
             toggleApple={toggleApple}
             playbackTime={playbackTime}
@@ -289,6 +291,7 @@ function App() {
             isDJSpeaking={false}
             appleTrack={appleTrack}
             isApplePlaying={isApplePlaying}
+            isAppleTransitioning={isAppleTransitioning}
             isAppleMusicAuthorized={isAppleMusicAuthorized}
             toggleApple={toggleApple}
             playbackTime={playbackTime}

@@ -20,6 +20,8 @@ interface ChatInterfaceProps {
   isDJSpeaking: boolean;
   /** Whether music is currently playing */
   isPlaying: boolean;
+  /** Whether a playback transition is in progress */
+  isTransitioning?: boolean;
   /** Current track being played */
   currentTrack: Track | null;
   /** Toggle play/pause */
@@ -62,6 +64,7 @@ interface ChatInterfaceProps {
 export const ChatInterface = ({
   isDJSpeaking,
   isPlaying,
+  isTransitioning = false,
   currentTrack,
   togglePlay,
   playbackTime,
@@ -170,6 +173,7 @@ export const ChatInterface = ({
             <RecordPlayer
               currentTrack={currentTrack}
               isPaused={!isPlaying}
+              isTransitioning={isTransitioning}
               togglePlay={togglePlay}
               playbackTime={playbackTime}
               onSeek={onSeek}
