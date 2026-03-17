@@ -77,12 +77,23 @@ jobs:
           npx wrangler deploy --config wrangler.branch.toml \
             --name "playheads-web-${SLUG}"
 
-      - name: Deploy agent worker (preview)
+      - name: Deploy agent worker
         working-directory: apps/agent
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx wrangler deploy --config wrangler.preview.toml
+        run: |
+          SLUG="${{ steps.branch.outputs.slug }}"
+          DOMAIN="${{ vars.PRODUCTION_DOMAIN }}"
+          cp wrangler.preview.toml wrangler.branch.toml
+          cat >> wrangler.branch.toml <<TOML
+
+          [[routes]]
+          pattern = "agent-${SLUG}.pw.${DOMAIN}"
+          custom_domain = true
+          TOML
+          npx wrangler deploy --config wrangler.branch.toml \
+            --name "playheads-agent-${SLUG}"
 
       - name: Deploy preview gateway
         working-directory: apps/gateway
@@ -90,8 +101,10 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
+          SLUG="${{ steps.branch.outputs.slug }}"
           DOMAIN="${{ vars.PRODUCTION_DOMAIN }}"
           cp wrangler.preview.toml wrangler.branch.toml
+          sed -i "s/playheads-agent-preview/playheads-agent-${SLUG}/" wrangler.branch.toml
           cat >> wrangler.branch.toml <<TOML
 
           [[routes]]
@@ -175,12 +188,12 @@ jobs:
             fi
           done
 
-      - name: Sync agent worker secrets (preview)
+      - name: Sync agent worker secrets
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          WORKER="playheads-agent-preview"
+          WORKER="playheads-agent-${{ steps.branch.outputs.slug }}"
           declare -A SECRETS=(
             [CLOUDFLARE_ACCOUNT_ID]="${{ secrets.CLOUDFLARE_ACCOUNT_ID }}"
             [AI_GATEWAY_ID]="${{ secrets.AI_GATEWAY_ID }}"
