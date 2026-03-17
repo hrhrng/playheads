@@ -19,6 +19,7 @@ import { useWaitlistGate } from './hooks/useWaitlistGate';
 import { useChatStore } from './store/chatStore';
 import { API_BASE } from './config/api';
 import type { MusicActions } from './hooks/useAgentChatAdapter';
+import type { FormattedTrack } from './types/apple-music';
 
 function App() {
   const location = useLocation();
@@ -148,61 +149,55 @@ function App() {
     await playAppleTrack(index);
   }, [activeSessionId, playAppleTrack, updatePlayingPlaylist]);
 
-  // Initial restore on Apple Music authorization
+  // --------------------------------------------------------------------------
+  // currentConversation: load viewed playlist whenever activeSessionId changes
+  // --------------------------------------------------------------------------
+  const userId = effectiveSession?.user?.id || null;
+
   useEffect(() => {
-    if (!isAppleMusicAuthorized || isInitializing || initialRestoreDone.current) return;
     if (!activeSessionId) return;
-
-    initialRestoreDone.current = true;
-
-    const returningToPlayingSession = playingSessionId && playingSessionId === activeSessionId;
-    const alreadyPlayingElsewhere = playingSessionId && playingSessionId !== activeSessionId;
 
     let cancelled = false;
     (async () => {
-      if (returningToPlayingSession) {
-        // Navigating back to the session that already owns playback.
-        // MusicKit is already in the correct state — just refresh the
-        // viewed playlist from backend without touching MusicKit at all.
-        try {
-          const url = effectiveSession?.user?.id
-            ? `${API_BASE}/state?session_id=${activeSessionId}&user_id=${effectiveSession.user.id}`
-            : `${API_BASE}/state?session_id=${activeSessionId}`;
-          const res = await fetch(url);
-          if (!cancelled && res.ok) {
-            const data = await res.json();
-            const backendPlaylist = data.playlist || [];
-            if (backendPlaylist.length > 0 || viewedPlaylist.length === 0) {
-              setViewedPlaylist(backendPlaylist);
-            }
-          }
-        } catch { /* ignore — MusicKit state is already correct */ }
-      } else if (alreadyPlayingElsewhere) {
-        // Restore playing session's state for MusicKit playback refs
-        const playingData = await restoreStateFromBackend(playingSessionId);
-        if (!cancelled && playingData) {
-          updatePlayingPlaylist(playingSessionId, playingData.playlist || []);
+      try {
+        const url = userId
+          ? `${API_BASE}/state?session_id=${activeSessionId}&user_id=${userId}`
+          : `${API_BASE}/state?session_id=${activeSessionId}`;
+        const res = await fetch(url);
+        if (cancelled || !res.ok) return;
+        const data = await res.json();
+        const backendPlaylist: FormattedTrack[] = data.playlist || [];
+        if (backendPlaylist.length > 0 || viewedPlaylist.length === 0) {
+          setViewedPlaylist(backendPlaylist);
         }
-        // Load viewed conversation's playlist for the UI
-        const viewedData = await restoreStateFromBackend(activeSessionId);
-        if (!cancelled) {
-          setViewedPlaylist(viewedData?.playlist || []);
-        }
-      } else {
-        // No playback session yet — full restore for this conversation
-        const data = await restoreStateFromBackend(activeSessionId);
-        if (!cancelled && data) {
-          updatePlayingPlaylist(activeSessionId, data.playlist || []);
-          const backendPlaylist = data.playlist || [];
-          if (backendPlaylist.length > 0 || viewedPlaylist.length === 0) {
-            setViewedPlaylist(backendPlaylist);
-          }
-          setPlayingSessionId(activeSessionId);
-        }
-      }
+      } catch { /* network error — keep current viewedPlaylist */ }
       playlistSyncReady.current = true;
     })();
-    return () => { cancelled = true; initialRestoreDone.current = false; };
+    return () => { cancelled = true; };
+  }, [activeSessionId, userId]);
+
+  // --------------------------------------------------------------------------
+  // playingConversation: restore MusicKit state once on authorization
+  // --------------------------------------------------------------------------
+  useEffect(() => {
+    if (!isAppleMusicAuthorized || isInitializing || initialRestoreDone.current) return;
+    // Need a session to restore from — either already playing or currently active
+    const targetSessionId = playingSessionId || activeSessionId;
+    if (!targetSessionId) return;
+
+    initialRestoreDone.current = true;
+
+    let cancelled = false;
+    (async () => {
+      const data = await restoreStateFromBackend(targetSessionId);
+      if (!cancelled && data) {
+        updatePlayingPlaylist(targetSessionId, data.playlist || []);
+        if (!playingSessionId) {
+          setPlayingSessionId(targetSessionId);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
   }, [isAppleMusicAuthorized, isInitializing, activeSessionId, playingSessionId, restoreStateFromBackend, updatePlayingPlaylist]);
 
   // ============================================================================
