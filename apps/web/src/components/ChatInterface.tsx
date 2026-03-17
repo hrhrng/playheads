@@ -3,7 +3,7 @@
  * @module components/ChatInterface
  */
 
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { RecordPlayer } from './RecordPlayer';
@@ -50,6 +50,10 @@ interface ChatInterfaceProps {
   playingConversationTitle?: string | null;
   /** Navigate to the conversation that currently owns playback */
   onNavigateToPlayingConversation?: () => void;
+  /** Skip to next track */
+  onSkipNext?: () => Promise<void>;
+  /** Skip to previous track */
+  onSkipPrev?: () => Promise<void>;
 }
 
 /**
@@ -79,6 +83,8 @@ export const ChatInterface = ({
   playingSessionId,
   playingConversationTitle,
   onNavigateToPlayingConversation,
+  onSkipNext,
+  onSkipPrev,
 }: ChatInterfaceProps) => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -102,6 +108,34 @@ export const ChatInterface = ({
   });
 
   // Note: Removed initial warning toast as connection handling is now done via overlay and actionable toasts
+
+  // Swipe gesture handling for skip next/prev (only in player mode)
+  const touchStartRef = useRef<{ y: number; time: number } | null>(null);
+  const swipingRef = useRef(false);
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (showHistory) return;
+    touchStartRef.current = { y: e.touches[0].clientY, time: Date.now() };
+    swipingRef.current = false;
+  }, [showHistory]);
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (showHistory || !touchStartRef.current) return;
+    const deltaY = e.changedTouches[0].clientY - touchStartRef.current.y;
+    const elapsed = Date.now() - touchStartRef.current.time;
+    touchStartRef.current = null;
+
+    // Require minimum 50px swipe within 500ms
+    if (Math.abs(deltaY) < 50 || elapsed > 500) return;
+
+    if (deltaY < 0 && onSkipNext) {
+      // Swipe up → next track
+      onSkipNext();
+    } else if (deltaY > 0 && onSkipPrev) {
+      // Swipe down → previous track
+      onSkipPrev();
+    }
+  }, [showHistory, onSkipNext, onSkipPrev]);
 
   // Wrap sendMessage — allow chatting without Apple Music auth;
   // playback errors are caught at the MusicKit layer with reconnect prompts.
@@ -167,8 +201,12 @@ export const ChatInterface = ({
           </div>
         )}
 
-        {/* Record Player - Always Visible */}
-        <div className="absolute inset-0 flex items-center justify-center pb-20">
+        {/* Record Player - Always Visible, swipe up/down for next/prev */}
+        <div
+          className="absolute inset-0 flex items-center justify-center pb-20"
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+        >
           <div className="relative z-10 w-full max-w-xl px-8">
             <RecordPlayer
               currentTrack={currentTrack}

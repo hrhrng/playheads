@@ -87,6 +87,8 @@ function App() {
     syncPlaylistToBackend,
     restoreStateFromBackend,
     updatePlayingPlaylist,
+    skipNext,
+    skipPrev,
   } = useAppleMusic({
     userId: effectiveSession?.user.id || null,
     activeSessionId,
@@ -275,6 +277,8 @@ function App() {
             onLogout={logout}
             onLinkApple={linkApple}
             onDisconnectApple={appleMusicLogout}
+            skipNext={skipNext}
+            skipPrev={skipPrev}
           />
         } />
 
@@ -307,6 +311,8 @@ function App() {
             isViewingPlayingConversation={isViewingPlayingConversation}
             onStartPlaybackFromConversation={startPlaybackFromConversation}
             playingSessionId={playingSessionId}
+            skipNext={skipNext}
+            skipPrev={skipPrev}
           />
         } />
       </Routes>
