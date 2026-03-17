@@ -112,7 +112,6 @@ export function useInitialMessage(
 interface LocationState {
   initialMessage?: string;
   isNewlyCreated?: boolean;
-  preservedMessages?: Message[];
   [key: string]: unknown;
 }
 

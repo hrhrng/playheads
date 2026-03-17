@@ -11,7 +11,6 @@ import { useSidebarState } from '../hooks/useSidebarState';
 import type {
   Track,
   PlaybackTime,
-  Message,
   AgentAction,
   FormattedTrack,
   Conversation
@@ -78,14 +77,12 @@ export function HomeRoute({
 
   const handleSessionCreated = (
     newSessionId: string,
-    preservedMessages: Message[],
     initialMessage: string
   ): void => {
     navigate(`/chat/${newSessionId}`, {
       replace: true,
       state: {
         isNewlyCreated: true,
-        preservedMessages,
         initialMessage
       }
     });
@@ -174,14 +171,12 @@ export function ChatRoute({
 
   const handleSessionCreated = (
     newSessionId: string,
-    preservedMessages: Message[],
     initialMessage: string
   ): void => {
     navigate(`/chat/${newSessionId}`, {
       replace: true,
       state: {
         isNewlyCreated: true,
-        preservedMessages,
         initialMessage
       }
     });

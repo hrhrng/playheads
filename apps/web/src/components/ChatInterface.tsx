@@ -41,7 +41,7 @@ interface ChatInterfaceProps {
   /** Callback when message is sent */
   onMessageSent?: () => void;
   /** Callback when new session is created */
-  onSessionCreated?: (newSessionId: string, preservedMessages: Message[], initialMessage: string) => void;
+  onSessionCreated?: (newSessionId: string, initialMessage: string) => void;
   /** Callback to link Apple Music account */
   onLinkApple?: () => Promise<void>;
   /** Session ID that currently owns playback */

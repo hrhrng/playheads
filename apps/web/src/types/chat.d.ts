@@ -70,50 +70,6 @@ export interface ModernMessage {
 export type Message = LegacyMessage | ModernMessage;
 
 /**
- * Chat history from backend
- */
-export interface ChatHistoryEntry {
-  role: MessageRole;
-  content?: string;
-  parts?: MessagePart[];
-}
-
-/**
- * SSE event types from backend
- */
-export interface SSETextEvent {
-  content: string;
-}
-
-export interface SSEThinkingEvent {
-  content: string;
-}
-
-export interface SSEToolStartEvent {
-  id: string;
-  tool_name: string;
-  args: Record<string, unknown>;
-}
-
-export interface SSEToolEndEvent {
-  id: string;
-  result: unknown;
-  status: ToolCallStatus;
-}
-
-export interface SSEDoneEvent {
-  actions: AgentAction[];
-}
-
-/**
- * Real-time action event - streamed immediately when tool executes
- */
-export interface SSEActionEvent {
-  type: AgentAction['type'];
-  data?: Record<string, unknown>;
-}
-
-/**
  * Agent action types
  */
 export interface AgentAction {

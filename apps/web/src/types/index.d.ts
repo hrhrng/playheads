@@ -14,13 +14,6 @@ export type {
   LegacyMessage,
   ModernMessage,
   MessageRole,
-  ChatHistoryEntry,
-  SSETextEvent,
-  SSEThinkingEvent,
-  SSEToolStartEvent,
-  SSEToolEndEvent,
-  SSEDoneEvent,
-  SSEActionEvent,
   AgentAction
 } from './chat';
 
@@ -35,10 +28,6 @@ export {
 // Store types
 export type {
   ChatStoreState,
-  LoadHistoryStatus,
-  AgentAction as StoreAgentAction,
-  ChatHistoryResponse,
-  ChatHistoryEntry as StoreChatHistoryEntry,
   CreateSessionResponse
 } from './store';
 
@@ -57,16 +46,8 @@ export type {
 
 // API types
 export type {
-  ChatRequest,
   CreateSessionRequest,
   CreateSessionResponse as APICreateSessionResponse,
-  GetStateParams,
-  ChatStateResponse,
-  ChatHistoryEntry as APIChatHistoryEntry,
-  MessagePart as APIMessagePart,
-  TextPart as APITextPart,
-  ThinkingPart as APIThinkingPart,
-  ToolCallPart as APIToolCallPart,
   SyncStateRequest,
   SyncStateResponse,
   SessionsListResponse,

@@ -23,7 +23,6 @@ interface UseChatParams {
   onMessageSent?: () => void;
   onSessionCreated?: (
     newSessionId: string,
-    preservedMessages: Message[],
     initialMessage: string
   ) => void;
 }
@@ -109,11 +108,8 @@ export function useChat({
         const { session_id: newSessionId } = await res.json() as { session_id: string };
 
         // Navigate to the new session - useAgentChat will connect automatically
-        const userMessage: Message = { role: 'user', content: messageText };
-        const preservedMessages = [...messages, userMessage];
-
         if (onSessionCreated) {
-          onSessionCreated(newSessionId, preservedMessages, messageText);
+          onSessionCreated(newSessionId, messageText);
         }
       } catch (error) {
         console.error('Failed to create session:', error);
@@ -128,7 +124,7 @@ export function useChat({
       useChatStore.setState({ input: '' });
       adapter.sendMessage(messageText);
     }
-  }, [input, isLoading, sessionId, userId, messages, onSessionCreated, adapter]);
+  }, [input, isLoading, sessionId, userId, onSessionCreated, adapter]);
 
   return {
     messages,
