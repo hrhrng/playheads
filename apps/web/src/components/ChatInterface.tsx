@@ -109,15 +109,16 @@ export const ChatInterface = ({
 
   // Note: Removed initial warning toast as connection handling is now done via overlay and actionable toasts
 
-  // Swipe gesture handling for skip next/prev (only in player mode)
-  // Uses native listeners with { passive: false } so we can preventDefault on
-  // vertical swipes to stop browser pull-to-refresh / overscroll.
-  const swipeTargetRef = useRef<HTMLDivElement>(null);
+  // --- Skip gesture handling (touch, mouse drag, wheel, keyboard) ---
+  // Uses callback ref so listeners attach when the DOM element mounts,
+  // even if the initial render shows SkeletonLoader / NewChatView.
   const swipeContentRef = useRef<HTMLDivElement>(null);
   const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
   const touchMovedRef = useRef(false);
+  const wheelCooldownRef = useRef(false);
+  const swipeCleanupRef = useRef<(() => void) | null>(null);
 
-  // Store latest callbacks in refs so the native listener always sees current values
+  // Store latest callbacks in refs so native listeners always see current values
   const showHistoryRef = useRef(showHistory);
   showHistoryRef.current = showHistory;
   const onSkipNextRef = useRef(onSkipNext);
@@ -125,44 +126,80 @@ export const ChatInterface = ({
   const onSkipPrevRef = useRef(onSkipPrev);
   onSkipPrevRef.current = onSkipPrev;
 
-  useEffect(() => {
-    const el = swipeTargetRef.current;
+  // Shared: spring-back animation
+  const springBack = useCallback(() => {
+    const content = swipeContentRef.current;
+    if (content) {
+      content.style.transition = 'transform 0.35s cubic-bezier(0.25, 1.5, 0.5, 1)';
+      content.style.transform = 'translateY(0)';
+    }
+  }, []);
+
+  // Shared: apply dampened translateY during drag/swipe
+  const applyDrag = useCallback((dy: number) => {
+    const dampened = Math.sign(dy) * Math.min(Math.abs(dy) * 0.4, 80);
+    const content = swipeContentRef.current;
+    if (content) {
+      content.style.transition = 'none';
+      content.style.transform = `translateY(${dampened}px)`;
+    }
+  }, []);
+
+  // Shared: trigger skip based on direction
+  const triggerSkip = useCallback((dy: number) => {
+    if (dy < 0 && onSkipNextRef.current) {
+      onSkipNextRef.current();
+    } else if (dy > 0 && onSkipPrevRef.current) {
+      onSkipPrevRef.current();
+    }
+  }, []);
+
+  // Shared: bounce animation for instant triggers (wheel, keyboard)
+  const bounceAndSkip = useCallback((direction: number) => {
+    const content = swipeContentRef.current;
+    if (content) {
+      content.style.transition = 'none';
+      content.style.transform = `translateY(${direction * -30}px)`;
+      // Force reflow then spring back
+      content.getBoundingClientRect();
+      content.style.transition = 'transform 0.35s cubic-bezier(0.25, 1.5, 0.5, 1)';
+      content.style.transform = 'translateY(0)';
+    }
+    triggerSkip(direction < 0 ? -1 : 1);
+  }, [triggerSkip]);
+
+  const isInteractive = (target: HTMLElement) =>
+    !!target.closest('button, input, [role="slider"], .rc-slider');
+
+  // Callback ref: attaches touch + mouse + wheel listeners when the element mounts
+  const swipeTargetRef = useCallback((el: HTMLDivElement | null) => {
+    // Clean up old listeners
+    if (swipeCleanupRef.current) {
+      swipeCleanupRef.current();
+      swipeCleanupRef.current = null;
+    }
     if (!el) return;
 
+    // --- Touch ---
     const onTouchStart = (e: TouchEvent) => {
       if (showHistoryRef.current) return;
-      const target = e.target as HTMLElement;
-      if (target.closest('button, input, [role="slider"], .rc-slider')) return;
+      if (isInteractive(e.target as HTMLElement)) return;
       touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, time: Date.now() };
       touchMovedRef.current = false;
     };
-
     const onTouchMove = (e: TouchEvent) => {
       touchMovedRef.current = true;
       if (touchStartRef.current) {
         const dx = Math.abs(e.touches[0].clientX - touchStartRef.current.x);
         const dy = e.touches[0].clientY - touchStartRef.current.y;
         if (Math.abs(dy) > 10 && Math.abs(dy) > dx) {
-          e.preventDefault(); // block browser overscroll
-          // Rubber-band: dampen offset logarithmically for resistance feel
-          const dampened = Math.sign(dy) * Math.min(Math.abs(dy) * 0.4, 80);
-          const content = swipeContentRef.current;
-          if (content) {
-            content.style.transition = 'none';
-            content.style.transform = `translateY(${dampened}px)`;
-          }
+          e.preventDefault();
+          applyDrag(dy);
         }
       }
     };
-
     const onTouchEnd = (e: TouchEvent) => {
-      // Spring back to origin
-      const content = swipeContentRef.current;
-      if (content) {
-        content.style.transition = 'transform 0.35s cubic-bezier(0.25, 1.5, 0.5, 1)';
-        content.style.transform = 'translateY(0)';
-      }
-
+      springBack();
       if (showHistoryRef.current || !touchStartRef.current || !touchMovedRef.current) {
         touchStartRef.current = null;
         return;
@@ -171,25 +208,90 @@ export const ChatInterface = ({
       const dy = e.changedTouches[0].clientY - touchStartRef.current.y;
       const elapsed = Date.now() - touchStartRef.current.time;
       touchStartRef.current = null;
-
       if (Math.abs(dy) < 60 || elapsed > 400 || Math.abs(dx) > Math.abs(dy) * 0.5) return;
-
-      if (dy < 0 && onSkipNextRef.current) {
-        onSkipNextRef.current();
-      } else if (dy > 0 && onSkipPrevRef.current) {
-        onSkipPrevRef.current();
-      }
+      triggerSkip(dy);
     };
 
+    // --- Mouse drag ---
+    let mouseStart: { x: number; y: number; time: number } | null = null;
+    let mouseMoved = false;
+    const onMouseDown = (e: MouseEvent) => {
+      if (showHistoryRef.current) return;
+      if (isInteractive(e.target as HTMLElement)) return;
+      if (e.button !== 0) return; // left click only
+      mouseStart = { x: e.clientX, y: e.clientY, time: Date.now() };
+      mouseMoved = false;
+      e.preventDefault(); // prevent text selection during drag
+    };
+    const onMouseMove = (e: MouseEvent) => {
+      if (!mouseStart) return;
+      mouseMoved = true;
+      const dx = Math.abs(e.clientX - mouseStart.x);
+      const dy = e.clientY - mouseStart.y;
+      if (Math.abs(dy) > 10 && Math.abs(dy) > dx) {
+        applyDrag(dy);
+      }
+    };
+    const onMouseUp = (e: MouseEvent) => {
+      springBack();
+      if (!mouseStart || !mouseMoved) { mouseStart = null; return; }
+      const dx = e.clientX - mouseStart.x;
+      const dy = e.clientY - mouseStart.y;
+      const elapsed = Date.now() - mouseStart.time;
+      mouseStart = null;
+      if (Math.abs(dy) < 60 || elapsed > 400 || Math.abs(dx) > Math.abs(dy) * 0.5) return;
+      triggerSkip(dy);
+    };
+
+    // --- Wheel ---
+    const onWheel = (e: WheelEvent) => {
+      if (showHistoryRef.current) return;
+      if (wheelCooldownRef.current) return;
+      if (Math.abs(e.deltaY) < 30) return; // ignore tiny scrolls
+      wheelCooldownRef.current = true;
+      setTimeout(() => { wheelCooldownRef.current = false; }, 800);
+      // Scroll down (positive deltaY) → next, scroll up → prev
+      bounceAndSkip(e.deltaY > 0 ? -1 : 1);
+    };
+
+    // Register all listeners
     el.addEventListener('touchstart', onTouchStart, { passive: true });
     el.addEventListener('touchmove', onTouchMove, { passive: false });
     el.addEventListener('touchend', onTouchEnd, { passive: true });
-    return () => {
+    el.addEventListener('mousedown', onMouseDown);
+    el.addEventListener('wheel', onWheel, { passive: true });
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+
+    swipeCleanupRef.current = () => {
       el.removeEventListener('touchstart', onTouchStart);
       el.removeEventListener('touchmove', onTouchMove);
       el.removeEventListener('touchend', onTouchEnd);
+      el.removeEventListener('mousedown', onMouseDown);
+      el.removeEventListener('wheel', onWheel);
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
     };
-  }, []); // stable — uses refs for changing values
+  }, [applyDrag, springBack, triggerSkip, bounceAndSkip]);
+
+  // --- Keyboard: arrow up/down to skip ---
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (showHistoryRef.current) return;
+      // Don't intercept when typing in an input/textarea
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        bounceAndSkip(1); // up = prev
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        bounceAndSkip(-1); // down = next
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [bounceAndSkip]);
 
   // Wrap sendMessage — allow chatting without Apple Music auth;
   // playback errors are caught at the MusicKit layer with reconnect prompts.
