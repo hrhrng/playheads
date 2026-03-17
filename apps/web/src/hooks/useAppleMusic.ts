@@ -919,6 +919,13 @@ export default function useAppleMusic({
         } as any);
         if (wasPlaying) {
           try { await musicKit.play(); } catch { /* autoplay policy */ }
+        } else {
+          // Not auto-playing: clear transition so play button is enabled
+          setIsTransitioning(false);
+          if (transitionTimeoutRef.current) {
+            clearTimeout(transitionTimeoutRef.current);
+            transitionTimeoutRef.current = null;
+          }
         }
         syncMusicKitState().catch(() => {});
       }
@@ -961,6 +968,13 @@ export default function useAppleMusic({
         } as any);
         if (wasPlaying) {
           try { await musicKit.play(); } catch { /* autoplay policy */ }
+        } else {
+          // Not auto-playing: clear transition so play button is enabled
+          setIsTransitioning(false);
+          if (transitionTimeoutRef.current) {
+            clearTimeout(transitionTimeoutRef.current);
+            transitionTimeoutRef.current = null;
+          }
         }
         syncMusicKitState().catch(() => {});
       }
