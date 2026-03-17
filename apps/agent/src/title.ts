@@ -41,7 +41,7 @@ export async function generateConversationTitle(
       model: anthropic("claude-haiku-4-5-20251001"),
       prompt,
       temperature: 0.7,
-      maxTokens: 20,
+      maxOutputTokens: 20,
     });
 
     let title = text.trim();

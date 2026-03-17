@@ -8,7 +8,7 @@
  * Ported from apps/backend/agent.py
  */
 import { AIChatAgent } from "@cloudflare/ai-chat";
-import { streamText, convertToModelMessages } from "ai";
+import { streamText, convertToModelMessages, stepCountIs } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createMusicTools } from "./tools";
 import { generateAndUpdateTitle } from "./title";
@@ -120,7 +120,7 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
       system: buildSystemPrompt(this.state),
       messages: await convertToModelMessages(this.messages),
       tools,
-      maxSteps: 10, // Allow multi-turn tool calling (replaces LangGraph agentic loop)
+      stopWhen: stepCountIs(10), // Allow multi-turn tool calling (replaces LangGraph agentic loop)
       abortSignal: options?.abortSignal,
       onFinish: async ({ text }) => {
         if (!sessionId) return;

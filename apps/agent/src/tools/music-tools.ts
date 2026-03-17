@@ -27,7 +27,7 @@ export function createMusicTools(ctx: ToolContext) {
     search_music: tool({
       description:
         "Search for music tracks on Apple Music. Returns a list of tracks with IDs.",
-      parameters: z.object({
+      inputSchema: z.object({
         query: z.string().describe("Search query string"),
       }),
       execute: async ({ query }) => {
@@ -66,7 +66,7 @@ export function createMusicTools(ctx: ToolContext) {
     add_to_queue: tool({
       description:
         "Add a track to the queue by its Apple Music ID (from search_music results).",
-      parameters: z.object({
+      inputSchema: z.object({
         track_id: z
           .string()
           .describe('Apple Music song ID (e.g. "12345" from search results)'),
@@ -107,7 +107,7 @@ export function createMusicTools(ctx: ToolContext) {
     play_track: tool({
       description:
         "Play a specific track from the playlist by its position number (1-indexed).",
-      parameters: z.object({
+      inputSchema: z.object({
         index: z
           .string()
           .describe("Track position number starting from 1"),
@@ -126,7 +126,7 @@ export function createMusicTools(ctx: ToolContext) {
 
     skip_next: tool({
       description: "Skip to the next track in the playlist.",
-      parameters: z.object({}),
+      inputSchema: z.object({}),
       execute: async () => {
         return {
           message: "Skipping to the next track.",
@@ -138,7 +138,7 @@ export function createMusicTools(ctx: ToolContext) {
     remove_from_playlist: tool({
       description:
         "Remove a track from the playlist by its position number (1-indexed).",
-      parameters: z.object({
+      inputSchema: z.object({
         index: z
           .string()
           .describe("Track position number starting from 1"),
@@ -157,7 +157,7 @@ export function createMusicTools(ctx: ToolContext) {
 
     get_now_playing: tool({
       description: "Get information about the currently playing track.",
-      parameters: z.object({}),
+      inputSchema: z.object({}),
       execute: async () => {
         if (!ctx.state.currentTrack) {
           return "No track is currently playing.";
@@ -174,7 +174,7 @@ export function createMusicTools(ctx: ToolContext) {
 
     get_playlist: tool({
       description: "Get the current playlist/queue of tracks.",
-      parameters: z.object({}),
+      inputSchema: z.object({}),
       execute: async () => {
         if (!ctx.state.playlist.length) {
           return "The playlist is empty.";
