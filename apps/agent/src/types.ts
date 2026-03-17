@@ -7,7 +7,7 @@
 // ---------------------------------------------------------------------------
 export interface Env {
   // Durable Object bindings
-  MUSIC_AGENT: DurableObjectNamespace;
+  MusicChatAgent: DurableObjectNamespace;
 
   // D1 database
   DB: D1Database;

@@ -4,7 +4,7 @@ compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
 
 [[durable_objects.bindings]]
-name = "MUSIC_AGENT"
+name = "MusicChatAgent"
 class_name = "MusicChatAgent"
 
 [[migrations]]
