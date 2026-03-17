@@ -113,6 +113,7 @@ export const ChatInterface = ({
   // Uses native listeners with { passive: false } so we can preventDefault on
   // vertical swipes to stop browser pull-to-refresh / overscroll.
   const swipeTargetRef = useRef<HTMLDivElement>(null);
+  const swipeContentRef = useRef<HTMLDivElement>(null);
   const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
   const touchMovedRef = useRef(false);
 
@@ -140,14 +141,28 @@ export const ChatInterface = ({
       touchMovedRef.current = true;
       if (touchStartRef.current) {
         const dx = Math.abs(e.touches[0].clientX - touchStartRef.current.x);
-        const dy = Math.abs(e.touches[0].clientY - touchStartRef.current.y);
-        if (dy > 10 && dy > dx) {
+        const dy = e.touches[0].clientY - touchStartRef.current.y;
+        if (Math.abs(dy) > 10 && Math.abs(dy) > dx) {
           e.preventDefault(); // block browser overscroll
+          // Rubber-band: dampen offset logarithmically for resistance feel
+          const dampened = Math.sign(dy) * Math.min(Math.abs(dy) * 0.4, 80);
+          const content = swipeContentRef.current;
+          if (content) {
+            content.style.transition = 'none';
+            content.style.transform = `translateY(${dampened}px)`;
+          }
         }
       }
     };
 
     const onTouchEnd = (e: TouchEvent) => {
+      // Spring back to origin
+      const content = swipeContentRef.current;
+      if (content) {
+        content.style.transition = 'transform 0.35s cubic-bezier(0.25, 1.5, 0.5, 1)';
+        content.style.transform = 'translateY(0)';
+      }
+
       if (showHistoryRef.current || !touchStartRef.current || !touchMovedRef.current) {
         touchStartRef.current = null;
         return;
@@ -246,7 +261,7 @@ export const ChatInterface = ({
           className="absolute inset-0 flex items-center justify-center pb-20"
           style={{ touchAction: 'pan-x' }}
         >
-          <div className="relative z-10 w-full max-w-xl px-8">
+          <div ref={swipeContentRef} className="relative z-10 w-full max-w-xl px-8">
             <RecordPlayer
               currentTrack={currentTrack}
               isPaused={!isPlaying}
