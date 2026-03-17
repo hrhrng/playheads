@@ -611,6 +611,7 @@ export default function useAppleMusic({
       }
 
       if (current_track?.id) {
+        lastPlayingTrackIdRef.current = current_track.id;
         const alreadyPlaying = musicKit.nowPlayingItem?.id === current_track.id;
 
         if (!alreadyPlaying) {
@@ -896,17 +897,15 @@ export default function useAppleMusic({
     startTransition();
     try {
       const playlist = playingPlaylistRef.current;
-      const mkId = musicKit.nowPlayingItem?.id;
-      const lastId = lastPlayingTrackIdRef.current;
-      const currentId = mkId || lastId;
-      console.log('[skipNext]', { mkId, lastId, currentId, playlistLen: playlist.length, playlistIds: playlist.map(t => t.id) });
+      const currentId = musicKit.nowPlayingItem?.id || lastPlayingTrackIdRef.current;
       if (!currentId || playlist.length === 0) return;
 
       const currentIdx = playlist.findIndex(t => t.id === currentId);
       const nextTrack = playlist[currentIdx + 1];
       if (nextTrack?.id) {
+        lastPlayingTrackIdRef.current = nextTrack.id;
         await musicKit.setQueue({ song: nextTrack.id, startPlaying: true } as any);
-        await syncMusicKitState();
+        syncMusicKitState().catch(() => {});
       }
     } catch (e) {
       const classified = classifyError(e);
@@ -926,17 +925,15 @@ export default function useAppleMusic({
     startTransition();
     try {
       const playlist = playingPlaylistRef.current;
-      const mkId = musicKit.nowPlayingItem?.id;
-      const lastId = lastPlayingTrackIdRef.current;
-      const currentId = mkId || lastId;
-      console.log('[skipPrev]', { mkId, lastId, currentId, playlistLen: playlist.length, playlistIds: playlist.map(t => t.id) });
+      const currentId = musicKit.nowPlayingItem?.id || lastPlayingTrackIdRef.current;
       if (!currentId || playlist.length === 0) return;
 
       const currentIdx = playlist.findIndex(t => t.id === currentId);
       const prevTrack = playlist[currentIdx - 1];
       if (prevTrack?.id) {
+        lastPlayingTrackIdRef.current = prevTrack.id;
         await musicKit.setQueue({ song: prevTrack.id, startPlaying: true } as any);
-        await syncMusicKitState();
+        syncMusicKitState().catch(() => {});
       }
     } catch (e) {
       const classified = classifyError(e);

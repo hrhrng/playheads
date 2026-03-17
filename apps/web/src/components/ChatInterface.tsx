@@ -159,7 +159,7 @@ export const ChatInterface = ({
     const content = swipeContentRef.current;
     if (content) {
       content.style.transition = 'none';
-      content.style.transform = `translateY(${direction * -30}px)`;
+      content.style.transform = `translateY(${direction * 30}px)`;
       // Force reflow then spring back
       content.getBoundingClientRect();
       content.style.transition = 'transform 0.35s cubic-bezier(0.25, 1.5, 0.5, 1)';
