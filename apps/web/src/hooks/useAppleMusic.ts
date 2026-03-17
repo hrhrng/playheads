@@ -491,7 +491,11 @@ export default function useAppleMusic({
 
           const playing = state === 'playing' || state === 2;
           const paused  = state === 'paused'  || state === 3;
-          setIsPlaying(playing);
+          // Only update isPlaying for terminal states. Transitional states
+          // (seeking=8, loading=1, waiting=6) must NOT flip the UI.
+          if (playing || paused) {
+            setIsPlaying(playing);
+          }
           if (mk.nowPlayingItem) {
             setCurrentTrack(mk.nowPlayingItem);
             if (playing) lastPlayingTrackIdRef.current = mk.nowPlayingItem.id;
@@ -684,6 +688,7 @@ export default function useAppleMusic({
   // Playback Controls (with sync)
   // ==========================================================================
   const isFlushingRef = useRef(false);
+  const playbackLockRef = useRef(false);
 
   const flushPendingQueue = useCallback(async () => {
     const pending = pendingQueueRef.current;
@@ -701,7 +706,8 @@ export default function useAppleMusic({
   }, [musicKit]);
 
   const play = useCallback(async (): Promise<void> => {
-    if (!musicKit) return;
+    if (!musicKit || playbackLockRef.current) return;
+    playbackLockRef.current = true;
     console.log('[MK] play() called, pending:', !!pendingQueueRef.current, 'mkState:', musicKit.playbackState);
     try {
       playerReadyRef.current = true;
@@ -719,11 +725,14 @@ export default function useAppleMusic({
       } else {
         showErrorToast(e, 'playback');
       }
+    } finally {
+      playbackLockRef.current = false;
     }
   }, [musicKit, flushPendingQueue, syncMusicKitState, handleAuthLost]);
 
   const pause = useCallback(async (): Promise<void> => {
-    if (!musicKit) return;
+    if (!musicKit || playbackLockRef.current) return;
+    playbackLockRef.current = true;
     console.log('[MK] pause() called, mkState:', musicKit.playbackState);
     try {
       await musicKit.pause();
@@ -736,11 +745,14 @@ export default function useAppleMusic({
       } else {
         showErrorToast(e, 'playback');
       }
+    } finally {
+      playbackLockRef.current = false;
     }
   }, [musicKit, syncMusicKitState, handleAuthLost]);
 
   const togglePlay = useCallback(async (): Promise<void> => {
-    if (!musicKit) return;
+    if (!musicKit || playbackLockRef.current) return;
+    playbackLockRef.current = true;
     console.log('[MK] togglePlay() called, mkState:', musicKit.playbackState, 'pending:', !!pendingQueueRef.current);
     try {
       // Read real MusicKit state, not stale React closure
@@ -764,6 +776,8 @@ export default function useAppleMusic({
       } else {
         showErrorToast(e, 'playback');
       }
+    } finally {
+      playbackLockRef.current = false;
     }
   }, [musicKit, flushPendingQueue, syncMusicKitState, handleAuthLost]);
 
@@ -771,7 +785,8 @@ export default function useAppleMusic({
     items: (string | Track)[],
     startPlaying = true
   ): Promise<void> => {
-    if (!musicKit) return;
+    if (!musicKit || playbackLockRef.current) return;
+    playbackLockRef.current = true;
     pendingQueueRef.current = null;
     try {
       playerReadyRef.current = true;
@@ -788,11 +803,14 @@ export default function useAppleMusic({
       } else {
         showErrorToast(e, 'queue management');
       }
+    } finally {
+      playbackLockRef.current = false;
     }
   }, [musicKit, syncMusicKitState, handleAuthLost]);
 
   const playTrack = useCallback(async (index: number): Promise<void> => {
-    if (!musicKit) return;
+    if (!musicKit || playbackLockRef.current) return;
+    playbackLockRef.current = true;
     pendingQueueRef.current = null;
     try {
       const targetTrack = playingPlaylistRef.current[index];
@@ -812,6 +830,8 @@ export default function useAppleMusic({
       } else {
         showErrorToast(e, 'playback');
       }
+    } finally {
+      playbackLockRef.current = false;
     }
   }, [musicKit, syncMusicKitState, handleAuthLost]);
 
@@ -850,7 +870,8 @@ export default function useAppleMusic({
   }, [musicKit, syncMusicKitState, handleAuthLost]);
 
   const skipNext = useCallback(async (): Promise<void> => {
-    if (!musicKit) return;
+    if (!musicKit || playbackLockRef.current) return;
+    playbackLockRef.current = true;
     try {
       const playlist = playingPlaylistRef.current;
       const currentId = musicKit.nowPlayingItem?.id;
@@ -869,11 +890,14 @@ export default function useAppleMusic({
       } else {
         showErrorToast(e, 'playback');
       }
+    } finally {
+      playbackLockRef.current = false;
     }
   }, [musicKit, syncMusicKitState, handleAuthLost]);
 
   const skipPrev = useCallback(async (): Promise<void> => {
-    if (!musicKit) return;
+    if (!musicKit || playbackLockRef.current) return;
+    playbackLockRef.current = true;
     try {
       const playlist = playingPlaylistRef.current;
       const currentId = musicKit.nowPlayingItem?.id;
@@ -892,6 +916,8 @@ export default function useAppleMusic({
       } else {
         showErrorToast(e, 'playback');
       }
+    } finally {
+      playbackLockRef.current = false;
     }
   }, [musicKit, syncMusicKitState, handleAuthLost]);
 
