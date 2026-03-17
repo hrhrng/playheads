@@ -40,4 +40,4 @@ head_sampling_rate = 1
 APP_HOSTNAME = ""
 ADMIN_HOSTNAME = ""
 PREVIEW_DOMAIN = ""
-USE_NEW_AGENT = "false"
+USE_NEW_AGENT = "true"
