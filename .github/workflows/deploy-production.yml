@@ -120,9 +120,9 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           WORKER="playheads-agent"
+          # CLOUDFLARE_ACCOUNT_ID and AI_GATEWAY_ID are already defined as
+          # [vars] in wrangler.toml — do NOT set them as secrets (name conflict).
           declare -A SECRETS=(
-            [CLOUDFLARE_ACCOUNT_ID]="${{ secrets.CLOUDFLARE_ACCOUNT_ID }}"
-            [AI_GATEWAY_ID]="${{ secrets.AI_GATEWAY_ID }}"
             [CF_AIG_TOKEN]="${{ secrets.CF_AIG_TOKEN }}"
             [APPLE_MUSIC_TEAM_ID]="${{ secrets.APPLE_MUSIC_TEAM_ID }}"
             [APPLE_MUSIC_KEY_ID]="${{ secrets.APPLE_MUSIC_KEY_ID }}"
