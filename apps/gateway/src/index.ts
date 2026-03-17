@@ -12,6 +12,8 @@ import {
   handleCreateSession,
   handleGetState,
   handleSyncState,
+  handleGetQueue,
+  handleSyncQueue,
 } from "./d1-handlers";
 
 interface Env {
@@ -127,6 +129,14 @@ export default {
     // /api/state/sync → D1 native
     if (url.pathname === "/api/state/sync" && request.method === "POST") {
       return handleSyncState(request, env.DB);
+    }
+
+    // /api/queue → global user-level queue
+    if (url.pathname === "/api/queue" && request.method === "GET") {
+      return handleGetQueue(request, env.DB);
+    }
+    if (url.pathname === "/api/queue/sync" && request.method === "POST") {
+      return handleSyncQueue(request, env.DB);
     }
 
     // /api/* → backend worker (agent/chat, apple-music, actions)

@@ -7,7 +7,7 @@
  */
 import { drizzle } from "drizzle-orm/d1";
 import { schema } from "@playheads/auth";
-import { eq, and, desc, lt, or, sql } from "drizzle-orm";
+import { eq, and, desc, lt, or } from "drizzle-orm";
 
 // Re-export D1Database type for the Env interface
 type D1 = D1Database;
@@ -488,5 +488,83 @@ export async function handleSyncState(
   } catch (e) {
     console.error("Failed to sync state:", e);
     return Response.json({ error: "Failed to sync state" }, { status: 500 });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/queue?user_id=...
+// ---------------------------------------------------------------------------
+export async function handleGetQueue(
+  request: Request,
+  DB: D1,
+): Promise<Response> {
+  const url = new URL(request.url);
+  const userId = url.searchParams.get("user_id");
+  if (!userId) {
+    return Response.json({ error: "user_id required" }, { status: 400 });
+  }
+
+  try {
+    const db = drizzle(DB);
+    const [row] = await db
+      .select({
+        queue: schema.profile.queue,
+        queueIndex: schema.profile.queueIndex,
+      })
+      .from(schema.profile)
+      .where(eq(schema.profile.id, userId));
+
+    if (!row) {
+      return Response.json({ queue: [], currentIndex: -1 });
+    }
+
+    return Response.json({
+      queue: JSON.parse(row.queue || "[]"),
+      currentIndex: row.queueIndex ?? -1,
+    });
+  } catch (e) {
+    console.error("Failed to get queue:", e);
+    return Response.json({ error: "Failed to get queue" }, { status: 500 });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/queue/sync  { user_id, queue, currentIndex }
+// ---------------------------------------------------------------------------
+export async function handleSyncQueue(
+  request: Request,
+  DB: D1,
+): Promise<Response> {
+  const body = (await request.json()) as {
+    user_id?: string;
+    queue?: unknown[];
+    currentIndex?: number;
+  };
+
+  if (!body.user_id) {
+    return Response.json({ error: "user_id required" }, { status: 400 });
+  }
+
+  try {
+    const now = Date.now();
+    await DB.prepare(
+      'UPDATE "profile" SET "queue" = ?, "queueIndex" = ?, "queueUpdatedAt" = ?, "updatedAt" = ? WHERE "id" = ?',
+    )
+      .bind(
+        JSON.stringify(body.queue || []),
+        body.currentIndex ?? -1,
+        now,
+        now,
+        body.user_id,
+      )
+      .run();
+
+    return Response.json({
+      status: "synced",
+      last_sync: new Date(now).toISOString(),
+    });
+  } catch (e) {
+    console.error("Failed to sync queue:", e);
+    return Response.json({ error: "Failed to sync queue" }, { status: 500 });
   }
 }

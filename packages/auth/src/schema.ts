@@ -88,6 +88,9 @@ export const profile = sqliteTable('profile', {
   displayName: text('displayName'),
   avatarUrl: text('avatarUrl'),
   appleMusicToken: text('appleMusicToken'),
+  queue: text('queue').notNull().default('[]'),
+  queueIndex: integer('queueIndex').notNull().default(-1),
+  queueUpdatedAt: integer('queueUpdatedAt', { mode: 'number' }),
   createdAt: integer('createdAt', { mode: 'number' }).notNull(),
   updatedAt: integer('updatedAt', { mode: 'number' }).notNull(),
 });

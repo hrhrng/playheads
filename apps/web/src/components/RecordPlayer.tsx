@@ -6,11 +6,12 @@
 import React, { useState } from 'react';
 import Slider from 'rc-slider';
 import 'rc-slider/assets/index.css';
-import type { Track, PlaybackTime } from '../types';
+import type { PlaybackTime } from '../types';
+import type { UnifiedTrack } from '../providers/types';
 
 interface RecordPlayerProps {
   /** Current track being played */
-  currentTrack: Track | null;
+  currentTrack: UnifiedTrack | null;
   /** Whether playback is paused */
   isPaused: boolean;
   /** Whether a playback transition is in progress */
@@ -66,14 +67,9 @@ export const RecordPlayer = ({
     );
   }
 
-  const attr = currentTrack.attributes || currentTrack;
-  const trackName = (attr as any).name || (attr as any).title || 'Unknown Track';
-  const artistName = (attr as any).artistName || 'Unknown Artist';
-  const artworkUrl = formatArtwork(
-    (attr as any).artwork?.url ||
-    (currentTrack as any).artwork?.url ||
-    (currentTrack as any).artworkURL
-  );
+  const trackName = currentTrack.name || 'Unknown Track';
+  const artistName = currentTrack.artist || 'Unknown Artist';
+  const artworkUrl = formatArtwork(currentTrack.artworkUrl);
 
   const current = playbackTime?.current || 0;
   const total = playbackTime?.total || 1;

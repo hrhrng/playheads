@@ -1,18 +1,21 @@
 /**
  * PlaylistSidebar - Collapsible playlist sidebar with resizable width
+ * Shows the global queue (same across all conversations).
  * @module components/PlaylistSidebar
  */
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import type { Track, FormattedTrack } from '../types';
+import type { UnifiedTrack } from '../providers/types';
 
 interface PlaylistSidebarProps {
   /** Currently playing track */
-  currentTrack: Track | null;
+  currentTrack: UnifiedTrack | null;
   /** Whether music is currently playing */
   isPlaying: boolean;
-  /** Queue of tracks to play (live from MusicKit) */
-  queue: Track[];
+  /** Global queue tracks */
+  queue: UnifiedTrack[];
+  /** Current playing index in the queue */
+  currentIndex: number;
   /** Callback when a track is selected to play */
   onPlayTrack?: (index: number) => void;
   /** Whether the sidebar is collapsed */
@@ -25,12 +28,6 @@ interface PlaylistSidebarProps {
   width: number;
   /** Callback when width changes */
   onWidthChange?: (width: number) => void;
-  /** Static playlist for a non-playing conversation (from backend) */
-  viewedPlaylist?: FormattedTrack[];
-  /** Whether the viewed conversation owns playback */
-  isViewingPlayingConversation?: boolean;
-  /** Callback to start playback from a non-playing conversation's playlist */
-  onStartPlaybackFromConversation?: (index: number) => void;
 }
 
 interface FormattedSidebarTrack {
@@ -41,21 +38,19 @@ interface FormattedSidebarTrack {
 }
 
 /**
- * PlaylistSidebar component - displays queue with collapsible and resizable interface
+ * PlaylistSidebar component - displays global queue with collapsible and resizable interface
  */
 export const PlaylistSidebar = ({
   currentTrack,
   isPlaying,
-  queue: _propQueue,
+  queue: queueTracks,
+  currentIndex,
   onPlayTrack,
   collapsed,
   toggleCollapse,
   showQueue = true,
   width,
   onWidthChange,
-  viewedPlaylist = [],
-  isViewingPlayingConversation = true,
-  onStartPlaybackFromConversation
 }: PlaylistSidebarProps): React.JSX.Element => {
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
@@ -64,7 +59,7 @@ export const PlaylistSidebar = ({
 
   // Handle resize start
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (collapsed) return; // Don't allow resize when collapsed
+    if (collapsed) return;
     e.preventDefault();
     setIsResizing(true);
     startX.current = e.clientX;
@@ -76,7 +71,7 @@ export const PlaylistSidebar = ({
     if (!isResizing) return;
 
     const handleMouseMove = (e: MouseEvent) => {
-      const deltaX = startX.current - e.clientX; // Negative because we drag from left edge
+      const deltaX = startX.current - e.clientX;
       const newWidth = startWidth.current + deltaX;
       onWidthChange?.(newWidth);
     };
@@ -114,20 +109,16 @@ export const PlaylistSidebar = ({
     return url.replace('{w}', size.toString()).replace('{h}', size.toString());
   };
 
-  // Always use viewedPlaylist (our own state), never MusicKit queue
-  const queue: FormattedSidebarTrack[] = viewedPlaylist.map((item): FormattedSidebarTrack => ({
+  // Format queue tracks for display
+  const queue: FormattedSidebarTrack[] = queueTracks.map((item): FormattedSidebarTrack => ({
     id: item.id,
     title: item.name || 'Unknown Title',
     artist: item.artist || 'Unknown Artist',
-    cover: formatArtwork(item.artwork_url)
+    cover: formatArtwork(item.artworkUrl)
   }));
 
   const handleTrackClick = (index: number) => {
-    if (!isViewingPlayingConversation && onStartPlaybackFromConversation) {
-      // Viewing a different conversation — load its playlist into MusicKit
-      onStartPlaybackFromConversation(index);
-    } else if (onPlayTrack) {
-      // Viewing playing conversation — jump to track
+    if (onPlayTrack) {
       onPlayTrack(index);
     }
   };
@@ -150,7 +141,6 @@ export const PlaylistSidebar = ({
           onMouseDown={handleMouseDown}
           title="Drag to resize sidebar"
         >
-          {/* Visual indicator on hover */}
           <div className="absolute left-1/2 top-1/2 -translate-y-1/2 -translate-x-1/2 w-0.5 h-8 bg-gray-300 rounded-full opacity-0 group-hover:opacity-100 group-hover:bg-blue-500/80 transition-all" />
         </div>
       )}
@@ -162,14 +152,13 @@ export const PlaylistSidebar = ({
           onMouseDown={handleMouseDown}
           title="Drag to expand sidebar"
         >
-          {/* Visual indicator on hover */}
           <div className="absolute left-1/2 top-1/2 -translate-y-1/2 -translate-x-1/2 w-0.5 h-8 bg-gray-300 rounded-full opacity-0 group-hover:opacity-100 group-hover:bg-blue-500/80 transition-all" />
         </div>
       )}
       {/* Playlist Container */}
       <div className="flex-1 min-h-0 bg-white rounded-t-3xl flex flex-col shadow-sm overflow-hidden relative border border-white transition-all">
 
-        {/* Toggle Button - Absolute Positioned or Flex */}
+        {/* Toggle Button */}
         <div className={`flex ${collapsed ? 'justify-center py-6' : 'justify-between p-6 pb-2'} items-center`}>
           {!collapsed && <h2 className="text-sm font-medium text-gemini-text tracking-tight">Playlist</h2>}
           <button
@@ -193,7 +182,6 @@ export const PlaylistSidebar = ({
         {collapsed ? (
           /* Mini View - Vertical Player Strip */
           <div className="flex-1 flex flex-col items-center pt-8 gap-6 opacity-100 transition-opacity duration-500 delay-100">
-
             {/* Mini Vinyl Spinner */}
             <div className={`w-12 h-12 rounded-full bg-black border-2 border-gray-200 flex items-center justify-center ${!!currentTrack && isPlaying ? 'animate-spin-slow' : ''} shadow-md`}>
               <div className="w-4 h-4 rounded-full bg-white border border-gray-300" />
@@ -215,27 +203,40 @@ export const PlaylistSidebar = ({
         ) : (
           /* Full Expanded View */
           <div className="flex-1 min-h-0 flex flex-col min-w-0 opacity-100 transition-opacity duration-300">
-
             {/* Queue List */}
             {showQueue && (
               <div className="flex-1 overflow-y-auto space-y-2 px-4 pb-4">
                 <h3 className="text-[10px] font-medium text-gemini-subtext uppercase tracking-widest mb-2 px-2">Up Next</h3>
-                {queue.map((track, index) => (
+                {queue.map((track, index) => {
+                  const isCurrent = index === currentIndex;
+                  return (
                     <div
-                      key={track.id}
+                      key={`${track.id}-${index}`}
                       onClick={() => handleTrackClick(index)}
-                      className="flex items-center gap-3 p-2 rounded-xl hover:bg-gemini-bg cursor-pointer group transition-colors"
+                      className={`flex items-center gap-3 p-2 rounded-xl hover:bg-gemini-bg cursor-pointer group transition-colors ${
+                        isCurrent ? 'bg-gemini-bg ring-1 ring-blue-200' : ''
+                      }`}
                     >
                       <div className="w-10 h-10 rounded-lg bg-gray-200 overflow-hidden relative shrink-0">
                         <img src={track.cover} alt={track.title} className="w-full h-full object-cover" />
                         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+                        {isCurrent && isPlaying && (
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                            <div className="flex gap-0.5 h-3 items-end">
+                              <div className="w-0.5 bg-white rounded-full animate-music-bar-1 h-full"></div>
+                              <div className="w-0.5 bg-white rounded-full animate-music-bar-2 h-2/3"></div>
+                              <div className="w-0.5 bg-white rounded-full animate-music-bar-3 h-1/2"></div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="text-[13px] font-medium text-gemini-text truncate leading-snug">{track.title}</div>
+                        <div className={`text-[13px] font-medium truncate leading-snug ${isCurrent ? 'text-blue-600' : 'text-gemini-text'}`}>{track.title}</div>
                         <div className="text-[11px] text-gemini-subtext truncate">{track.artist}</div>
                       </div>
                     </div>
-                  ))}
+                  );
+                })}
               </div>
             )}
           </div>

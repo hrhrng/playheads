@@ -7,11 +7,9 @@
  * @module hooks/useChat
  */
 
-import { useEffect, useRef, useState, useCallback } from 'react';
-import { flushSync } from 'react-dom';
+import { useRef, useState, useCallback } from 'react';
 import { toast } from 'sonner';
-import { useLocation, useNavigate, type NavigateFunction } from 'react-router-dom';
-import { useAgentChatAdapter, type MusicActions } from './useAgentChatAdapter';
+import { useAgentChatAdapter, type MusicActions, type QueueOperations } from './useAgentChatAdapter';
 import { useChatStore } from '../store/chatStore';
 import { API_BASE } from '../config/api';
 import type { Message } from '../types/chat';
@@ -20,6 +18,7 @@ interface UseChatParams {
   sessionId: string | null;
   userId: string | null;
   musicActions?: MusicActions;
+  queueOps?: QueueOperations;
   onMessageSent?: () => void;
   onSessionCreated?: (
     newSessionId: string,
@@ -47,10 +46,10 @@ export function useChat({
   sessionId,
   userId,
   musicActions,
+  queueOps,
   onMessageSent,
   onSessionCreated,
 }: UseChatParams): UseChatReturn {
-  const navigate = useNavigate() as NavigateFunction;
   const {
     input,
     showHistory,
@@ -64,6 +63,7 @@ export function useChat({
     sessionId: sessionId || "__no_session__",
     userId: userId || "",
     musicActions,
+    queueOps,
     onMessageSent,
   });
 

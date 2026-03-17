@@ -13,8 +13,9 @@ import { ChatInput } from './chat/ChatInput';
 import { TranscriptOverlay } from './chat/TranscriptOverlay';
 import { useChat } from '../hooks/useChat';
 import { useInitialMessage } from '../hooks/useChatHelpers';
-import type { Track, PlaybackTime, Message } from '../types';
-import type { MusicActions } from '../hooks/useAgentChatAdapter';
+import type { PlaybackTime, Message } from '../types';
+import type { UnifiedTrack } from '../providers/types';
+import type { MusicActions, QueueOperations } from '../hooks/useAgentChatAdapter';
 
 interface ChatInterfaceProps {
   /** Whether the DJ is currently speaking */
@@ -24,7 +25,7 @@ interface ChatInterfaceProps {
   /** Whether a playback transition is in progress */
   isTransitioning?: boolean;
   /** Current track being played */
-  currentTrack: Track | null;
+  currentTrack: UnifiedTrack | null;
   /** Toggle play/pause */
   togglePlay: () => void;
   /** Current playback position and duration */
@@ -39,18 +40,14 @@ interface ChatInterfaceProps {
   isAppleMusicAuthorized: boolean;
   /** Music actions for client tools (player control) */
   musicActions?: MusicActions;
+  /** Queue operations for agent action dispatch */
+  queueOps?: QueueOperations;
   /** Callback when message is sent */
   onMessageSent?: () => void;
   /** Callback when new session is created */
   onSessionCreated?: (newSessionId: string, initialMessage: string) => void;
   /** Callback to link Apple Music account */
   onLinkApple?: () => Promise<void>;
-  /** Session ID that currently owns playback */
-  playingSessionId?: string | null;
-  /** Title of the conversation that currently owns playback */
-  playingConversationTitle?: string | null;
-  /** Navigate to the conversation that currently owns playback */
-  onNavigateToPlayingConversation?: () => void;
   /** Skip to next track */
   onSkipNext?: () => Promise<void>;
   /** Skip to previous track */
@@ -78,12 +75,10 @@ export const ChatInterface = ({
   userId,
   isAppleMusicAuthorized,
   musicActions,
+  queueOps,
   onMessageSent,
   onSessionCreated,
   onLinkApple,
-  playingSessionId,
-  playingConversationTitle,
-  onNavigateToPlayingConversation,
   onSkipNext,
   onSkipPrev,
 }: ChatInterfaceProps) => {
@@ -104,6 +99,7 @@ export const ChatInterface = ({
     sessionId,
     userId,
     musicActions,
+    queueOps,
     onMessageSent,
     onSessionCreated,
   });
@@ -323,32 +319,6 @@ export const ChatInterface = ({
   // Main chat interface
   return (
     <div className="flex flex-col h-full relative bg-white rounded-3xl overflow-hidden shadow-sm border border-white">
-      {/* Cross-session banner — top-right corner */}
-      {(() => {
-        const showBanner = !showHistory && !!playingSessionId && playingSessionId !== sessionId && !!playingConversationTitle;
-        return (
-          <div className={`absolute top-4 right-4 z-40 transition-all duration-300 ${
-            showBanner ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2 pointer-events-none'
-          }`}>
-            <button
-              onClick={onNavigateToPlayingConversation}
-              className="group inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-black/90 hover:bg-black text-white shadow-lg hover:shadow-xl transition-all hover:scale-[1.02]"
-            >
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
-              </span>
-              <span className="text-xs">
-                Playing from <span className="font-semibold">{playingConversationTitle}</span>
-              </span>
-              <svg className="w-3.5 h-3.5 text-white/50 group-hover:text-white/80 group-hover:translate-x-0.5 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
-          </div>
-        );
-      })()}
-
       {/* Hero Stage */}
       <div className="flex-1 flex flex-col items-center justify-center relative pb-48">
         {/* Visualizer Background */}
@@ -397,10 +367,8 @@ export const ChatInterface = ({
             title={showHistory ? 'Back to Player' : 'View Transcript'}
           >
             {(() => {
-              const attr = currentTrack ? (currentTrack.attributes || currentTrack) : null;
-              const artUrl = attr
-                ? ((attr as any).artwork?.url || (currentTrack as any).artworkURL || '')
-                    .replace('{w}', '64').replace('{h}', '64')
+              const artUrl = currentTrack?.artworkUrl
+                ? currentTrack.artworkUrl.replace('{w}', '64').replace('{h}', '64')
                 : '';
               const hasArt = !!currentTrack && !!artUrl;
 

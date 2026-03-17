@@ -117,14 +117,36 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
     const storefront = (body.storefront as string) || "us";
     const messageCount = this.messages.length;
 
+    // Read global queue from D1 profile (user-level, not per-session)
+    let globalState: PlaybackState = this.state;
+    if (userId) {
+      try {
+        const row = await this.env.DB.prepare(
+          'SELECT "queue", "queueIndex" FROM "profile" WHERE "id" = ?'
+        ).bind(userId).first<{ queue: string; queueIndex: number }>();
+        if (row) {
+          const queueTracks = JSON.parse(row.queue || "[]") as PlaybackState["playlist"];
+          const idx = row.queueIndex ?? -1;
+          globalState = {
+            currentTrack: idx >= 0 && idx < queueTracks.length ? queueTracks[idx] : null,
+            playlist: queueTracks,
+            isPlaying: this.state.isPlaying,
+            playbackPosition: this.state.playbackPosition,
+          };
+        }
+      } catch (e) {
+        console.warn("[MusicChatAgent] Failed to read global queue:", e);
+      }
+    }
+
     console.log("[MusicChatAgent] onChatMessage", {
       sessionId,
       userId,
       storefront,
       messageCount,
-      playlistLength: this.state.playlist.length,
-      currentTrack: this.state.currentTrack?.name || null,
-      isPlaying: this.state.isPlaying,
+      playlistLength: globalState.playlist.length,
+      currentTrack: globalState.currentTrack?.name || null,
+      isPlaying: globalState.isPlaying,
     });
 
     // Route through Cloudflare AI Gateway
@@ -139,7 +161,7 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
     // MusicKit JS operations as a side effect (same as old SSE action pattern).
     // Claude's native web_search is added as a server-side tool for discovery.
     const tools = {
-      ...createMusicTools({ env: this.env, state: this.state, storefront }),
+      ...createMusicTools({ env: this.env, state: globalState, storefront }),
       web_search: anthropic.tools.webSearch_20250305({ maxUses: 5 }),
     };
 
@@ -154,7 +176,7 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
           thinking: { type: "enabled" as const, budgetTokens: thinkingBudget },
         },
       } : undefined,
-      system: buildSystemPrompt(this.state),
+      system: buildSystemPrompt(globalState),
       messages: await convertToModelMessages(this.messages),
       tools,
       stopWhen: stepCountIs(10), // Allow multi-turn tool calling (replaces LangGraph agentic loop)

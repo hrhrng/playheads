@@ -8,14 +8,12 @@ import { AppLayout } from '../components/AppLayout';
 import { ChatInterface } from '../components/ChatInterface';
 import { PlaylistSidebar } from '../components/PlaylistSidebar';
 import { useSidebarState } from '../hooks/useSidebarState';
-import type {
-  Track,
-  PlaybackTime,
-  FormattedTrack,
-  Conversation
-} from '../types';
+import type { PlaybackTime } from '../types';
+import type { UnifiedTrack } from '../providers/types';
 import type { AuthSession } from '../hooks/useAuth';
-import type { MusicActions } from '../hooks/useAgentChatAdapter';
+import type { MusicActions, QueueOperations } from '../hooks/useAgentChatAdapter';
+import type { UsePlayQueueReturn } from '../hooks/usePlayQueue';
+import type { Conversation } from '../types';
 
 interface RouteComponentProps {
   session: AuthSession | null;
@@ -27,26 +25,22 @@ interface RouteComponentProps {
   hasMoreConversations?: boolean;
   isLoadingMoreConversations?: boolean;
   isDJSpeaking: boolean;
-  appleTrack: Track | null;
-  isApplePlaying: boolean;
-  isAppleTransitioning: boolean;
+  currentTrack: UnifiedTrack | null;
+  isPlaying: boolean;
+  isTransitioning: boolean;
   isAppleMusicAuthorized: boolean;
-  toggleApple: () => void;
+  togglePlay: () => void;
   playbackTime: PlaybackTime;
   seekTo: (time: number) => void;
-  appleQueue?: Track[];
   playAppleTrack?: (index: number) => Promise<void>;
   musicActions: MusicActions;
   fetchConversations: () => Promise<void>;
   onLogout: () => void;
   onLinkApple?: () => Promise<void>;
   onDisconnectApple?: () => Promise<void>;
-  viewedPlaylist?: FormattedTrack[];
-  isViewingPlayingConversation?: boolean;
-  onStartPlaybackFromConversation?: (index: number) => void;
-  playingSessionId?: string | null;
   skipNext?: () => Promise<void>;
   skipPrev?: () => Promise<void>;
+  queue: UsePlayQueueReturn;
 }
 
 /**
@@ -62,11 +56,11 @@ export function HomeRoute({
   hasMoreConversations,
   isLoadingMoreConversations,
   isDJSpeaking,
-  appleTrack,
-  isApplePlaying,
-  isAppleTransitioning,
+  currentTrack,
+  isPlaying,
+  isTransitioning,
   isAppleMusicAuthorized,
-  toggleApple,
+  togglePlay,
   playbackTime,
   seekTo,
   musicActions,
@@ -74,9 +68,9 @@ export function HomeRoute({
   onLogout,
   onLinkApple,
   onDisconnectApple,
-  playingSessionId,
   skipNext,
   skipPrev,
+  queue,
 }: RouteComponentProps) {
   const navigate = useNavigate();
 
@@ -116,30 +110,20 @@ export function HomeRoute({
     >
       <ChatInterface
         isDJSpeaking={isDJSpeaking}
-        currentTrack={appleTrack}
-        isPlaying={isApplePlaying}
-        isTransitioning={isAppleTransitioning}
+        currentTrack={currentTrack}
+        isPlaying={isPlaying}
+        isTransitioning={isTransitioning}
         isAppleMusicAuthorized={isAppleMusicAuthorized}
-        togglePlay={toggleApple}
+        togglePlay={togglePlay}
         playbackTime={playbackTime}
         onSeek={seekTo}
         sessionId={null}
         userId={session?.user.id || null}
         musicActions={musicActions}
+        queueOps={queue}
         onMessageSent={fetchConversations}
         onSessionCreated={handleSessionCreated}
         onLinkApple={onLinkApple}
-        playingSessionId={playingSessionId}
-        playingConversationTitle={
-          playingSessionId
-            ? conversations.find(c => c.id === playingSessionId)?.title || 'Untitled'
-            : null
-        }
-        onNavigateToPlayingConversation={
-          playingSessionId
-            ? () => navigate(`/chat/${playingSessionId}`)
-            : undefined
-        }
         onSkipNext={skipNext}
         onSkipPrev={skipPrev}
       />
@@ -160,26 +144,22 @@ export function ChatRoute({
   hasMoreConversations,
   isLoadingMoreConversations,
   isDJSpeaking,
-  appleTrack,
-  isApplePlaying,
-  isAppleTransitioning,
+  currentTrack,
+  isPlaying,
+  isTransitioning,
   isAppleMusicAuthorized,
-  toggleApple,
+  togglePlay,
   playbackTime,
   seekTo,
-  appleQueue = [],
   playAppleTrack,
   musicActions,
   fetchConversations,
   onLogout,
   onLinkApple,
   onDisconnectApple,
-  viewedPlaylist = [],
-  isViewingPlayingConversation = true,
-  onStartPlaybackFromConversation,
-  playingSessionId,
   skipNext,
   skipPrev,
+  queue,
 }: RouteComponentProps) {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -223,46 +203,34 @@ export function ChatRoute({
       onDisconnectAppleMusic={onDisconnectApple}
       rightPanel={
         <PlaylistSidebar
-          currentTrack={appleTrack}
-          isPlaying={isApplePlaying}
-          queue={appleQueue}
-          onPlayTrack={playAppleTrack}
+          currentTrack={currentTrack}
+          isPlaying={isPlaying}
+          queue={queue.queue}
+          currentIndex={queue.currentIndex}
+          onPlayTrack={(index) => queue.playAtIndex(index)}
           collapsed={collapsed}
           toggleCollapse={toggleCollapse}
           width={width}
           onWidthChange={setWidth}
-          viewedPlaylist={viewedPlaylist}
-          isViewingPlayingConversation={isViewingPlayingConversation}
-          onStartPlaybackFromConversation={onStartPlaybackFromConversation}
         />
       }
     >
       <ChatInterface
         isDJSpeaking={isDJSpeaking}
-        currentTrack={appleTrack}
-        isPlaying={isApplePlaying}
-        isTransitioning={isAppleTransitioning}
+        currentTrack={currentTrack}
+        isPlaying={isPlaying}
+        isTransitioning={isTransitioning}
         isAppleMusicAuthorized={isAppleMusicAuthorized}
-        togglePlay={toggleApple}
+        togglePlay={togglePlay}
         playbackTime={playbackTime}
         onSeek={seekTo}
         sessionId={sessionId}
         userId={session?.user.id || null}
         musicActions={musicActions}
+        queueOps={queue}
         onMessageSent={fetchConversations}
         onSessionCreated={handleSessionCreated}
         onLinkApple={onLinkApple}
-        playingSessionId={playingSessionId}
-        playingConversationTitle={
-          playingSessionId
-            ? conversations.find(c => c.id === playingSessionId)?.title || 'Untitled'
-            : null
-        }
-        onNavigateToPlayingConversation={
-          playingSessionId
-            ? () => navigate(`/chat/${playingSessionId}`)
-            : undefined
-        }
         onSkipNext={skipNext}
         onSkipPrev={skipPrev}
       />
