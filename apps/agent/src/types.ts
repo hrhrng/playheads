@@ -18,9 +18,8 @@ export interface Env {
   ANTHROPIC_MODEL: string;
   ANTHROPIC_THINKING_BUDGET: string;
   OPENAI_API_KEY: string;
-  OPENAI_BASE_URL: string;
 
-  // Cloudflare AI Gateway
+  // Cloudflare AI Gateway (via ai-gateway-provider)
   CLOUDFLARE_ACCOUNT_ID: string;
   AI_GATEWAY_ID: string;
 

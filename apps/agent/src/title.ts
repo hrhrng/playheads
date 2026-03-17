@@ -2,6 +2,9 @@
  * Conversation title generation using LLM.
  * Ported from apps/backend/title_generator.py
  */
+import { generateText } from "ai";
+import { createAiGateway } from "ai-gateway-provider";
+import { createOpenAI } from "ai-gateway-provider/providers/openai";
 import type { Env } from "./types";
 
 const TITLE_PROMPT = `Based on this music conversation, generate a short, descriptive title (max 5 words).
@@ -34,34 +37,20 @@ export async function generateConversationTitle(
 
     const prompt = TITLE_PROMPT.replace("{conversation}", conversationText);
 
-    // Call OpenAI via AI Gateway
-    const baseURL = env.AI_GATEWAY_ID
-      ? `https://gateway.ai.cloudflare.com/v1/${env.CLOUDFLARE_ACCOUNT_ID}/${env.AI_GATEWAY_ID}/openai`
-      : env.OPENAI_BASE_URL || "https://api.openai.com/v1";
+    const aigateway = createAiGateway({
+      accountId: env.CLOUDFLARE_ACCOUNT_ID,
+      gateway: env.AI_GATEWAY_ID,
+    });
+    const openai = createOpenAI({ apiKey: env.OPENAI_API_KEY });
 
-    const response = await fetch(`${baseURL}/chat/completions`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${env.OPENAI_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gpt-5-nano",
-        messages: [{ role: "user", content: prompt }],
-        temperature: 0.7,
-        max_tokens: 20,
-      }),
+    const { text } = await generateText({
+      model: aigateway(openai("gpt-5-nano")),
+      prompt,
+      temperature: 0.7,
+      maxTokens: 20,
     });
 
-    if (!response.ok) {
-      console.error("Title generation API error:", response.status);
-      return "New Conversation";
-    }
-
-    const data = (await response.json()) as {
-      choices: Array<{ message: { content: string } }>;
-    };
-    let title = data.choices?.[0]?.message?.content?.trim() || "";
+    let title = text.trim();
     title = title.replace(/^["']|["']$/g, "").trim();
 
     if (title.length > 50) {
