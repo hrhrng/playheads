@@ -74,14 +74,21 @@ function mapUIMessagesToMessages(uiMessages: UIMessage[]): Message[] {
               state: string;
               input?: unknown;
               output?: unknown;
+              errorText?: string;
             };
+            const hasOutput = toolPart.state === "output-available" || toolPart.output !== undefined;
+            const hasError = toolPart.state === "output-error";
             parts.push({
               type: "tool_call",
               id: toolPart.toolCallId,
               tool_name: toolPart.toolName || part.type.replace(/^tool-/, ""),
               args: (toolPart.input ?? {}) as Record<string, unknown>,
-              result: toolPart.state === "output-available" ? toolPart.output : undefined,
-              status: toolPart.state === "output-available" ? "success" : "pending",
+              result: hasError
+                ? toolPart.errorText ?? "Tool execution failed"
+                : hasOutput
+                  ? toolPart.output
+                  : undefined,
+              status: hasError ? "error" : hasOutput ? "success" : "pending",
             });
           }
           break;
