@@ -71,6 +71,18 @@ function buildSystemPrompt(state: PlaybackState): string {
 }
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Extract a plain-text preview from a UIMessage (for conversation list). */
+function extractTextPreview(msg: import("ai").UIMessage): string {
+  for (const part of msg.parts) {
+    if (part.type === "text" && part.text) return part.text;
+  }
+  return "...";
+}
+
+// ---------------------------------------------------------------------------
 // MusicChatAgent
 // ---------------------------------------------------------------------------
 
@@ -124,8 +136,24 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
       maxSteps: 10, // Allow multi-turn tool calling (replaces LangGraph agentic loop)
       abortSignal: options?.abortSignal,
       onFinish: async () => {
+        if (!sessionId) return;
+
+        // Sync conversation metadata to D1 so the conversation list stays current
+        const now = Date.now();
+        const totalMessages = this.messages.length;
+        const lastMsg = this.messages[totalMessages - 1];
+        const preview = lastMsg
+          ? extractTextPreview(lastMsg).slice(0, 100)
+          : null;
+
+        this.env.DB.batch([
+          this.env.DB.prepare(
+            'UPDATE "conversation" SET "messageCount" = ?, "lastMessagePreview" = ?, "lastMessageAt" = ?, "updatedAt" = ? WHERE "id" = ?'
+          ).bind(totalMessages, preview, now, now, sessionId),
+        ]).catch((e) => console.warn("D1 metadata sync failed:", e));
+
         // Generate title after 2nd message (1 user + 1 assistant)
-        if (sessionId && userId && messageCount <= 2) {
+        if (userId && messageCount <= 2) {
           const simplifiedMessages = this.messages.slice(0, 5).map((m) => ({
             role: m.role,
             content:
