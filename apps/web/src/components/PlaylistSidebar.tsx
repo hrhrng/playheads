@@ -203,40 +203,102 @@ export const PlaylistSidebar = ({
         ) : (
           /* Full Expanded View */
           <div className="flex-1 min-h-0 flex flex-col min-w-0 opacity-100 transition-opacity duration-300">
-            {/* Queue List */}
             {showQueue && (
-              <div className="flex-1 overflow-y-auto space-y-2 px-4 pb-4">
-                <h3 className="text-[10px] font-medium text-gemini-subtext uppercase tracking-widest mb-2 px-2">Up Next</h3>
-                {queue.map((track, index) => {
-                  const isCurrent = index === currentIndex;
-                  return (
-                    <div
-                      key={`${track.id}-${index}`}
-                      onClick={() => handleTrackClick(index)}
-                      className={`flex items-center gap-3 p-2 rounded-xl hover:bg-gemini-bg cursor-pointer group transition-colors ${
-                        isCurrent ? 'bg-gemini-bg ring-1 ring-blue-200' : ''
-                      }`}
-                    >
-                      <div className="w-10 h-10 rounded-lg bg-gray-200 overflow-hidden relative shrink-0">
-                        <img src={track.cover} alt={track.title} className="w-full h-full object-cover" />
-                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
-                        {isCurrent && isPlaying && (
-                          <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                            <div className="flex gap-0.5 h-3 items-end">
-                              <div className="w-0.5 bg-white rounded-full animate-music-bar-1 h-full"></div>
-                              <div className="w-0.5 bg-white rounded-full animate-music-bar-2 h-2/3"></div>
-                              <div className="w-0.5 bg-white rounded-full animate-music-bar-3 h-1/2"></div>
-                            </div>
+              <div className="flex-1 overflow-y-auto px-4 pb-4">
+
+                {/* Now Playing */}
+                {currentIndex >= 0 && currentIndex < queue.length && (
+                  <div className="mb-4">
+                    <h3 className="text-[10px] font-medium text-gemini-subtext uppercase tracking-widest mb-2 px-2">Now Playing</h3>
+                    {(() => {
+                      const track = queue[currentIndex];
+                      return (
+                        <div
+                          onClick={() => handleTrackClick(currentIndex)}
+                          className="flex items-center gap-3 p-2 rounded-xl bg-gemini-bg ring-1 ring-blue-200 cursor-pointer group transition-colors"
+                        >
+                          <div className="w-10 h-10 rounded-lg bg-gray-200 overflow-hidden relative shrink-0">
+                            <img src={track.cover} alt={track.title} className="w-full h-full object-cover" />
+                            {isPlaying && (
+                              <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                                <div className="flex gap-0.5 h-3 items-end">
+                                  <div className="w-0.5 bg-white rounded-full animate-music-bar-1 h-full"></div>
+                                  <div className="w-0.5 bg-white rounded-full animate-music-bar-2 h-2/3"></div>
+                                  <div className="w-0.5 bg-white rounded-full animate-music-bar-3 h-1/2"></div>
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        )}
+                          <div className="flex-1 min-w-0">
+                            <div className="text-[13px] font-medium text-blue-600 truncate leading-snug">{track.title}</div>
+                            <div className="text-[11px] text-gemini-subtext truncate">{track.artist}</div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+
+                {/* Up Next — tracks after current */}
+                {(() => {
+                  const upNextStart = currentIndex >= 0 ? currentIndex + 1 : 0;
+                  const upNext = queue.slice(upNextStart);
+                  if (upNext.length === 0 && (currentIndex < 0 || currentIndex >= queue.length)) {
+                    // Show full queue when nothing is playing
+                    if (queue.length === 0) return null;
+                    return (
+                      <>
+                        <h3 className="text-[10px] font-medium text-gemini-subtext uppercase tracking-widest mb-2 px-2">Queue</h3>
+                        <div className="space-y-2">
+                          {queue.map((track, index) => (
+                            <div
+                              key={`${track.id}-${index}`}
+                              onClick={() => handleTrackClick(index)}
+                              className="flex items-center gap-3 p-2 rounded-xl hover:bg-gemini-bg cursor-pointer group transition-colors"
+                            >
+                              <div className="w-10 h-10 rounded-lg bg-gray-200 overflow-hidden relative shrink-0">
+                                <img src={track.cover} alt={track.title} className="w-full h-full object-cover" />
+                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-[13px] font-medium text-gemini-text truncate leading-snug">{track.title}</div>
+                                <div className="text-[11px] text-gemini-subtext truncate">{track.artist}</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    );
+                  }
+                  if (upNext.length === 0) return null;
+                  return (
+                    <>
+                      <h3 className="text-[10px] font-medium text-gemini-subtext uppercase tracking-widest mb-2 px-2">Up Next</h3>
+                      <div className="space-y-2">
+                        {upNext.map((track, i) => {
+                          const realIndex = upNextStart + i;
+                          return (
+                            <div
+                              key={`${track.id}-${realIndex}`}
+                              onClick={() => handleTrackClick(realIndex)}
+                              className="flex items-center gap-3 p-2 rounded-xl hover:bg-gemini-bg cursor-pointer group transition-colors"
+                            >
+                              <div className="w-10 h-10 rounded-lg bg-gray-200 overflow-hidden relative shrink-0">
+                                <img src={track.cover} alt={track.title} className="w-full h-full object-cover" />
+                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-[13px] font-medium text-gemini-text truncate leading-snug">{track.title}</div>
+                                <div className="text-[11px] text-gemini-subtext truncate">{track.artist}</div>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <div className={`text-[13px] font-medium truncate leading-snug ${isCurrent ? 'text-blue-600' : 'text-gemini-text'}`}>{track.title}</div>
-                        <div className="text-[11px] text-gemini-subtext truncate">{track.artist}</div>
-                      </div>
-                    </div>
+                    </>
                   );
-                })}
+                })()}
+
               </div>
             )}
           </div>

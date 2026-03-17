@@ -1,6 +1,11 @@
 /**
  * Global play queue hook — single queue for all conversations.
- * Manages track list, current index, auto-advance, and backend sync.
+ *
+ * Uses MusicKit native queue for playback ordering and auto-advance.
+ * Mirrors our track array to MusicKit via playWithQueue / addToNativeQueue.
+ * Syncs currentIndex from MusicKit's nowPlayingItemDidChange events.
+ *
+ * If the user switches provider, the queue should be cleared externally.
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
@@ -29,13 +34,12 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
   const [queue, setQueue] = useState<UnifiedTrack[]>([]);
   const [currentIndex, setCurrentIndex] = useState(-1);
 
-  // Refs for provider callbacks (avoid stale closures)
   const queueRef = useRef(queue);
   queueRef.current = queue;
   const currentIndexRef = useRef(currentIndex);
   currentIndexRef.current = currentIndex;
 
-  // Backend sync
+  // ── Backend sync (debounced) ────────────────────────────────────
   const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSyncedRef = useRef<string>('');
 
@@ -55,32 +59,34 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
     }, 500);
   }, [userId]);
 
-  // Auto-advance: register track-ended callback on provider
+  // ── Sync currentIndex from MusicKit nowPlayingItemDidChange ─────
   useEffect(() => {
     if (!provider) return;
-    provider.setOnTrackEnded(() => {
+    const unsub = provider.onNowPlayingChange((trackId) => {
+      if (!trackId) return;
       const q = queueRef.current;
-      const idx = currentIndexRef.current;
-      if (idx >= 0 && idx < q.length - 1) {
-        const nextIdx = idx + 1;
-        const nextTrack = q[nextIdx];
-        if (nextTrack?.id) {
-          setCurrentIndex(nextIdx);
-          provider.play(nextTrack.id).catch(console.error);
-          syncToBackend(q, nextIdx);
-        }
+      const idx = q.findIndex(t => t.id === trackId);
+      if (idx >= 0 && idx !== currentIndexRef.current) {
+        setCurrentIndex(idx);
+        syncToBackend(q, idx);
       }
     });
-    return () => { provider.setOnTrackEnded(null); };
+    return unsub;
   }, [provider, syncToBackend]);
+
+  // ── Queue operations ────────────────────────────────────────────
 
   const addTrack = useCallback((track: UnifiedTrack) => {
     setQueue(prev => {
       const next = [...prev, track];
+      // Append to MusicKit native queue so it auto-advances
+      if (provider) {
+        provider.addToNativeQueue(track.id).catch(console.error);
+      }
       syncToBackend(next, currentIndexRef.current);
       return next;
     });
-  }, [syncToBackend]);
+  }, [provider, syncToBackend]);
 
   const removeTrack = useCallback((index: number) => {
     setQueue(prev => {
@@ -89,83 +95,37 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
       if (index < newIndex) newIndex--;
       else if (index === newIndex) newIndex = -1;
       setCurrentIndex(newIndex);
+      // Rebuild MusicKit queue to reflect removal
+      if (provider && next.length > 0 && newIndex >= 0) {
+        const songIds = next.map(t => t.id);
+        provider.playWithQueue(songIds, newIndex).catch(console.error);
+      }
       syncToBackend(next, newIndex);
       return next;
     });
-  }, [syncToBackend]);
+  }, [provider, syncToBackend]);
 
   const playAtIndex = useCallback(async (index: number) => {
     const q = queueRef.current;
-    if (index < 0 || index >= q.length) return;
-    const track = q[index];
-    if (!track?.id || !provider) return;
+    if (index < 0 || index >= q.length || !provider) return;
 
     setCurrentIndex(index);
-    await provider.play(track.id);
+    // Set MusicKit queue to ALL songs, start at index — enables native auto-advance
+    const songIds = q.map(t => t.id);
+    await provider.playWithQueue(songIds, index);
     syncToBackend(q, index);
   }, [provider, syncToBackend]);
 
   const skipNext = useCallback(async () => {
-    const q = queueRef.current;
-    const idx = currentIndexRef.current;
-    if (idx < 0 || idx >= q.length - 1 || !provider) return;
-
-    const nextIdx = idx + 1;
-    const track = q[nextIdx];
-    if (!track?.id) return;
-
-    // Check if was playing before skip
-    const wasPlaying = provider.playbackState.isPlaying;
-    setCurrentIndex(nextIdx);
-    if (wasPlaying) {
-      await provider.play(track.id);
-    } else {
-      // Just update the current track display without playing
-      provider.restoreFromState({
-        current_track: {
-          id: track.id,
-          name: track.name,
-          artist: track.artist,
-          album: track.album,
-          artwork_url: track.artworkUrl,
-          duration: track.durationSeconds,
-        },
-        is_playing: false,
-        playback_position: 0,
-      });
-    }
-    syncToBackend(queueRef.current, nextIdx);
-  }, [provider, syncToBackend]);
+    if (!provider) return;
+    // MusicKit handles skip natively — nowPlayingChange listener updates currentIndex
+    await provider.skipToNext();
+  }, [provider]);
 
   const skipPrev = useCallback(async () => {
-    const q = queueRef.current;
-    const idx = currentIndexRef.current;
-    if (idx <= 0 || !provider) return;
-
-    const prevIdx = idx - 1;
-    const track = q[prevIdx];
-    if (!track?.id) return;
-
-    const wasPlaying = provider.playbackState.isPlaying;
-    setCurrentIndex(prevIdx);
-    if (wasPlaying) {
-      await provider.play(track.id);
-    } else {
-      provider.restoreFromState({
-        current_track: {
-          id: track.id,
-          name: track.name,
-          artist: track.artist,
-          album: track.album,
-          artwork_url: track.artworkUrl,
-          duration: track.durationSeconds,
-        },
-        is_playing: false,
-        playback_position: 0,
-      });
-    }
-    syncToBackend(queueRef.current, prevIdx);
-  }, [provider, syncToBackend]);
+    if (!provider) return;
+    await provider.skipToPrev();
+  }, [provider]);
 
   const setQueueFn = useCallback((tracks: UnifiedTrack[]) => {
     setQueue(tracks);
@@ -178,7 +138,7 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
     syncToBackend([], -1);
   }, [syncToBackend]);
 
-  // Restore from backend on mount
+  // ── Restore from backend on mount ───────────────────────────────
   useEffect(() => {
     if (!userId) return;
     let cancelled = false;

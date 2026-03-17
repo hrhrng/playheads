@@ -109,19 +109,7 @@ export function useMusicProvider({
             // Restore current track display
             const idx = data.currentIndex ?? -1;
             if (idx >= 0 && idx < data.queue.length) {
-              const track = data.queue[idx];
-              await provider.restoreFromState({
-                current_track: {
-                  id: track.id,
-                  name: track.name,
-                  artist: track.artist,
-                  album: track.album,
-                  artwork_url: track.artworkUrl,
-                  duration: track.durationSeconds,
-                },
-                is_playing: false,
-                playback_position: 0,
-              });
+              provider.restoreTrackDisplay(data.queue[idx], 0);
             }
           }
         }

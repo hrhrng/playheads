@@ -1,7 +1,7 @@
 /**
- * Apple Music provider — pure TS class wrapping MusicKit JS.
- * Responsible only for single-track playback, auth, and search.
- * Queue management is handled by usePlayQueue.
+ * Apple Music provider — wraps MusicKit JS.
+ * Manages MusicKit native queue for real-time playback.
+ * If the user switches provider, the queue is cleared externally.
  */
 
 import { toast } from 'sonner';
@@ -12,10 +12,10 @@ import type { MusicKitInstance } from '../types/musicKit';
 import type { MusicProvider, PlaybackState, UnifiedTrack, ProviderType } from './types';
 
 type StateChangeCallback = (state: PlaybackState) => void;
+type NowPlayingChangeCallback = (trackId: string | null) => void;
 
 interface AppleMusicProviderConfig {
   storedMusicUserToken?: string | null;
-  onTrackEnded?: () => void;
 }
 
 export class AppleMusicProvider implements MusicProvider {
@@ -32,6 +32,7 @@ export class AppleMusicProvider implements MusicProvider {
   };
 
   private listeners: StateChangeCallback[] = [];
+  private nowPlayingListeners: NowPlayingChangeCallback[] = [];
   private eventListeners: Array<[string, (...args: any[]) => void]> = [];
   private config: AppleMusicProviderConfig;
   private destroyed = false;
@@ -44,21 +45,16 @@ export class AppleMusicProvider implements MusicProvider {
 
   // Playback control
   private playbackLock = false;
-  private isAdvancing = false;
   private lastPlayingTrackId: string | null = null;
   private transitionTimeout: ReturnType<typeof setTimeout> | null = null;
   private isFlushing = false;
   private developerToken: string | null = null;
-
-  // Track ended callback — called by usePlayQueue for auto-advance
-  private onTrackEnded: (() => void) | null = null;
 
   // Storefront
   private _storefrontId = 'us';
 
   constructor(config: AppleMusicProviderConfig = {}) {
     this.config = config;
-    this.onTrackEnded = config.onTrackEnded || null;
   }
 
   get isAuthorized(): boolean { return this._isAuthorized; }
@@ -66,16 +62,10 @@ export class AppleMusicProvider implements MusicProvider {
   get playbackState(): PlaybackState { return this._playbackState; }
   get storefrontId(): string { return this._storefrontId; }
 
-  setOnTrackEnded(cb: (() => void) | null) {
-    this.onTrackEnded = cb;
-  }
-
   // ── State emission ──────────────────────────────────────────────
   private emit() {
     if (this.destroyed) return;
-    for (const cb of this.listeners) {
-      cb(this._playbackState);
-    }
+    for (const cb of this.listeners) cb(this._playbackState);
   }
 
   private updateState(partial: Partial<PlaybackState>) {
@@ -85,9 +75,13 @@ export class AppleMusicProvider implements MusicProvider {
 
   onStateChange(cb: StateChangeCallback): () => void {
     this.listeners.push(cb);
-    return () => {
-      this.listeners = this.listeners.filter(l => l !== cb);
-    };
+    return () => { this.listeners = this.listeners.filter(l => l !== cb); };
+  }
+
+  /** Subscribe to nowPlayingItem changes — usePlayQueue syncs currentIndex from this. */
+  onNowPlayingChange(cb: NowPlayingChangeCallback): () => void {
+    this.nowPlayingListeners.push(cb);
+    return () => { this.nowPlayingListeners = this.nowPlayingListeners.filter(l => l !== cb); };
   }
 
   // ── Initialization ──────────────────────────────────────────────
@@ -100,14 +94,12 @@ export class AppleMusicProvider implements MusicProvider {
         return;
       }
 
-      // Fetch developer token
       try {
         const response = await fetch(`${API_BASE}/apple-music/developer-token`);
         if (!response.ok) throw new Error(`Developer token request failed: ${response.status}`);
         const data = await response.json();
         this.developerToken = data.token;
 
-        // Set up token refresh
         const refreshTime = (data.expires_at - Date.now() / 1000 - 300) * 1000;
         if (refreshTime > 0) {
           setTimeout(() => { if (!this.destroyed) this.initialize(); }, refreshTime);
@@ -119,20 +111,16 @@ export class AppleMusicProvider implements MusicProvider {
         return;
       }
 
-      // Clear MusicKit browser-persisted state
       this.playerReadyRef = false;
       try {
         Object.keys(localStorage).forEach(key => {
           if (key.includes('media-user-token')) return;
-          if (key.startsWith('music.') || key.startsWith('mk-')) {
-            localStorage.removeItem(key);
-          }
+          if (key.startsWith('music.') || key.startsWith('mk-')) localStorage.removeItem(key);
         });
         const dbs = await (indexedDB.databases?.() ?? Promise.resolve([]));
         for (const db of dbs) {
-          if (db.name && (db.name.includes('music') || db.name.includes('MusicKit'))) {
+          if (db.name && (db.name.includes('music') || db.name.includes('MusicKit')))
             indexedDB.deleteDatabase(db.name);
-          }
         }
       } catch (_) { /* storage access may be restricted */ }
 
@@ -142,18 +130,14 @@ export class AppleMusicProvider implements MusicProvider {
       } as any) as MusicKitInstance;
       this.musicKit = mk;
 
-      // Stop any auto-restored playback
       try { mk.stop(); } catch (_) { /* ignore */ }
 
-      // Restore auth from server-side token
       if (this.config.storedMusicUserToken && !mk.isAuthorized) {
         (mk as any).musicUserToken = this.config.storedMusicUserToken;
       }
 
       this._isAuthorized = mk.isAuthorized;
       this._storefrontId = mk.storefrontId || 'us';
-
-      // Register events
       this.registerEvents(mk);
     } catch (err) {
       console.error('[AppleMusicProvider] Error initializing:', err);
@@ -169,7 +153,6 @@ export class AppleMusicProvider implements MusicProvider {
   }
 
   private registerEvents(mk: MusicKitInstance) {
-    // Auth
     this.on(mk, 'authorizationStatusDidChange', () => {
       const nowAuthorized = mk.isAuthorized;
       if (this._isAuthorized && !nowAuthorized) this.handleAuthLost();
@@ -177,16 +160,16 @@ export class AppleMusicProvider implements MusicProvider {
       this.emit();
     });
 
-    // Media item change
     this.on(mk, 'nowPlayingItemDidChange', () => {
       if (!this.playerReadyRef) return;
       const item = mk.nowPlayingItem;
       if (item) {
+        this.lastPlayingTrackId = item.id;
         this.updateState({ currentTrack: this.formatMusicKitTrack(item) });
+        for (const cb of this.nowPlayingListeners) cb(item.id);
       }
     });
 
-    // Playback state change
     this.on(mk, 'playbackStateDidChange', (e: any) => {
       if (!this.playerReadyRef) return;
       const state = e.state;
@@ -198,24 +181,11 @@ export class AppleMusicProvider implements MusicProvider {
         const currentTrack = mk.nowPlayingItem
           ? this.formatMusicKitTrack(mk.nowPlayingItem)
           : this._playbackState.currentTrack;
-        this.updateState({
-          isPlaying: playing,
-          isTransitioning: false,
-          currentTrack,
-        });
-        if (playing && mk.nowPlayingItem) {
-          this.lastPlayingTrackId = mk.nowPlayingItem.id;
-        }
-      }
-
-      // Auto-advance on track end
-      const ended = state === 'completed' || state === 10 || state === 'ended' || state === 5;
-      if (ended && !this.isAdvancing && this.onTrackEnded) {
-        this.onTrackEnded();
+        this.updateState({ isPlaying: playing, isTransitioning: false, currentTrack });
+        if (playing && mk.nowPlayingItem) this.lastPlayingTrackId = mk.nowPlayingItem.id;
       }
     });
 
-    // Playback time
     this.on(mk, 'playbackTimeDidChange', (e: any) => {
       if (!this.playerReadyRef) return;
       if (this.isRestoringRef) return;
@@ -226,7 +196,7 @@ export class AppleMusicProvider implements MusicProvider {
     });
   }
 
-  private formatMusicKitTrack(item: any): UnifiedTrack {
+  formatMusicKitTrack(item: any): UnifiedTrack {
     const attr = item.attributes || item;
     return {
       id: item.id || '',
@@ -244,10 +214,7 @@ export class AppleMusicProvider implements MusicProvider {
     this.emit();
     toast.error('Your Apple Music session expired', {
       description: 'Please reconnect to continue playing music',
-      action: {
-        label: 'Reconnect',
-        onClick: () => this.login()
-      },
+      action: { label: 'Reconnect', onClick: () => this.login() },
       duration: Infinity
     });
   }
@@ -255,16 +222,11 @@ export class AppleMusicProvider implements MusicProvider {
   private startTransition() {
     this.updateState({ isTransitioning: true });
     if (this.transitionTimeout) clearTimeout(this.transitionTimeout);
-    this.transitionTimeout = setTimeout(() => {
-      this.updateState({ isTransitioning: false });
-    }, 5000);
+    this.transitionTimeout = setTimeout(() => { this.updateState({ isTransitioning: false }); }, 5000);
   }
 
   private clearTransition() {
-    if (this.transitionTimeout) {
-      clearTimeout(this.transitionTimeout);
-      this.transitionTimeout = null;
-    }
+    if (this.transitionTimeout) { clearTimeout(this.transitionTimeout); this.transitionTimeout = null; }
   }
 
   // ── Auth ─────────────────────────────────────────────────────────
@@ -301,20 +263,86 @@ export class AppleMusicProvider implements MusicProvider {
     this.emit();
   }
 
-  // ── Playback ────────────────────────────────────────────────────
+  // ── Playback — MusicKit native queue ────────────────────────────
+
+  /** Set MusicKit queue to all song IDs and start playback at startIndex. */
+  async playWithQueue(songIds: string[], startIndex: number): Promise<void> {
+    if (!this.musicKit || this.playbackLock || songIds.length === 0) return;
+    this.playbackLock = true;
+    this.startTransition();
+    try {
+      this.playerReadyRef = true;
+      this.pendingQueue = null;
+      await this.musicKit.setQueue({ songs: songIds, startPlaying: false } as any);
+      if (startIndex > 0) {
+        await this.musicKit.changeToMediaAtIndex(startIndex);
+      }
+      await this.musicKit.play();
+      this.updateState({ isPlaying: true });
+    } catch (e) {
+      const classified = classifyError(e);
+      if (classified.category === ErrorCategory.AUTH_EXPIRED) this.handleAuthLost();
+      else showErrorToast(e, 'playback');
+    } finally {
+      this.playbackLock = false;
+    }
+  }
+
+  /** Append a song to the end of MusicKit's native queue. */
+  async addToNativeQueue(songId: string): Promise<void> {
+    if (!this.musicKit) return;
+    try {
+      await (this.musicKit as any).playLater({ songs: [songId] });
+    } catch (e) {
+      console.error('[AppleMusicProvider] playLater error:', e);
+      const classified = classifyError(e);
+      if (classified.category === ErrorCategory.AUTH_EXPIRED) this.handleAuthLost();
+    }
+  }
+
+  /** Skip to next track in MusicKit native queue. */
+  async skipToNext(): Promise<void> {
+    if (!this.musicKit || this.playbackLock) return;
+    this.playbackLock = true;
+    this.startTransition();
+    try {
+      await this.musicKit.skipToNextItem();
+    } catch (e) {
+      const classified = classifyError(e);
+      if (classified.category === ErrorCategory.AUTH_EXPIRED) this.handleAuthLost();
+      else showErrorToast(e, 'playback');
+    } finally {
+      this.playbackLock = false;
+    }
+  }
+
+  /** Skip to previous track in MusicKit native queue. */
+  async skipToPrev(): Promise<void> {
+    if (!this.musicKit || this.playbackLock) return;
+    this.playbackLock = true;
+    this.startTransition();
+    try {
+      await this.musicKit.skipToPreviousItem();
+    } catch (e) {
+      const classified = classifyError(e);
+      if (classified.category === ErrorCategory.AUTH_EXPIRED) this.handleAuthLost();
+      else showErrorToast(e, 'playback');
+    } finally {
+      this.playbackLock = false;
+    }
+  }
+
+  /** Resume or start playback (single track fallback / pending queue flush). */
   async play(trackId?: string, startTime?: number): Promise<void> {
     if (!this.musicKit || this.playbackLock) return;
     this.playbackLock = true;
     this.startTransition();
     try {
       this.playerReadyRef = true;
-
       if (trackId) {
-        // Play a specific track
         this.pendingQueue = null;
         await this.musicKit.setQueue({ song: trackId, startPlaying: true, startTime } as any);
       } else if (this.pendingQueue) {
-        // Flush pending queue
         await this.flushPendingQueue();
       } else {
         await this.musicKit.play();
@@ -322,11 +350,8 @@ export class AppleMusicProvider implements MusicProvider {
       this.updateState({ isPlaying: true });
     } catch (e) {
       const classified = classifyError(e);
-      if (classified.category === ErrorCategory.AUTH_EXPIRED) {
-        this.handleAuthLost();
-      } else {
-        showErrorToast(e, 'playback');
-      }
+      if (classified.category === ErrorCategory.AUTH_EXPIRED) this.handleAuthLost();
+      else showErrorToast(e, 'playback');
     } finally {
       this.playbackLock = false;
     }
@@ -341,11 +366,8 @@ export class AppleMusicProvider implements MusicProvider {
       this.updateState({ isPlaying: false });
     } catch (e) {
       const classified = classifyError(e);
-      if (classified.category === ErrorCategory.AUTH_EXPIRED) {
-        this.handleAuthLost();
-      } else {
-        showErrorToast(e, 'playback');
-      }
+      if (classified.category === ErrorCategory.AUTH_EXPIRED) this.handleAuthLost();
+      else showErrorToast(e, 'playback');
     } finally {
       this.playbackLock = false;
     }
@@ -370,11 +392,8 @@ export class AppleMusicProvider implements MusicProvider {
       }
     } catch (e) {
       const classified = classifyError(e);
-      if (classified.category === ErrorCategory.AUTH_EXPIRED) {
-        this.handleAuthLost();
-      } else {
-        showErrorToast(e, 'playback');
-      }
+      if (classified.category === ErrorCategory.AUTH_EXPIRED) this.handleAuthLost();
+      else showErrorToast(e, 'playback');
     } finally {
       this.playbackLock = false;
     }
@@ -382,15 +401,11 @@ export class AppleMusicProvider implements MusicProvider {
 
   seekTo(seconds: number): void {
     if (!this.musicKit) return;
-    try {
-      this.musicKit.seekToTime(seconds);
-    } catch (e) {
+    try { this.musicKit.seekToTime(seconds); }
+    catch (e) {
       const classified = classifyError(e);
-      if (classified.category === ErrorCategory.AUTH_EXPIRED) {
-        this.handleAuthLost();
-      } else {
-        showErrorToast(e, 'playback');
-      }
+      if (classified.category === ErrorCategory.AUTH_EXPIRED) this.handleAuthLost();
+      else showErrorToast(e, 'playback');
     }
   }
 
@@ -400,9 +415,7 @@ export class AppleMusicProvider implements MusicProvider {
     const storefront = this.musicKit.storefrontId || 'us';
     try {
       const response = await this.musicKit.api.music(`v1/catalog/${storefront}/search`, {
-        term: query,
-        types: 'songs',
-        limit: 10
+        term: query, types: 'songs', limit: 10
       }) as any;
       const songs = response.data?.results?.songs?.data || [];
       return songs.map((s: any) => this.formatMusicKitTrack(s));
@@ -412,48 +425,27 @@ export class AppleMusicProvider implements MusicProvider {
     }
   }
 
-  // ── Restore from backend state ──────────────────────────────────
-  async restoreFromState(state: {
-    current_track?: { id: string; name: string; artist: string; album?: string; artwork_url?: string; duration?: number } | null;
-    is_playing?: boolean;
-    playback_position?: number;
-  }): Promise<void> {
-    const { current_track, playback_position } = state;
+  // ── Restore from backend ────────────────────────────────────────
+  restoreTrackDisplay(track: UnifiedTrack, playbackPosition = 0): void {
+    this.lastPlayingTrackId = track.id;
+    const alreadyPlaying = this.musicKit?.nowPlayingItem?.id === track.id;
 
-    if (!current_track?.id) {
-      this.playerReadyRef = true;
-      return;
+    if (!alreadyPlaying && track.provider === 'apple-music') {
+      const startTime = playbackPosition > 0 ? playbackPosition : undefined;
+      this.pendingQueue = { songId: track.id, startTime };
     }
 
-    this.lastPlayingTrackId = current_track.id;
-    const alreadyPlaying = this.musicKit?.nowPlayingItem?.id === current_track.id;
-
-    if (!alreadyPlaying) {
-      const startTime = (playback_position && playback_position > 0) ? playback_position : undefined;
-      this.pendingQueue = { songId: current_track.id, startTime };
-    }
-
-    // Set React-visible state immediately
     this.updateState({
-      currentTrack: {
-        id: current_track.id,
-        name: current_track.name,
-        artist: current_track.artist,
-        album: current_track.album || '',
-        artworkUrl: current_track.artwork_url || '',
-        durationSeconds: current_track.duration || 0,
-        provider: 'apple-music',
-      },
+      currentTrack: track,
       isPlaying: false,
       playbackTime: alreadyPlaying
         ? this._playbackState.playbackTime
-        : { current: playback_position || 0, total: current_track.duration || 0 },
+        : { current: playbackPosition, total: track.durationSeconds },
     });
-
     this.playerReadyRef = true;
   }
 
-  // ── Internal helpers ────────────────────────────────────────────
+  // ── Internal ────────────────────────────────────────────────────
   private async flushPendingQueue() {
     const pending = this.pendingQueue;
     if (!pending || !this.musicKit || this.isFlushing) return;
@@ -470,12 +462,10 @@ export class AppleMusicProvider implements MusicProvider {
     }
   }
 
-  /** Get the MusicKit user token for backend persistence */
   getMusicUserToken(): string | null {
     return (this.musicKit as any)?.musicUserToken || null;
   }
 
-  // ── Cleanup ─────────────────────────────────────────────────────
   destroy(): void {
     this.destroyed = true;
     this.playerReadyRef = false;
@@ -488,5 +478,6 @@ export class AppleMusicProvider implements MusicProvider {
     }
     this.eventListeners = [];
     this.listeners = [];
+    this.nowPlayingListeners = [];
   }
 }
