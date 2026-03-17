@@ -6,9 +6,10 @@
  * remove_from_playlist) are registered as client tools so they
  * execute directly against MusicKit JS on the frontend.
  */
-import { useMemo, useCallback } from "react";
+import { useMemo, useCallback, useEffect, useRef } from "react";
 import { useAgent } from "agents/react";
 import { useAgentChat } from "@cloudflare/ai-chat/react";
+import { isToolUIPart, getToolName } from "ai";
 import type { UIMessage } from "ai";
 import type { Message, MessagePart } from "../types/chat";
 
@@ -39,14 +40,6 @@ interface UseAgentChatAdapterReturn {
 
 /**
  * Map Vercel AI SDK UIMessage[] to our app's Message[] format.
- *
- * UIMessage format:
- *   role: 'user' | 'assistant'
- *   parts: [{ type: 'text', text }, { type: 'reasoning', text }, { type: 'tool-invocation', ... }]
- *
- * Our format:
- *   role: 'user' | 'agent'
- *   parts: [{ type: 'text', content }, { type: 'thinking', content }, { type: 'tool_call', ... }]
  */
 function mapUIMessagesToMessages(uiMessages: UIMessage[]): Message[] {
   return uiMessages.map((msg) => {
@@ -177,6 +170,8 @@ function buildClientTools(actions: MusicActions) {
   };
 }
 
+type ClientToolMap = ReturnType<typeof buildClientTools>;
+
 export function useAgentChatAdapter({
   sessionId,
   userId,
@@ -195,9 +190,14 @@ export function useAgentChatAdapter({
     [musicActions]
   );
 
+  // Ref for stable access to client tools in effects
+  const clientToolsRef = useRef(clientTools);
+  clientToolsRef.current = clientTools;
+
   const {
     messages: uiMessages,
     sendMessage: agentSendMessage,
+    addToolOutput,
     clearHistory,
     status,
   } = useAgentChat({
@@ -205,8 +205,101 @@ export function useAgentChatAdapter({
     body: { session_id: sessionId, user_id: userId },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     tools: clientTools as any,
-    experimental_automaticToolResolution: !!clientTools,
+    // Disable the library's automatic resolution — we handle it ourselves
+    // because experimental_automaticToolResolution has race conditions that
+    // cause tool calls to hang without executing.
+    experimental_automaticToolResolution: false,
   });
+
+  // ------------------------------------------------------------------
+  // Manual client tool resolution
+  // ------------------------------------------------------------------
+  const processedToolCallsRef = useRef(new Set<string>());
+  const isResolvingRef = useRef(false);
+
+  useEffect(() => {
+    if (!clientToolsRef.current) return;
+    if (isResolvingRef.current) return;
+
+    // Collect ALL pending tool calls across all messages (not just the last)
+    const pendingToolCalls: Array<{
+      toolCallId: string;
+      toolName: string;
+      input: unknown;
+    }> = [];
+
+    for (const msg of uiMessages) {
+      if (msg.role !== "assistant") continue;
+      for (const part of msg.parts) {
+        if (
+          isToolUIPart(part) &&
+          part.state === "input-available" &&
+          !processedToolCallsRef.current.has(part.toolCallId)
+        ) {
+          const toolName = getToolName(part);
+          const tool = clientToolsRef.current[toolName as keyof ClientToolMap];
+          if (tool) {
+            pendingToolCalls.push({
+              toolCallId: part.toolCallId,
+              toolName,
+              input: (part as unknown as { input?: unknown }).input,
+            });
+          }
+        }
+      }
+    }
+
+    if (pendingToolCalls.length === 0) return;
+
+    // Mark all as being processed to prevent re-entry
+    for (const tc of pendingToolCalls) {
+      processedToolCallsRef.current.add(tc.toolCallId);
+    }
+    isResolvingRef.current = true;
+
+    (async () => {
+      try {
+        for (const tc of pendingToolCalls) {
+          const tool = clientToolsRef.current?.[tc.toolName as keyof ClientToolMap];
+          if (!tool?.execute) continue;
+
+          let output: unknown;
+          try {
+            output = await tool.execute(tc.input as never);
+          } catch (error) {
+            output = `Error executing tool: ${error instanceof Error ? error.message : String(error)}`;
+          }
+
+          // Send result to server and update local UI state
+          addToolOutput({
+            toolCallId: tc.toolCallId,
+            toolName: tc.toolName,
+            output,
+          });
+        }
+      } finally {
+        isResolvingRef.current = false;
+      }
+    })();
+  }, [uiMessages, addToolOutput]);
+
+  // Clean up processed tool call IDs when messages change
+  useEffect(() => {
+    const currentIds = new Set<string>();
+    for (const msg of uiMessages) {
+      for (const part of msg.parts) {
+        if ("toolCallId" in part && (part as { toolCallId: string }).toolCallId) {
+          currentIds.add((part as { toolCallId: string }).toolCallId);
+        }
+      }
+    }
+    // Remove stale entries
+    for (const id of processedToolCallsRef.current) {
+      if (!currentIds.has(id)) {
+        processedToolCallsRef.current.delete(id);
+      }
+    }
+  }, [uiMessages]);
 
   // Map UIMessage[] → Message[]
   const messages = useMemo(
