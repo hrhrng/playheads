@@ -21,7 +21,7 @@ service = "playheads-admin"
 
 [[services]]
 binding = "AGENT"
-service = "playheads-agent"
+service = "playheads-agent-preview"
 
 [[d1_databases]]
 binding = "DB"
