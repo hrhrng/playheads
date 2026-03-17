@@ -53,20 +53,25 @@ function mapUIMessagesToMessages(uiMessages: UIMessage[]): Message[] {
             parts.push({ type: "thinking", content: part.text });
           }
           break;
-        case "tool-invocation":
-          parts.push({
-            type: "tool_call",
-            id: part.toolInvocation.toolCallId,
-            tool_name: part.toolInvocation.toolName,
-            args: part.toolInvocation.args as Record<string, unknown>,
-            result: part.toolInvocation.state === "result" ? part.toolInvocation.result : undefined,
-            status:
-              part.toolInvocation.state === "result"
-                ? "success"
-                : part.toolInvocation.state === "partial-call" || part.toolInvocation.state === "call"
-                  ? "pending"
-                  : "pending",
-          });
+        default:
+          // Handle tool invocation parts (type is "tool-<name>" or "dynamic-tool")
+          if (part.type === "dynamic-tool" || part.type.startsWith("tool-")) {
+            const toolPart = part as unknown as {
+              toolCallId: string;
+              toolName?: string;
+              state: string;
+              input?: unknown;
+              output?: unknown;
+            };
+            parts.push({
+              type: "tool_call",
+              id: toolPart.toolCallId,
+              tool_name: toolPart.toolName || part.type.replace(/^tool-/, ""),
+              args: (toolPart.input ?? {}) as Record<string, unknown>,
+              result: toolPart.state === "output-available" ? toolPart.output : undefined,
+              status: toolPart.state === "output-available" ? "success" : "pending",
+            });
+          }
           break;
       }
     }
@@ -99,11 +104,18 @@ function extractActionsFromMessages(uiMessages: UIMessage[]): AgentAction[] {
   for (const msg of uiMessages) {
     if (msg.role !== "assistant") continue;
     for (const part of msg.parts) {
-      if (part.type !== "tool-invocation") continue;
-      if (part.toolInvocation.state !== "result") continue;
-      if (!ACTION_TOOLS.has(part.toolInvocation.toolName)) continue;
+      if (part.type !== "dynamic-tool" && !part.type.startsWith("tool-")) continue;
+      const toolPart = part as unknown as {
+        toolCallId: string;
+        toolName?: string;
+        state: string;
+        output?: unknown;
+      };
+      if (toolPart.state !== "output-available") continue;
+      const toolName = toolPart.toolName || part.type.replace(/^tool-/, "");
+      if (!ACTION_TOOLS.has(toolName)) continue;
 
-      const result = part.toolInvocation.result;
+      const result = toolPart.output;
       if (result && typeof result === "object" && "action" in result) {
         const actionData = (result as { action: Record<string, unknown> }).action;
         if (actionData && typeof actionData.type === "string") {
