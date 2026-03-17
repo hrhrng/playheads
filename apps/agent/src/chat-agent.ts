@@ -24,12 +24,9 @@ Current State:
 {state_context}
 
 Available Tools:
-Server tools (run on backend):
 - search_music(query) — search Apple Music catalog. Returns track list with IDs.
 - get_now_playing() — check what's currently playing.
 - get_playlist() — show the current playlist/queue.
-
-Client tools (run on user's device via MusicKit JS):
 - add_to_queue(track_id) — add a track by Apple Music ID (from search_music results).
 - play_track(index) — play a track ALREADY in the playlist (1-indexed position).
 - skip_next() — skip to the next track.
@@ -50,7 +47,6 @@ IMPORTANT:
 - add_to_queue needs a track_id from search_music results.
 - play_track plays a track ALREADY in the playlist (1-indexed).
 - remove_from_playlist takes a 1-indexed position.
-- Client tools execute on the user's device. They will fail if Apple Music is not connected.
 
 Be conversational and fun! Keep responses concise.`;
 
@@ -110,9 +106,9 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
     onFinish?: Parameters<AIChatAgent<Env, PlaybackState>["onChatMessage"]>[0],
     options?: Parameters<AIChatAgent<Env, PlaybackState>["onChatMessage"]>[1]
   ) {
-    // All tools: server tools have `execute`, client tools don't.
-    // Client tools (add_to_queue, play_track, etc.) pause the stream —
-    // the frontend's onToolCall callback handles execution via MusicKit JS.
+    // All tools have `execute` on the server. Player control tools embed
+    // `_action` in their results — the frontend picks these up and dispatches
+    // MusicKit JS operations as a side effect (same as old SSE action pattern).
     const tools = createMusicTools({
       env: this.env,
       state: this.state,

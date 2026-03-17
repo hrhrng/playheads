@@ -3,27 +3,33 @@
  * and maps UIMessage format to our app's Message format.
  *
  * Player control tools (play_track, add_to_queue, skip_next,
- * remove_from_playlist) are defined on the SERVER without execute.
- * When the AI calls them, the stream pauses and the onToolCall
- * callback fires here to execute via MusicKit JS on the frontend.
- *
- * @see https://developers.cloudflare.com/agents/api-reference/chat-agents/#client-side-tools
+ * remove_from_playlist) execute on the SERVER and return JSON results
+ * containing an `_action` field. This hook watches for new tool results
+ * and dispatches MusicKit JS operations as a side effect — matching
+ * the old SSE action dispatch pattern.
  */
-import { useMemo, useCallback, useRef } from "react";
+import { useMemo, useCallback, useRef, useEffect } from "react";
 import { useAgent } from "agents/react";
 import { useAgentChat } from "@cloudflare/ai-chat/react";
 import type { UIMessage } from "ai";
 import type { Message, MessagePart } from "../types/chat";
+import { useChatStore } from "../store/chatStore";
 
 /**
  * Music action callbacks provided by useAppleMusic.
- * Each returns a string result that is sent back to the AI.
+ * Each is fire-and-forget (old executeAgentActions pattern).
  */
 export interface MusicActions {
-  playTrack: (index: number) => Promise<string>;
-  addToQueue: (trackId: string) => Promise<string>;
-  skipNext: () => Promise<string>;
-  removeTrack: (index: number) => Promise<string>;
+  playTrack: (index: number) => Promise<void>;
+  addToQueue: (trackId: string) => Promise<void>;
+  skipNext: () => Promise<void>;
+  removeTrack: (index: number) => Promise<void>;
+}
+
+/** Action payload embedded in server tool results. */
+interface MusicAction {
+  type: "add_to_queue" | "play_track" | "skip_next" | "remove_track";
+  data: Record<string, unknown>;
 }
 
 interface UseAgentChatAdapterParams {
@@ -38,6 +44,24 @@ interface UseAgentChatAdapterReturn {
   sendMessage: (text: string) => void;
   isLoading: boolean;
   clearHistory: () => void;
+}
+
+/**
+ * Try to extract a `_action` payload from a tool result string.
+ * Server player-control tools return JSON like:
+ *   { "message": "Added ...", "_action": { "type": "add_to_queue", "data": {...} } }
+ */
+function extractAction(output: unknown): MusicAction | null {
+  if (typeof output !== "string") return null;
+  try {
+    const parsed = JSON.parse(output);
+    if (parsed && parsed._action && typeof parsed._action.type === "string") {
+      return parsed._action as MusicAction;
+    }
+  } catch {
+    // Not JSON or no _action field — that's fine (e.g. search_music results)
+  }
+  return null;
 }
 
 /**
@@ -73,16 +97,29 @@ function mapUIMessagesToMessages(uiMessages: UIMessage[]): Message[] {
             };
             const hasOutput = toolPart.state === "output-available" || toolPart.output !== undefined;
             const hasError = toolPart.state === "output-error";
+
+            // Parse display message from JSON tool output
+            let displayResult: unknown = undefined;
+            if (hasOutput && !hasError && typeof toolPart.output === "string") {
+              try {
+                const parsed = JSON.parse(toolPart.output);
+                if (parsed?.message) displayResult = parsed.message;
+                else displayResult = toolPart.output;
+              } catch {
+                displayResult = toolPart.output;
+              }
+            } else if (hasError) {
+              displayResult = toolPart.errorText ?? "Tool execution failed";
+            } else if (hasOutput) {
+              displayResult = toolPart.output;
+            }
+
             parts.push({
               type: "tool_call",
               id: toolPart.toolCallId,
               tool_name: toolPart.toolName || part.type.replace(/^tool-/, ""),
               args: (toolPart.input ?? {}) as Record<string, unknown>,
-              result: hasError
-                ? toolPart.errorText ?? "Tool execution failed"
-                : hasOutput
-                  ? toolPart.output
-                  : undefined,
+              result: displayResult,
               status: hasError ? "error" : hasOutput ? "success" : "pending",
             });
           }
@@ -99,35 +136,6 @@ function mapUIMessagesToMessages(uiMessages: UIMessage[]): Message[] {
   });
 }
 
-/**
- * Dispatch a client-side tool call to the appropriate MusicKit action.
- * Returns the string result that flows back to the AI.
- */
-async function executeClientTool(
-  toolName: string,
-  input: Record<string, unknown>,
-  actions: MusicActions
-): Promise<string> {
-  switch (toolName) {
-    case "add_to_queue":
-      return actions.addToQueue(input.track_id as string);
-    case "play_track": {
-      const idx = parseInt(input.index as string);
-      if (isNaN(idx)) return "Please provide a valid track number.";
-      return actions.playTrack(idx - 1);
-    }
-    case "skip_next":
-      return actions.skipNext();
-    case "remove_from_playlist": {
-      const idx = parseInt(input.index as string);
-      if (isNaN(idx)) return "Please provide a valid track number.";
-      return actions.removeTrack(idx - 1);
-    }
-    default:
-      return `Unknown client tool: ${toolName}`;
-  }
-}
-
 export function useAgentChatAdapter({
   sessionId,
   userId,
@@ -140,55 +148,6 @@ export function useAgentChatAdapter({
     name: sessionId,
   });
 
-  // Ref for stable access to musicActions in onToolCall callback
-  const musicActionsRef = useRef(musicActions);
-  musicActionsRef.current = musicActions;
-
-  // onToolCall — the official Cloudflare Agents API for client-side tools.
-  // Server defines tools WITHOUT execute. When the AI calls them, the
-  // stream pauses and this callback fires. We execute via MusicKit JS
-  // and call addToolOutput to resume.
-  const handleToolCall = useCallback(
-    async ({
-      toolCall,
-      addToolOutput,
-    }: {
-      toolCall: { toolCallId: string; toolName: string; input: unknown };
-      addToolOutput: (opts: {
-        toolCallId: string;
-        output: unknown;
-        state?: "output-available" | "output-error";
-        errorText?: string;
-      }) => void;
-    }) => {
-      const actions = musicActionsRef.current;
-      if (!actions) {
-        addToolOutput({
-          toolCallId: toolCall.toolCallId,
-          output: "Music actions not available. Please try again.",
-        });
-        return;
-      }
-
-      let output: string;
-      try {
-        output = await executeClientTool(
-          toolCall.toolName,
-          (toolCall.input ?? {}) as Record<string, unknown>,
-          actions
-        );
-      } catch (error) {
-        output = `Error: ${error instanceof Error ? error.message : String(error)}`;
-      }
-
-      addToolOutput({
-        toolCallId: toolCall.toolCallId,
-        output,
-      });
-    },
-    []
-  );
-
   const {
     messages: uiMessages,
     sendMessage: agentSendMessage,
@@ -197,10 +156,78 @@ export function useAgentChatAdapter({
   } = useAgentChat({
     agent,
     body: { session_id: sessionId, user_id: userId },
-    // Client-side tools are defined on the server WITHOUT execute.
-    // When the AI calls them, the stream pauses and this callback fires.
-    onToolCall: handleToolCall,
   });
+
+  // ── Side-effect: dispatch MusicKit actions from tool results ──
+  // Mirrors the old SSE action handler: when we see a completed tool result
+  // containing `_action`, execute the corresponding MusicKit operation.
+  const musicActionsRef = useRef(musicActions);
+  musicActionsRef.current = musicActions;
+  const processedActionIds = useRef(new Set<string>());
+
+  useEffect(() => {
+    const actions = musicActionsRef.current;
+    if (!actions) return;
+
+    for (const msg of uiMessages) {
+      if (msg.role !== "assistant") continue;
+      for (const part of msg.parts) {
+        if (!part.type.startsWith("tool-") && part.type !== "dynamic-tool") continue;
+        const toolPart = part as unknown as {
+          toolCallId: string;
+          state: string;
+          output?: unknown;
+        };
+        // Only process completed tool calls, and only once
+        if (toolPart.state !== "output-available") continue;
+        if (processedActionIds.current.has(toolPart.toolCallId)) continue;
+
+        const action = extractAction(toolPart.output);
+        if (!action) continue;
+
+        // Mark as processed before dispatching (prevent double-execution)
+        processedActionIds.current.add(toolPart.toolCallId);
+
+        // Update viewedPlaylist immediately (like old SSE handler)
+        if (action.type === "add_to_queue" && action.data?.track_id) {
+          useChatStore.getState().addToViewedPlaylist({
+            id: action.data.track_id as string,
+            name: (action.data.name as string) || "Unknown",
+            artist: (action.data.artist as string) || "Unknown Artist",
+            album: (action.data.album as string) || "",
+            artwork_url: (action.data.artwork_url as string) || "",
+            duration: (action.data.duration as number) || 0,
+          });
+        } else if (action.type === "remove_track" && action.data?.index != null) {
+          useChatStore.getState().removeFromViewedPlaylist(action.data.index as number);
+        }
+
+        // Dispatch MusicKit action (fire-and-forget, like old executeAgentActions)
+        switch (action.type) {
+          case "add_to_queue":
+            actions.addToQueue(action.data.track_id as string).catch((e) =>
+              console.error("[Agent] add_to_queue error:", e)
+            );
+            break;
+          case "play_track":
+            actions.playTrack(action.data.index as number).catch((e) =>
+              console.error("[Agent] play_track error:", e)
+            );
+            break;
+          case "skip_next":
+            actions.skipNext().catch((e) =>
+              console.error("[Agent] skip_next error:", e)
+            );
+            break;
+          case "remove_track":
+            actions.removeTrack(action.data.index as number).catch((e) =>
+              console.error("[Agent] remove_track error:", e)
+            );
+            break;
+        }
+      }
+    }
+  }, [uiMessages]);
 
   // Map UIMessage[] → Message[]
   const messages = useMemo(

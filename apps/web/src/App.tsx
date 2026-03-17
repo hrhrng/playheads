@@ -113,23 +113,24 @@ function App() {
     }
   }, [activeSessionId, updatePlayingPlaylist]);
 
-  // Music actions for client tools — each wraps the agent action with session setup
+  // Music actions dispatched as side effects when tool results contain _action.
+  // Fire-and-forget (no return value) — matches old executeAgentActions pattern.
   const musicActions: MusicActions = useMemo(() => ({
     playTrack: async (index: number) => {
       ensurePlayingSession();
-      return agentPlayTrack(index);
+      await agentPlayTrack(index);
     },
     addToQueue: async (trackId: string) => {
       ensurePlayingSession();
-      return agentAddToQueue(trackId);
+      await agentAddToQueue(trackId);
     },
     skipNext: async () => {
       ensurePlayingSession();
-      return agentSkipNext();
+      await agentSkipNext();
     },
     removeTrack: async (index: number) => {
       ensurePlayingSession();
-      return agentRemoveTrack(index);
+      await agentRemoveTrack(index);
     },
   }), [ensurePlayingSession, agentPlayTrack, agentAddToQueue, agentSkipNext, agentRemoveTrack]);
 
