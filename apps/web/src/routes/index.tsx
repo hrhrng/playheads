@@ -74,6 +74,7 @@ export function HomeRoute({
   onLogout,
   onLinkApple,
   onDisconnectApple,
+  playingSessionId,
   skipNext,
   skipPrev,
 }: RouteComponentProps) {
@@ -128,6 +129,17 @@ export function HomeRoute({
         onMessageSent={fetchConversations}
         onSessionCreated={handleSessionCreated}
         onLinkApple={onLinkApple}
+        playingSessionId={playingSessionId}
+        playingConversationTitle={
+          playingSessionId
+            ? conversations.find(c => c.id === playingSessionId)?.title || 'Untitled'
+            : null
+        }
+        onNavigateToPlayingConversation={
+          playingSessionId
+            ? () => navigate(`/chat/${playingSessionId}`)
+            : undefined
+        }
         onSkipNext={skipNext}
         onSkipPrev={skipPrev}
       />

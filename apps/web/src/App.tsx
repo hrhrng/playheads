@@ -155,15 +155,24 @@ function App() {
     initialRestoreDone.current = true;
 
     const alreadyPlayingElsewhere = playingSessionId && playingSessionId !== activeSessionId;
-    const restoreSessionId = alreadyPlayingElsewhere ? playingSessionId : activeSessionId;
 
     let cancelled = false;
     (async () => {
-      const data = await restoreStateFromBackend(restoreSessionId);
-      if (!cancelled && data) {
-        updatePlayingPlaylist(restoreSessionId, data.playlist || []);
-
-        if (!alreadyPlayingElsewhere) {
+      if (alreadyPlayingElsewhere) {
+        // Restore playing session's state for MusicKit playback refs
+        const playingData = await restoreStateFromBackend(playingSessionId);
+        if (!cancelled && playingData) {
+          updatePlayingPlaylist(playingSessionId, playingData.playlist || []);
+        }
+        // Load viewed conversation's playlist for the UI
+        const viewedData = await restoreStateFromBackend(activeSessionId);
+        if (!cancelled) {
+          setViewedPlaylist(viewedData?.playlist || []);
+        }
+      } else {
+        const data = await restoreStateFromBackend(activeSessionId);
+        if (!cancelled && data) {
+          updatePlayingPlaylist(activeSessionId, data.playlist || []);
           // Only overwrite local playlist if backend has actual data;
           // otherwise keep the locally-created playlist (e.g. from SSE actions
           // before Apple Music was connected).
@@ -207,12 +216,12 @@ function App() {
     if (playlistSyncTimer.current) clearTimeout(playlistSyncTimer.current);
     playlistSyncTimer.current = setTimeout(() => {
       lastSyncedPlaylistRef.current = serialized;
-      // Only update the playing playlist ref when viewing the conversation that owns playback.
-      // Otherwise, switching conversations overwrites playingSessionIdRef and breaks the binding.
+      // Only sync when viewing the conversation that owns playback.
+      // Otherwise, switching conversations would write the wrong playlist to backend.
       if (!playingSessionId || playingSessionId === activeSessionId) {
         updatePlayingPlaylist(activeSessionId, viewedPlaylist);
+        syncPlaylistToBackend(viewedPlaylist);
       }
-      syncPlaylistToBackend(viewedPlaylist);
     }, 500);
 
     return () => {
@@ -299,6 +308,7 @@ function App() {
             onLogout={logout}
             onLinkApple={linkApple}
             onDisconnectApple={appleMusicLogout}
+            playingSessionId={playingSessionId}
             skipNext={skipNext}
             skipPrev={skipPrev}
           />

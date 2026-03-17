@@ -325,7 +325,7 @@ export const ChatInterface = ({
     <div className="flex flex-col h-full relative bg-white rounded-3xl overflow-hidden shadow-sm border border-white">
       {/* Cross-session banner — top-right corner */}
       {(() => {
-        const showBanner = !showHistory && !!playingSessionId && !!sessionId && playingSessionId !== sessionId && !!playingConversationTitle;
+        const showBanner = !showHistory && !!playingSessionId && playingSessionId !== sessionId && !!playingConversationTitle;
         return (
           <div className={`absolute top-4 right-4 z-40 transition-all duration-300 ${
             showBanner ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2 pointer-events-none'
