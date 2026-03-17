@@ -14,6 +14,7 @@ export interface Env {
 
   // LLM configuration
   ANTHROPIC_MODEL: string;
+  ANTHROPIC_THINKING_BUDGET: string;
 
   // Cloudflare AI Gateway
   CLOUDFLARE_ACCOUNT_ID: string;

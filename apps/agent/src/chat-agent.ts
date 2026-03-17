@@ -25,6 +25,7 @@ Current State:
 
 Available Tools:
 - search_music(query) — search Apple Music catalog. Returns track list with IDs.
+- web_search(query) — search the web for music recommendations, playlist ideas, artist info, trending songs, or genre exploration.
 - get_now_playing() — check what's currently playing.
 - get_playlist() — show the current playlist/queue.
 - add_to_queue(track_id) — add a track by Apple Music ID (from search_music results).
@@ -41,12 +42,15 @@ Workflow:
 - "Remove N" → remove_from_playlist(N)
 - "What's playing?" → get_now_playing()
 - "Show queue" → get_playlist()
+- "Recommend" → web_search(query) → show results → wait for user to pick
 
 IMPORTANT:
 - search_music only searches — it does NOT add to queue or play.
 - add_to_queue needs a track_id from search_music results.
 - play_track plays a track ALREADY in the playlist (1-indexed).
 - remove_from_playlist takes a 1-indexed position.
+- web_search is for discovery and recommendations (web results). search_music is for finding specific tracks on Apple Music.
+- When asked to build a playlist, use web_search for ideas, then search_music + add_to_queue for each track.
 
 Be conversational and fun! Keep responses concise.`;
 
@@ -123,15 +127,6 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
       isPlaying: this.state.isPlaying,
     });
 
-    // All tools have `execute` on the server. Player control tools embed
-    // `_action` in their results — the frontend picks these up and dispatches
-    // MusicKit JS operations as a side effect (same as old SSE action pattern).
-    const tools = createMusicTools({
-      env: this.env,
-      state: this.state,
-      storefront,
-    });
-
     // Route through Cloudflare AI Gateway
     const anthropic = createAnthropic({
       apiKey: this.env.CF_AIG_TOKEN,
@@ -139,9 +134,26 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
     });
     const model = anthropic(this.env.ANTHROPIC_MODEL || "claude-sonnet-4-6");
 
+    // All tools have `execute` on the server. Player control tools embed
+    // `_action` in their results — the frontend picks these up and dispatches
+    // MusicKit JS operations as a side effect (same as old SSE action pattern).
+    // Claude's native web_search is added as a server-side tool for discovery.
+    const tools = {
+      ...createMusicTools({ env: this.env, state: this.state, storefront }),
+      web_search: anthropic.tools.webSearch_20250305({ maxUses: 5 }),
+    };
+
+    // Extended thinking (configurable via ANTHROPIC_THINKING_BUDGET env var)
+    const thinkingBudget = parseInt(this.env.ANTHROPIC_THINKING_BUDGET || "0");
+
     const result = streamText({
       model,
-      maxOutputTokens: 4096,
+      maxOutputTokens: thinkingBudget > 0 ? 16384 : 4096,
+      providerOptions: thinkingBudget > 0 ? {
+        anthropic: {
+          thinking: { type: "enabled" as const, budgetTokens: thinkingBudget },
+        },
+      } : undefined,
       system: buildSystemPrompt(this.state),
       messages: await convertToModelMessages(this.messages),
       tools,
