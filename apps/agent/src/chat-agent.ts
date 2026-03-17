@@ -104,10 +104,10 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
 
     let model;
     if (provider === "openai") {
-      const openai = createOpenAI({ apiKey: this.env.OPENAI_API_KEY });
+      const openai = createOpenAI();
       model = aigateway(openai("gpt-5-mini"));
     } else {
-      const anthropic = createAnthropic({ apiKey: this.env.ANTHROPIC_API_KEY });
+      const anthropic = createAnthropic();
       model = aigateway(anthropic(this.env.ANTHROPIC_MODEL || "claude-sonnet-4-6"));
     }
 

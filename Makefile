@@ -165,8 +165,6 @@ deploy-production-gateway:
 
 deploy-secrets-agent-preview:
 	@echo "Setting Cloudflare secrets for preview agent worker..."
-	cd apps/agent && npx wrangler secret put ANTHROPIC_API_KEY
-	cd apps/agent && npx wrangler secret put OPENAI_API_KEY
 	cd apps/agent && npx wrangler secret put CLOUDFLARE_ACCOUNT_ID
 	cd apps/agent && npx wrangler secret put AI_GATEWAY_ID
 	cd apps/agent && npx wrangler secret put CF_AIG_TOKEN

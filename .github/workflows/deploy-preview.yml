@@ -182,8 +182,6 @@ jobs:
         run: |
           WORKER="playheads-agent"
           declare -A SECRETS=(
-            [ANTHROPIC_API_KEY]="${{ secrets.ANTHROPIC_API_KEY }}"
-            [OPENAI_API_KEY]="${{ secrets.OPENAI_API_KEY }}"
             [CLOUDFLARE_ACCOUNT_ID]="${{ secrets.CLOUDFLARE_ACCOUNT_ID }}"
             [AI_GATEWAY_ID]="${{ secrets.AI_GATEWAY_ID }}"
             [CF_AIG_TOKEN]="${{ secrets.CF_AIG_TOKEN }}"

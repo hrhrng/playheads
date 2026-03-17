@@ -25,10 +25,6 @@ export async function generateConversationTitle(
   messages: Array<{ role: string; content?: string }>,
   env: Env
 ): Promise<string> {
-  if (!env.OPENAI_API_KEY) {
-    return "New Conversation";
-  }
-
   try {
     const conversationText = messages
       .slice(0, 5)
@@ -42,7 +38,7 @@ export async function generateConversationTitle(
       gateway: env.AI_GATEWAY_ID,
       apiKey: env.CF_AIG_TOKEN,
     });
-    const openai = createOpenAI({ apiKey: env.OPENAI_API_KEY });
+    const openai = createOpenAI();
 
     const { text } = await generateText({
       model: aigateway(openai("gpt-5-nano")),

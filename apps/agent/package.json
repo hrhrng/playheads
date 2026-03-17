@@ -12,8 +12,6 @@
     "@cloudflare/ai-chat": "^0.1.0",
     "ai": "^6.0.0",
     "ai-gateway-provider": "^2.0.0",
-    "@ai-sdk/anthropic": "^3.0.0",
-    "@ai-sdk/openai": "^3.0.0",
     "jose": "^6.0.0",
     "zod": "^3.24.0"
   },
