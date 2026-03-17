@@ -42,7 +42,7 @@ export const ToolCall = ({
     web_search: 'Web Search',
     play_track: 'Play',
     skip_next: 'Skip',
-    add_to_playlist: 'Add to Playlist',
+    add_to_queue: 'Add to Queue',
     remove_from_playlist: 'Remove',
     get_now_playing: 'Now Playing',
     get_playlist: 'Get Playlist'

@@ -1,8 +1,11 @@
 /**
- * API response types
+ * API types
+ *
+ * Types for REST API endpoints that remain after the Cloudflare Agents migration.
+ * Chat messaging is handled via WebSocket (useAgentChat), these types are for
+ * session CRUD, state sync, and Apple Music endpoints.
  */
 
-import type { Message } from './chat';
 import type { FormattedTrack } from './apple-music';
 
 /**
@@ -10,15 +13,6 @@ import type { FormattedTrack } from './apple-music';
  * Re-exported from config for backward compatibility
  */
 export { API_BASE } from '../config/api';
-
-/**
- * Chat request payload
- */
-export interface ChatRequest {
-  message: string;
-  session_id: string | null;
-  user_id: string;
-}
 
 /**
  * Create session request
@@ -32,55 +26,6 @@ export interface CreateSessionRequest {
  */
 export interface CreateSessionResponse {
   session_id: string;
-}
-
-/**
- * Get state request params
- */
-export interface GetStateParams {
-  session_id: string;
-  user_id?: string;
-}
-
-/**
- * Chat history state response
- */
-export interface ChatStateResponse {
-  chat_history: ChatHistoryEntry[];
-  [key: string]: unknown;
-}
-
-/**
- * Chat history entry
- */
-export interface ChatHistoryEntry {
-  role: 'user' | 'agent' | 'system';
-  content?: string;
-  parts?: MessagePart[];
-}
-
-/**
- * Message part types (matching backend format)
- */
-export type MessagePart = TextPart | ThinkingPart | ToolCallPart;
-
-export interface TextPart {
-  type: 'text';
-  content: string;
-}
-
-export interface ThinkingPart {
-  type: 'thinking';
-  content: string;
-}
-
-export interface ToolCallPart {
-  type: 'tool_call';
-  id: string;
-  tool_name: string;
-  args: Record<string, unknown>;
-  result?: unknown;
-  status: 'pending' | 'success' | 'error';
 }
 
 /**

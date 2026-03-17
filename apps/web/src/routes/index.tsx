@@ -11,12 +11,11 @@ import { useSidebarState } from '../hooks/useSidebarState';
 import type {
   Track,
   PlaybackTime,
-  Message,
-  AgentAction,
   FormattedTrack,
   Conversation
 } from '../types';
 import type { AuthSession } from '../hooks/useAuth';
+import type { MusicActions } from '../hooks/useAgentChatAdapter';
 
 interface RouteComponentProps {
   session: AuthSession | null;
@@ -37,7 +36,7 @@ interface RouteComponentProps {
   seekTo: (time: number) => void;
   appleQueue?: Track[];
   playAppleTrack?: (index: number) => Promise<void>;
-  executeAgentActions: (actions: AgentAction[]) => Promise<void>;
+  musicActions: MusicActions;
   fetchConversations: () => Promise<void>;
   onLogout: () => void;
   onLinkApple?: () => Promise<void>;
@@ -70,11 +69,12 @@ export function HomeRoute({
   toggleApple,
   playbackTime,
   seekTo,
-  executeAgentActions,
+  musicActions,
   fetchConversations,
   onLogout,
   onLinkApple,
   onDisconnectApple,
+  playingSessionId,
   skipNext,
   skipPrev,
 }: RouteComponentProps) {
@@ -82,14 +82,12 @@ export function HomeRoute({
 
   const handleSessionCreated = (
     newSessionId: string,
-    preservedMessages: Message[],
     initialMessage: string
   ): void => {
     navigate(`/chat/${newSessionId}`, {
       replace: true,
       state: {
         isNewlyCreated: true,
-        preservedMessages,
         initialMessage
       }
     });
@@ -127,10 +125,21 @@ export function HomeRoute({
         onSeek={seekTo}
         sessionId={null}
         userId={session?.user.id || null}
-        onAgentActions={executeAgentActions}
+        musicActions={musicActions}
         onMessageSent={fetchConversations}
         onSessionCreated={handleSessionCreated}
         onLinkApple={onLinkApple}
+        playingSessionId={playingSessionId}
+        playingConversationTitle={
+          playingSessionId
+            ? conversations.find(c => c.id === playingSessionId)?.title || 'Untitled'
+            : null
+        }
+        onNavigateToPlayingConversation={
+          playingSessionId
+            ? () => navigate(`/chat/${playingSessionId}`)
+            : undefined
+        }
         onSkipNext={skipNext}
         onSkipPrev={skipPrev}
       />
@@ -160,7 +169,7 @@ export function ChatRoute({
   seekTo,
   appleQueue = [],
   playAppleTrack,
-  executeAgentActions,
+  musicActions,
   fetchConversations,
   onLogout,
   onLinkApple,
@@ -182,14 +191,12 @@ export function ChatRoute({
 
   const handleSessionCreated = (
     newSessionId: string,
-    preservedMessages: Message[],
     initialMessage: string
   ): void => {
     navigate(`/chat/${newSessionId}`, {
       replace: true,
       state: {
         isNewlyCreated: true,
-        preservedMessages,
         initialMessage
       }
     });
@@ -241,7 +248,7 @@ export function ChatRoute({
         onSeek={seekTo}
         sessionId={sessionId}
         userId={session?.user.id || null}
-        onAgentActions={executeAgentActions}
+        musicActions={musicActions}
         onMessageSent={fetchConversations}
         onSessionCreated={handleSessionCreated}
         onLinkApple={onLinkApple}

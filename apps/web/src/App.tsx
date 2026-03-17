@@ -3,7 +3,7 @@
  * @module App
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Routes, Route, useLocation } from 'react-router-dom';
 import { HomeRoute, ChatRoute } from './routes';
 import useAppleMusic from './hooks/useAppleMusic';
@@ -17,6 +17,9 @@ import { LoginScreen } from './components/LoginScreen';
 import { WaitlistGate } from './components/WaitlistGate';
 import { useWaitlistGate } from './hooks/useWaitlistGate';
 import { useChatStore } from './store/chatStore';
+import { API_BASE } from './config/api';
+import type { MusicActions } from './hooks/useAgentChatAdapter';
+import type { FormattedTrack } from './types/apple-music';
 
 function App() {
   const location = useLocation();
@@ -39,7 +42,11 @@ function App() {
   // Waitlist gate (reads user_metadata from session, no external dependency)
   const waitlistStatus = useWaitlistGate(effectiveSession);
 
-  // Conversations CRUD
+  // Extract active session ID from URL
+  const pathParts = location.pathname.split('/');
+  const activeSessionId = (pathParts[1] === 'chat' && pathParts[2]) ? pathParts[2] : null;
+
+  // Conversations CRUD (with title polling for active session)
   const {
     conversations,
     fetchConversations,
@@ -49,7 +56,7 @@ function App() {
     loadMore: loadMoreConversations,
     hasMore: hasMoreConversations,
     isLoadingMore: isLoadingMoreConversations,
-  } = useConversations(session?.user?.id);
+  } = useConversations(session?.user?.id, activeSessionId);
 
   // Per-conversation playback state
   const [playingSessionId, setPlayingSessionId] = useState<string | null>(null);
@@ -57,10 +64,6 @@ function App() {
   const setViewedPlaylist = useChatStore(s => s.setViewedPlaylist);
   const initialRestoreDone = useRef(false);
   const playlistSyncReady = useRef(false);
-
-  // Extract active session ID from URL
-  const pathParts = location.pathname.split('/');
-  const activeSessionId = (pathParts[1] === 'chat' && pathParts[2]) ? pathParts[2] : null;
 
   // Apple Music account linking
   const {
@@ -82,11 +85,15 @@ function App() {
     playbackTime,
     seekTo,
     logout: appleMusicLogout,
-    executeAgentActions: rawExecuteAgentActions,
+    agentPlayTrack,
+    agentAddToQueue,
+    agentSkipNext,
+    agentRemoveTrack,
     syncMusicKitState,
     syncPlaylistToBackend,
     restoreStateFromBackend,
     updatePlayingPlaylist,
+    storefrontId,
     skipNext,
     skipPrev,
   } = useAppleMusic({
@@ -103,13 +110,36 @@ function App() {
 
   const isViewingPlayingConversation = !!playingSessionId && playingSessionId === activeSessionId;
 
-  const executeAgentActions = useCallback(async (actions: import('./types').AgentAction[]) => {
+  // Ensure the playing session is set before executing any agent action
+  const ensurePlayingSession = useCallback(() => {
+    console.log('[App] ensurePlayingSession:', { activeSessionId, viewedPlaylist: useChatStore.getState().viewedPlaylist.length });
     if (activeSessionId) {
       setPlayingSessionId(activeSessionId);
       updatePlayingPlaylist(activeSessionId, useChatStore.getState().viewedPlaylist);
     }
-    await rawExecuteAgentActions(actions);
-  }, [activeSessionId, rawExecuteAgentActions, updatePlayingPlaylist]);
+  }, [activeSessionId, updatePlayingPlaylist]);
+
+  // Music actions dispatched as side effects when tool results contain _action.
+  // Fire-and-forget (no return value) — matches old executeAgentActions pattern.
+  const musicActions: MusicActions = useMemo(() => ({
+    playTrack: async (index: number) => {
+      ensurePlayingSession();
+      await agentPlayTrack(index);
+    },
+    addToQueue: async (trackId: string) => {
+      ensurePlayingSession();
+      await agentAddToQueue(trackId);
+    },
+    skipNext: async () => {
+      ensurePlayingSession();
+      await agentSkipNext();
+    },
+    removeTrack: async (index: number) => {
+      ensurePlayingSession();
+      await agentRemoveTrack(index);
+    },
+    storefront: storefrontId,
+  }), [ensurePlayingSession, agentPlayTrack, agentAddToQueue, agentSkipNext, agentRemoveTrack, storefrontId]);
 
   const wrappedPlayAppleTrack = useCallback(async (index: number) => {
     if (activeSessionId) {
@@ -119,36 +149,55 @@ function App() {
     await playAppleTrack(index);
   }, [activeSessionId, playAppleTrack, updatePlayingPlaylist]);
 
-  // Initial restore on Apple Music authorization
+  // --------------------------------------------------------------------------
+  // currentConversation: load viewed playlist whenever activeSessionId changes
+  // --------------------------------------------------------------------------
+  const userId = effectiveSession?.user?.id || null;
+
   useEffect(() => {
-    if (!isAppleMusicAuthorized || isInitializing || initialRestoreDone.current) return;
     if (!activeSessionId) return;
-
-    initialRestoreDone.current = true;
-
-    const alreadyPlayingElsewhere = playingSessionId && playingSessionId !== activeSessionId;
-    const restoreSessionId = alreadyPlayingElsewhere ? playingSessionId : activeSessionId;
 
     let cancelled = false;
     (async () => {
-      const data = await restoreStateFromBackend(restoreSessionId);
-      if (!cancelled && data) {
-        updatePlayingPlaylist(restoreSessionId, data.playlist || []);
-
-        if (!alreadyPlayingElsewhere) {
-          // Only overwrite local playlist if backend has actual data;
-          // otherwise keep the locally-created playlist (e.g. from SSE actions
-          // before Apple Music was connected).
-          const backendPlaylist = data.playlist || [];
-          if (backendPlaylist.length > 0 || viewedPlaylist.length === 0) {
-            setViewedPlaylist(backendPlaylist);
-          }
-          setPlayingSessionId(activeSessionId);
+      try {
+        const url = userId
+          ? `${API_BASE}/state?session_id=${activeSessionId}&user_id=${userId}`
+          : `${API_BASE}/state?session_id=${activeSessionId}`;
+        const res = await fetch(url);
+        if (cancelled || !res.ok) return;
+        const data = await res.json();
+        const backendPlaylist: FormattedTrack[] = data.playlist || [];
+        if (backendPlaylist.length > 0 || viewedPlaylist.length === 0) {
+          setViewedPlaylist(backendPlaylist);
         }
-      }
+      } catch { /* network error — keep current viewedPlaylist */ }
       playlistSyncReady.current = true;
     })();
-    return () => { cancelled = true; initialRestoreDone.current = false; };
+    return () => { cancelled = true; };
+  }, [activeSessionId, userId]);
+
+  // --------------------------------------------------------------------------
+  // playingConversation: restore MusicKit state once on authorization
+  // --------------------------------------------------------------------------
+  useEffect(() => {
+    if (!isAppleMusicAuthorized || isInitializing || initialRestoreDone.current) return;
+    // Need a session to restore from — either already playing or currently active
+    const targetSessionId = playingSessionId || activeSessionId;
+    if (!targetSessionId) return;
+
+    initialRestoreDone.current = true;
+
+    let cancelled = false;
+    (async () => {
+      const data = await restoreStateFromBackend(targetSessionId);
+      if (!cancelled && data) {
+        updatePlayingPlaylist(targetSessionId, data.playlist || []);
+        if (!playingSessionId) {
+          setPlayingSessionId(targetSessionId);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
   }, [isAppleMusicAuthorized, isInitializing, activeSessionId, playingSessionId, restoreStateFromBackend, updatePlayingPlaylist]);
 
   // ============================================================================
@@ -157,26 +206,16 @@ function App() {
   const playlistSyncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSyncedPlaylistRef = useRef<string>('');
   const lastSyncedSessionRef = useRef<string | null>(null);
-  const isLoadingHistory = useChatStore(s => s.isLoadingHistory);
-
-  // Mark playlist sync as ready after first history load completes.
-  // This decouples playlist persistence from Apple Music auth — playlists
-  // created before connecting Apple Music will be synced to backend.
-  const historyLoadedOnce = useRef(false);
+  // With useAgentChat, messages load automatically via WebSocket —
+  // no separate loading state needed. Enable playlist sync immediately.
   useEffect(() => {
-    if (isLoadingHistory) {
-      historyLoadedOnce.current = true;
-    } else if (historyLoadedOnce.current) {
-      playlistSyncReady.current = true;
-    }
-  }, [isLoadingHistory]);
+    playlistSyncReady.current = true;
+  }, []);
 
   useEffect(() => {
     // Don't sync until history has loaded at least once — otherwise the empty
     // default viewedPlaylist overwrites the real playlist in the backend.
     if (!playlistSyncReady.current) return;
-    if (isLoadingHistory) return;
-
     if (activeSessionId !== lastSyncedSessionRef.current) {
       lastSyncedSessionRef.current = activeSessionId;
       lastSyncedPlaylistRef.current = '';
@@ -189,18 +228,18 @@ function App() {
     if (playlistSyncTimer.current) clearTimeout(playlistSyncTimer.current);
     playlistSyncTimer.current = setTimeout(() => {
       lastSyncedPlaylistRef.current = serialized;
-      // Only update the playing playlist ref when viewing the conversation that owns playback.
-      // Otherwise, switching conversations overwrites playingSessionIdRef and breaks the binding.
+      // Only sync when viewing the conversation that owns playback.
+      // Otherwise, switching conversations would write the wrong playlist to backend.
       if (!playingSessionId || playingSessionId === activeSessionId) {
         updatePlayingPlaylist(activeSessionId, viewedPlaylist);
+        syncPlaylistToBackend(viewedPlaylist);
       }
-      syncPlaylistToBackend(viewedPlaylist);
     }, 500);
 
     return () => {
       if (playlistSyncTimer.current) clearTimeout(playlistSyncTimer.current);
     };
-  }, [viewedPlaylist, activeSessionId, playingSessionId, effectiveSession?.user?.id, isLoadingHistory, syncPlaylistToBackend, updatePlayingPlaylist]);
+  }, [viewedPlaylist, activeSessionId, playingSessionId, effectiveSession?.user?.id, syncPlaylistToBackend, updatePlayingPlaylist]);
 
   const startPlaybackFromConversation = useCallback(async (trackIndex: number) => {
     if (!activeSessionId) return;
@@ -276,11 +315,12 @@ function App() {
             toggleApple={toggleApple}
             playbackTime={playbackTime}
             seekTo={seekTo}
-            executeAgentActions={executeAgentActions}
+            musicActions={musicActions}
             fetchConversations={fetchConversations}
             onLogout={logout}
             onLinkApple={linkApple}
             onDisconnectApple={appleMusicLogout}
+            playingSessionId={playingSessionId}
             skipNext={skipNext}
             skipPrev={skipPrev}
           />
@@ -306,7 +346,7 @@ function App() {
             seekTo={seekTo}
             appleQueue={appleQueue}
             playAppleTrack={wrappedPlayAppleTrack}
-            executeAgentActions={executeAgentActions}
+            musicActions={musicActions}
             fetchConversations={fetchConversations}
             onLogout={logout}
             onLinkApple={linkApple}

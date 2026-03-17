@@ -13,7 +13,7 @@ import type { Message } from '../types/chat';
  * @param value - Current textarea value
  * @returns Textarea ref object
  */
-export function useAutoResizeTextarea(value: string): RefObject<HTMLTextAreaElement> {
+export function useAutoResizeTextarea(value: string): RefObject<HTMLTextAreaElement | null> {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -33,7 +33,7 @@ export function useAutoResizeTextarea(value: string): RefObject<HTMLTextAreaElem
  * @param messages - Array of messages to watch for changes
  * @returns End element ref object for scroll target
  */
-export function useAutoScroll(messages: Message[]): RefObject<HTMLDivElement> {
+export function useAutoScroll(messages: Message[]): RefObject<HTMLDivElement | null> {
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -81,29 +81,19 @@ export function useInitialMessage(
       return;
     }
 
-    // For newly created sessions, wait until we have messages (from preservedMessages)
-    // Then send without adding user message again (it's already in state)
+    // Send the initial message once when the adapter is ready
     if (!isLoading && !hasSentRef.current) {
-      // For newly created sessions, only send when messages are loaded
-      if (isNewlyCreated && (!messages || messages.length === 0)) {
-        return; // Wait for preservedMessages to load
-      }
-
       hasSentRef.current = true;
-      console.log('[useInitialMessage] Auto-sending initial message:', initialMessage);
 
-      // Clear the state to prevent sending again
-      console.log('[useInitialMessage] Clearing navigation state...');
+      // Clear navigation state to prevent re-sending on re-render
       if (navigate) {
-        console.log('[useInitialMessage] Using navigate to clear state');
         navigate(pathname, { replace: true, state: {} });
       } else if (window.history.replaceState) {
-        console.log('[useInitialMessage] Using window.history to clear state');
         window.history.replaceState({}, document.title);
       }
 
-      // Skip adding user message if it's a newly created session (already in preservedMessages)
-      sendMessage(initialMessage, isNewlyCreated);
+      // useAgentChat handles adding the user message, so don't skip
+      sendMessage(initialMessage);
     }
   }, [
     locationState?.initialMessage,
@@ -122,7 +112,6 @@ export function useInitialMessage(
 interface LocationState {
   initialMessage?: string;
   isNewlyCreated?: boolean;
-  preservedMessages?: Message[];
   [key: string]: unknown;
 }
 

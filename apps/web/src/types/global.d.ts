@@ -8,7 +8,6 @@
 export interface RouterLocationState {
   initialMessage?: string;
   isNewlyCreated?: boolean;
-  preservedMessages?: unknown[];
   [key: string]: unknown;
 }
 

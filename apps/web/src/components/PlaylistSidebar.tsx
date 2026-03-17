@@ -4,7 +4,6 @@
  */
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { useChatStore } from '../store/chatStore';
 import type { Track, FormattedTrack } from '../types';
 
 interface PlaylistSidebarProps {
@@ -58,7 +57,6 @@ export const PlaylistSidebar = ({
   isViewingPlayingConversation = true,
   onStartPlaybackFromConversation
 }: PlaylistSidebarProps): React.JSX.Element => {
-  const isLoadingHistory = useChatStore(s => s.isLoadingHistory);
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const startX = useRef(0);
@@ -222,19 +220,7 @@ export const PlaylistSidebar = ({
             {showQueue && (
               <div className="flex-1 overflow-y-auto space-y-2 px-4 pb-4">
                 <h3 className="text-[10px] font-medium text-gemini-subtext uppercase tracking-widest mb-2 px-2">Up Next</h3>
-                {isLoadingHistory ? (
-                  /* Skeleton placeholders */
-                  Array.from({ length: 5 }).map((_, i) => (
-                    <div key={i} className="flex items-center gap-3 p-2 animate-pulse">
-                      <div className="w-10 h-10 rounded-lg bg-gray-200 shrink-0" />
-                      <div className="flex-1 min-w-0 space-y-2">
-                        <div className="h-3 bg-gray-200 rounded-full w-3/4" />
-                        <div className="h-2.5 bg-gray-100 rounded-full w-1/2" />
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  queue.map((track, index) => (
+                {queue.map((track, index) => (
                     <div
                       key={track.id}
                       onClick={() => handleTrackClick(index)}
@@ -249,8 +235,7 @@ export const PlaylistSidebar = ({
                         <div className="text-[11px] text-gemini-subtext truncate">{track.artist}</div>
                       </div>
                     </div>
-                  ))
-                )}
+                  ))}
               </div>
             )}
           </div>

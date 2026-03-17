@@ -6,8 +6,10 @@
        deploy-preview-landing deploy-production-landing \
        deploy-preview-admin deploy-production-admin \
        deploy-preview-backend deploy-production-backend \
+       deploy-preview-agent deploy-production-agent \
        deploy-production-web deploy-production-gateway \
-       deploy-secrets-preview deploy-secrets-production
+       deploy-secrets-preview deploy-secrets-production \
+       deploy-secrets-agent-preview
 
 # =============================================================================
 # Development
@@ -105,9 +107,9 @@ clean:
 
 deploy: deploy-preview
 
-deploy-preview: build-web build-landing deploy-preview-landing deploy-preview-admin deploy-preview-web deploy-preview-backend deploy-preview-gateway
+deploy-preview: build-web build-landing deploy-preview-landing deploy-preview-admin deploy-preview-web deploy-preview-backend deploy-preview-agent deploy-preview-gateway
 
-deploy-production: build-web build-landing deploy-production-landing deploy-production-admin deploy-production-web deploy-production-backend deploy-production-gateway
+deploy-production: build-web build-landing deploy-production-landing deploy-production-admin deploy-production-web deploy-production-backend deploy-production-agent deploy-production-gateway
 
 build-web:
 	@echo "Building web frontend..."
@@ -129,6 +131,10 @@ deploy-preview-backend:
 	@echo "Deploying backend worker (preview)..."
 	cd apps/backend-worker && npx wrangler deploy
 
+deploy-preview-agent:
+	@echo "Deploying agent worker (preview)..."
+	cd apps/agent && npx wrangler deploy
+
 deploy-preview-gateway:
 	@echo "Deploying gateway worker (preview)..."
 	cd apps/gateway && npx wrangler deploy --config wrangler.preview.toml
@@ -149,9 +155,22 @@ deploy-production-backend:
 	@echo "Deploying backend worker (production)..."
 	cd apps/backend-worker && npx wrangler deploy
 
+deploy-production-agent:
+	@echo "Deploying agent worker (production)..."
+	cd apps/agent && npx wrangler deploy
+
 deploy-production-gateway:
 	@echo "Deploying gateway worker (production)..."
 	cd apps/gateway && npx wrangler deploy --config wrangler.production.toml
+
+deploy-secrets-agent-preview:
+	@echo "Setting Cloudflare secrets for preview agent worker..."
+	cd apps/agent && npx wrangler secret put CLOUDFLARE_ACCOUNT_ID
+	cd apps/agent && npx wrangler secret put AI_GATEWAY_ID
+	cd apps/agent && npx wrangler secret put CF_AIG_TOKEN
+	cd apps/agent && npx wrangler secret put APPLE_MUSIC_TEAM_ID
+	cd apps/agent && npx wrangler secret put APPLE_MUSIC_KEY_ID
+	cd apps/agent && npx wrangler secret put APPLE_MUSIC_PRIVATE_KEY
 
 deploy-secrets-preview:
 	@echo "Setting Cloudflare secrets for preview backend worker..."

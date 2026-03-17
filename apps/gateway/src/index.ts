@@ -8,6 +8,7 @@ import {
   handleCreateConversation,
   handleDeleteConversation,
   handleUpdateConversation,
+  handleGetConversationTitle,
   handleCreateSession,
   handleGetState,
   handleSyncState,
@@ -18,10 +19,12 @@ interface Env {
   LANDING: Fetcher;
   BACKEND: Fetcher;
   ADMIN: Fetcher;
+  AGENT: Fetcher;
   DB: D1Database;
   APP_HOSTNAME: string;
   ADMIN_HOSTNAME: string;
   PREVIEW_DOMAIN: string;
+  USE_NEW_AGENT: string;
   BETTER_AUTH_SECRET: string;
   BETTER_AUTH_URL: string;
   BETTER_AUTH_TRUSTED_ORIGINS: string;
@@ -66,6 +69,11 @@ export default {
       return env.ADMIN.fetch(request);
     }
 
+    // /agents/* → agent worker (WebSocket + HTTP for useAgentChat)
+    if (url.pathname.startsWith("/agents/") && env.USE_NEW_AGENT === "true" && env.AGENT) {
+      return env.AGENT.fetch(request);
+    }
+
     // /api/auth/* → better-auth handler
     if (url.pathname.startsWith("/api/auth")) {
       const db = drizzle(env.DB);
@@ -90,6 +98,10 @@ export default {
     }
     if (url.pathname === "/api/conversations/create" && request.method === "POST") {
       return handleCreateConversation(request, env.DB);
+    }
+    if (url.pathname.match(/^\/api\/conversations\/[^/]+\/title$/) && request.method === "GET") {
+      const id = url.pathname.split("/api/conversations/")[1].replace("/title", "");
+      return handleGetConversationTitle(id, request, env.DB);
     }
     if (url.pathname.startsWith("/api/conversations/") && request.method === "DELETE") {
       const id = url.pathname.split("/api/conversations/")[1];
@@ -135,6 +147,10 @@ export default {
         return fetch(backendReq);
       }
 
+      // Feature flag: route to new Cloudflare Agent or old Python backend
+      const useNewAgent = env.USE_NEW_AGENT === "true" && env.AGENT;
+      const backendService = useNewAgent ? env.AGENT : env.BACKEND;
+
       const backendReq = new Request(
         new URL(backendPath, "http://backend").toString(),
         {
@@ -144,7 +160,7 @@ export default {
         }
       );
 
-      const response = await env.BACKEND.fetch(backendReq);
+      const response = await backendService.fetch(backendReq);
       const latency = Date.now() - start;
 
       console.log(
@@ -154,6 +170,7 @@ export default {
           path: url.pathname,
           status: response.status,
           latency_ms: latency,
+          backend: useNewAgent ? "agent" : "python",
         })
       );
 

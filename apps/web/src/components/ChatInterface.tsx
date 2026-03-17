@@ -13,7 +13,8 @@ import { ChatInput } from './chat/ChatInput';
 import { TranscriptOverlay } from './chat/TranscriptOverlay';
 import { useChat } from '../hooks/useChat';
 import { useInitialMessage } from '../hooks/useChatHelpers';
-import type { Track, PlaybackTime, Message, AgentAction } from '../types';
+import type { Track, PlaybackTime, Message } from '../types';
+import type { MusicActions } from '../hooks/useAgentChatAdapter';
 
 interface ChatInterfaceProps {
   /** Whether the DJ is currently speaking */
@@ -36,12 +37,12 @@ interface ChatInterfaceProps {
   userId: string | null;
   /** Whether Apple Music is authorized */
   isAppleMusicAuthorized: boolean;
-  /** Callback for agent actions */
-  onAgentActions?: (actions: AgentAction[]) => Promise<void> | void;
+  /** Music actions for client tools (player control) */
+  musicActions?: MusicActions;
   /** Callback when message is sent */
   onMessageSent?: () => void;
   /** Callback when new session is created */
-  onSessionCreated?: (newSessionId: string, preservedMessages: Message[], initialMessage: string) => void;
+  onSessionCreated?: (newSessionId: string, initialMessage: string) => void;
   /** Callback to link Apple Music account */
   onLinkApple?: () => Promise<void>;
   /** Session ID that currently owns playback */
@@ -76,7 +77,7 @@ export const ChatInterface = ({
   sessionId,
   userId,
   isAppleMusicAuthorized,
-  onAgentActions,
+  musicActions,
   onMessageSent,
   onSessionCreated,
   onLinkApple,
@@ -102,7 +103,7 @@ export const ChatInterface = ({
   } = useChat({
     sessionId,
     userId,
-    onAgentActions,
+    musicActions,
     onMessageSent,
     onSessionCreated,
   });
@@ -324,7 +325,7 @@ export const ChatInterface = ({
     <div className="flex flex-col h-full relative bg-white rounded-3xl overflow-hidden shadow-sm border border-white">
       {/* Cross-session banner — top-right corner */}
       {(() => {
-        const showBanner = !showHistory && !!playingSessionId && !!sessionId && playingSessionId !== sessionId && !!playingConversationTitle;
+        const showBanner = !showHistory && !!playingSessionId && playingSessionId !== sessionId && !!playingConversationTitle;
         return (
           <div className={`absolute top-4 right-4 z-40 transition-all duration-300 ${
             showBanner ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2 pointer-events-none'
