@@ -135,16 +135,15 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
       tools,
       maxSteps: 10, // Allow multi-turn tool calling (replaces LangGraph agentic loop)
       abortSignal: options?.abortSignal,
-      onFinish: async () => {
+      onFinish: async ({ text }) => {
         if (!sessionId) return;
 
-        // Sync conversation metadata to D1 so the conversation list stays current
+        // streamText's onFinish fires when the LLM is done, BEFORE the SDK
+        // persists the assistant message to this.messages. So we use the
+        // result `text` directly and add +1 for the assistant message.
         const now = Date.now();
-        const totalMessages = this.messages.length;
-        const lastMsg = this.messages[totalMessages - 1];
-        const preview = lastMsg
-          ? extractTextPreview(lastMsg).slice(0, 100)
-          : null;
+        const totalMessages = messageCount + 1; // +1 for the assistant reply
+        const preview = (text || "...").slice(0, 100);
 
         this.env.DB.batch([
           this.env.DB.prepare(
@@ -152,27 +151,24 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
           ).bind(totalMessages, preview, now, now, sessionId),
         ]).catch((e) => console.warn("D1 metadata sync failed:", e));
 
-        // Generate title after 2nd message (1 user + 1 assistant)
+        // Generate title after first exchange (1 user + 1 assistant = 2)
         if (userId && messageCount <= 2) {
-          const simplifiedMessages = this.messages.slice(0, 5).map((m) => ({
+          // Build simplified messages from what we have: this.messages
+          // contains the user message(s), plus the assistant text from result
+          const simplifiedMessages = this.messages.map((m) => ({
             role: m.role,
-            content:
-              typeof m.content === "string"
-                ? m.content
-                : m.parts
-                    ?.filter(
-                      (p: { type: string }) => p.type === "text"
-                    )
-                    .map(
-                      (p: { type: string; text?: string }) => p.text || ""
-                    )
-                    .join("") || "",
+            content: m.parts
+              .filter((p): p is Extract<typeof p, { type: "text" }> => p.type === "text")
+              .map((p) => p.text)
+              .join("") || "",
           }));
-          // Fire-and-forget title generation
+          // Append the assistant reply (not yet in this.messages)
+          simplifiedMessages.push({ role: "assistant", content: text });
+
           generateAndUpdateTitle(
             this.env.DB,
             sessionId,
-            simplifiedMessages,
+            simplifiedMessages.slice(0, 5),
             this.env
           ).catch((e) => console.warn("Title generation failed:", e));
         }
