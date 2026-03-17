@@ -3,7 +3,7 @@
  * @module App
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Routes, Route, useLocation } from 'react-router-dom';
 import { HomeRoute, ChatRoute } from './routes';
 import useAppleMusic from './hooks/useAppleMusic';
@@ -17,6 +17,7 @@ import { LoginScreen } from './components/LoginScreen';
 import { WaitlistGate } from './components/WaitlistGate';
 import { useWaitlistGate } from './hooks/useWaitlistGate';
 import { useChatStore } from './store/chatStore';
+import type { MusicActions } from './hooks/useAgentChatAdapter';
 
 function App() {
   const location = useLocation();
@@ -82,7 +83,10 @@ function App() {
     playbackTime,
     seekTo,
     logout: appleMusicLogout,
-    executeAgentActions: rawExecuteAgentActions,
+    agentPlayTrack,
+    agentAddToQueue,
+    agentSkipNext,
+    agentRemoveTrack,
     syncMusicKitState,
     syncPlaylistToBackend,
     restoreStateFromBackend,
@@ -101,13 +105,33 @@ function App() {
 
   const isViewingPlayingConversation = !!playingSessionId && playingSessionId === activeSessionId;
 
-  const executeAgentActions = useCallback(async (actions: import('./types').AgentAction[]) => {
+  // Ensure the playing session is set before executing any agent action
+  const ensurePlayingSession = useCallback(() => {
     if (activeSessionId) {
       setPlayingSessionId(activeSessionId);
       updatePlayingPlaylist(activeSessionId, useChatStore.getState().viewedPlaylist);
     }
-    await rawExecuteAgentActions(actions);
-  }, [activeSessionId, rawExecuteAgentActions, updatePlayingPlaylist]);
+  }, [activeSessionId, updatePlayingPlaylist]);
+
+  // Music actions for client tools — each wraps the agent action with session setup
+  const musicActions: MusicActions = useMemo(() => ({
+    playTrack: async (index: number) => {
+      ensurePlayingSession();
+      return agentPlayTrack(index);
+    },
+    addToQueue: async (trackId: string) => {
+      ensurePlayingSession();
+      return agentAddToQueue(trackId);
+    },
+    skipNext: async () => {
+      ensurePlayingSession();
+      return agentSkipNext();
+    },
+    removeTrack: async (index: number) => {
+      ensurePlayingSession();
+      return agentRemoveTrack(index);
+    },
+  }), [ensurePlayingSession, agentPlayTrack, agentAddToQueue, agentSkipNext, agentRemoveTrack]);
 
   const wrappedPlayAppleTrack = useCallback(async (index: number) => {
     if (activeSessionId) {
@@ -260,7 +284,7 @@ function App() {
             toggleApple={toggleApple}
             playbackTime={playbackTime}
             seekTo={seekTo}
-            executeAgentActions={executeAgentActions}
+            musicActions={musicActions}
             fetchConversations={fetchConversations}
             onLogout={logout}
             onLinkApple={linkApple}
@@ -288,7 +312,7 @@ function App() {
             seekTo={seekTo}
             appleQueue={appleQueue}
             playAppleTrack={wrappedPlayAppleTrack}
-            executeAgentActions={executeAgentActions}
+            musicActions={musicActions}
             fetchConversations={fetchConversations}
             onLogout={logout}
             onLinkApple={linkApple}

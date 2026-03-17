@@ -13,7 +13,8 @@ import { ChatInput } from './chat/ChatInput';
 import { TranscriptOverlay } from './chat/TranscriptOverlay';
 import { useChat } from '../hooks/useChat';
 import { useInitialMessage } from '../hooks/useChatHelpers';
-import type { Track, PlaybackTime, Message, AgentAction } from '../types';
+import type { Track, PlaybackTime, Message } from '../types';
+import type { MusicActions } from '../hooks/useAgentChatAdapter';
 
 interface ChatInterfaceProps {
   /** Whether the DJ is currently speaking */
@@ -36,8 +37,8 @@ interface ChatInterfaceProps {
   userId: string | null;
   /** Whether Apple Music is authorized */
   isAppleMusicAuthorized: boolean;
-  /** Callback for agent actions */
-  onAgentActions?: (actions: AgentAction[]) => Promise<void> | void;
+  /** Music actions for client tools (player control) */
+  musicActions?: MusicActions;
   /** Callback when message is sent */
   onMessageSent?: () => void;
   /** Callback when new session is created */
@@ -72,7 +73,7 @@ export const ChatInterface = ({
   sessionId,
   userId,
   isAppleMusicAuthorized,
-  onAgentActions,
+  musicActions,
   onMessageSent,
   onSessionCreated,
   onLinkApple,
@@ -96,7 +97,7 @@ export const ChatInterface = ({
   } = useChat({
     sessionId,
     userId,
-    onAgentActions,
+    musicActions,
     onMessageSent,
     onSessionCreated,
   });

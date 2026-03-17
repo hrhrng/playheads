@@ -1,10 +1,13 @@
 /**
- * Music tools for the Playhead DJ agent.
- * Ported from apps/backend/agent.py tools using Vercel AI SDK tool() format.
+ * Server-side music tools for the Playhead DJ agent.
+ *
+ * Player control tools (play_track, skip_next, remove_from_playlist,
+ * add_to_queue) are defined as client tools on the frontend so they
+ * execute directly against MusicKit JS.
  */
 import { tool } from "ai";
 import { z } from "zod";
-import { appleMusicGet, parseTrackFromSong } from "../apple-music";
+import { appleMusicGet } from "../apple-music";
 import type { Env, PlaybackState } from "../types";
 
 /**
@@ -18,9 +21,8 @@ export interface ToolContext {
 }
 
 /**
- * Create all music tools bound to the given context.
- * This pattern allows tools to access env, state, and emitAction
- * without global variables.
+ * Create server-side music tools bound to the given context.
+ * Player control tools are handled as client tools on the frontend.
  */
 export function createMusicTools(ctx: ToolContext) {
   return {
@@ -60,98 +62,6 @@ export function createMusicTools(ctx: ToolContext) {
         } catch (e) {
           return `Error searching music: ${String(e)}`;
         }
-      },
-    }),
-
-    add_to_queue: tool({
-      description:
-        "Add a track to the queue by its Apple Music ID (from search_music results).",
-      inputSchema: z.object({
-        track_id: z
-          .string()
-          .describe('Apple Music song ID (e.g. "12345" from search results)'),
-      }),
-      execute: async ({ track_id }) => {
-        try {
-          const result = await appleMusicGet(
-            `v1/catalog/us/songs/${track_id}`,
-            ctx.env
-          );
-
-          const songs =
-            (result.data as Array<Record<string, unknown>>) || [];
-          if (!songs.length) {
-            return { message: `No track found for ID '${track_id}'.` };
-          }
-
-          const track = parseTrackFromSong(songs[0]);
-
-          return {
-            message: `Added '${track.name}' by ${track.artist} to queue.`,
-            action: {
-              type: "add_to_queue",
-              track_id: track.id,
-              name: track.name,
-              artist: track.artist,
-              album: track.album,
-              artwork_url: track.artwork_url,
-              duration: track.duration,
-            },
-          };
-        } catch (e) {
-          return { message: `Error adding to queue: ${String(e)}` };
-        }
-      },
-    }),
-
-    play_track: tool({
-      description:
-        "Play a specific track from the playlist by its position number (1-indexed).",
-      inputSchema: z.object({
-        index: z
-          .string()
-          .describe("Track position number starting from 1"),
-      }),
-      execute: async ({ index }) => {
-        const idx = parseInt(index);
-        if (isNaN(idx)) {
-          return { message: "Please provide a valid track number." };
-        }
-        return {
-          message: `Playing track ${idx}.`,
-          action: { type: "play_track", index: idx - 1 },
-        };
-      },
-    }),
-
-    skip_next: tool({
-      description: "Skip to the next track in the playlist.",
-      inputSchema: z.object({}),
-      execute: async () => {
-        return {
-          message: "Skipping to the next track.",
-          action: { type: "skip_next" },
-        };
-      },
-    }),
-
-    remove_from_playlist: tool({
-      description:
-        "Remove a track from the playlist by its position number (1-indexed).",
-      inputSchema: z.object({
-        index: z
-          .string()
-          .describe("Track position number starting from 1"),
-      }),
-      execute: async ({ index }) => {
-        const idx = parseInt(index);
-        if (isNaN(idx)) {
-          return { message: "Please provide a valid track number." };
-        }
-        return {
-          message: `Removed track ${idx} from playlist.`,
-          action: { type: "remove_track", index: idx - 1 },
-        };
       },
     }),
 

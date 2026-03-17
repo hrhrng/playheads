@@ -15,7 +15,6 @@ import type {
   FormattedTrack,
   SearchResultItem,
   MusicKitInstance,
-  AgentAction
 } from '../types/index.d';
 
 interface UseAppleMusicParams {
@@ -53,7 +52,11 @@ interface UseAppleMusicReturn {
   seekTo: (time: number) => void;
   skipNext: () => Promise<void>;
   skipPrev: () => Promise<void>;
-  executeAgentActions: (actions: AgentAction[]) => Promise<void>;
+  /** Client tool actions for AI agent — return string results for the AI */
+  agentPlayTrack: (index: number) => Promise<string>;
+  agentAddToQueue: (trackId: string) => Promise<string>;
+  agentSkipNext: () => Promise<string>;
+  agentRemoveTrack: (index: number) => Promise<string>;
   /** Sync real MusicKit playback state to backend DB (reads from MusicKit, not React) */
   syncMusicKitState: () => Promise<void>;
   /** Sync just the playlist to backend (no MusicKit auth required) */
@@ -247,109 +250,105 @@ export default function useAppleMusic({
   }, []);
 
   // ==========================================================================
-  // Execute agent commands
-  // After each action, sync MusicKit state to backend as an ACK so the
-  // next agent turn reads real state from DB.
+  // Client tool actions — called by useAgentChat client tools.
+  // Each returns a string result that flows back to the AI.
   // ==========================================================================
-  const executeAgentActions = useCallback(async (actions: AgentAction[]): Promise<void> => {
-    if (!musicKit || !actions || actions.length === 0) return;
 
-    for (const action of actions) {
-      switch (action.type) {
-        case 'play_track': {
-          const index = action.data?.index as number | undefined;
-          if (index == null || index < 0) break;
+  const agentPlayTrack = useCallback(async (index: number): Promise<string> => {
+    if (!musicKit) return 'Apple Music is not connected.';
 
-          const targetTrack = playingPlaylistRef.current[index];
-          if (!targetTrack?.id) {
-            console.error('[Agent] play_track: no track at index', { index });
-            break;
-          }
-
-          try {
-            pendingQueueRef.current = null;
-            await musicKit.setQueue({ song: targetTrack.id, startPlaying: true } as any);
-          } catch (e) {
-            console.error('[Agent] play_track error:', e);
-            const classified = classifyError(e);
-            if (classified.category === ErrorCategory.AUTH_EXPIRED) {
-              handleAuthLost();
-              return;
-            }
-            showErrorToast(e, 'playback');
-          }
-          break;
-        }
-
-        case 'add_to_queue': {
-          const trackId = action.data?.track_id as string | undefined;
-          if (!trackId || trackId === 'undefined' || trackId === 'null') {
-            console.error('[Agent] add_to_queue: invalid track_id', action.data);
-            break;
-          }
-          try {
-            await (musicKit as any).playLater({ songs: [trackId] });
-          } catch (e) {
-            console.error('[Agent] add_to_queue playLater error:', e);
-            const classified = classifyError(e);
-            if (classified.category === ErrorCategory.AUTH_EXPIRED) {
-              handleAuthLost();
-              return;
-            }
-            showErrorToast(e, 'queue management');
-          }
-          break;
-        }
-
-        case 'skip_next': {
-          const playlist = playingPlaylistRef.current;
-          const currentId = musicKit.nowPlayingItem?.id;
-          if (currentId && playlist.length > 0) {
-            const currentIdx = playlist.findIndex(t => t.id === currentId);
-            const nextTrack = playlist[currentIdx + 1];
-            if (nextTrack?.id) {
-              try {
-                await musicKit.setQueue({ song: nextTrack.id, startPlaying: true } as any);
-              } catch (e) {
-                console.error('[Agent] skip_next error:', e);
-                const classified = classifyError(e);
-                if (classified.category === ErrorCategory.AUTH_EXPIRED) {
-                  handleAuthLost();
-                  return;
-                }
-                showErrorToast(e, 'playback');
-              }
-            }
-          }
-          break;
-        }
-
-        case 'remove_track': {
-          const index = action.data?.index as number | undefined;
-          if (index != null && index >= 0 && index < musicKit.queue.items.length) {
-            try {
-              await musicKit.queue.remove(index);
-            } catch (e) {
-              console.error('[Agent] remove_track error:', e);
-              const classified = classifyError(e);
-              if (classified.category === ErrorCategory.AUTH_EXPIRED) {
-                handleAuthLost();
-                return;
-              }
-              showErrorToast(e, 'queue management');
-            }
-          }
-          break;
-        }
-
-        default:
-          console.warn('[Agent] Unknown action type:', action.type);
-      }
+    const targetTrack = playingPlaylistRef.current[index];
+    if (!targetTrack?.id) {
+      return `No track at position ${index + 1}.`;
     }
 
-    // Fire-and-forget single sync after all actions complete.
-    // Avoids blocking the SSE stream with per-action awaits (Bug 3: "ON AIR..." hang).
-    syncMusicKitState();
+    try {
+      pendingQueueRef.current = null;
+      await musicKit.setQueue({ song: targetTrack.id, startPlaying: true } as any);
+      syncMusicKitState();
+      return `Now playing: ${targetTrack.name} by ${targetTrack.artist}`;
+    } catch (e) {
+      console.error('[Agent] play_track error:', e);
+      const classified = classifyError(e);
+      if (classified.category === ErrorCategory.AUTH_EXPIRED) {
+        handleAuthLost();
+        return 'Apple Music session expired. Please reconnect.';
+      }
+      return `Error playing track: ${String(e)}`;
+    }
+  }, [musicKit, syncMusicKitState, handleAuthLost]);
+
+  const agentAddToQueue = useCallback(async (trackId: string): Promise<string> => {
+    if (!musicKit) return 'Apple Music is not connected.';
+    if (!trackId || trackId === 'undefined' || trackId === 'null') {
+      return 'Invalid track ID.';
+    }
+
+    try {
+      await (musicKit as any).playLater({ songs: [trackId] });
+      syncMusicKitState();
+      return `Added track ${trackId} to queue.`;
+    } catch (e) {
+      console.error('[Agent] add_to_queue error:', e);
+      const classified = classifyError(e);
+      if (classified.category === ErrorCategory.AUTH_EXPIRED) {
+        handleAuthLost();
+        return 'Apple Music session expired. Please reconnect.';
+      }
+      return `Error adding to queue: ${String(e)}`;
+    }
+  }, [musicKit, syncMusicKitState, handleAuthLost]);
+
+  const agentSkipNext = useCallback(async (): Promise<string> => {
+    if (!musicKit) return 'Apple Music is not connected.';
+
+    const playlist = playingPlaylistRef.current;
+    const currentId = musicKit.nowPlayingItem?.id;
+    if (!currentId || playlist.length === 0) {
+      return 'No track is playing or playlist is empty.';
+    }
+
+    const currentIdx = playlist.findIndex(t => t.id === currentId);
+    const nextTrack = playlist[currentIdx + 1];
+    if (!nextTrack?.id) {
+      return 'Already at the last track in the playlist.';
+    }
+
+    try {
+      await musicKit.setQueue({ song: nextTrack.id, startPlaying: true } as any);
+      syncMusicKitState();
+      return `Skipped to: ${nextTrack.name} by ${nextTrack.artist}`;
+    } catch (e) {
+      console.error('[Agent] skip_next error:', e);
+      const classified = classifyError(e);
+      if (classified.category === ErrorCategory.AUTH_EXPIRED) {
+        handleAuthLost();
+        return 'Apple Music session expired. Please reconnect.';
+      }
+      return `Error skipping track: ${String(e)}`;
+    }
+  }, [musicKit, syncMusicKitState, handleAuthLost]);
+
+  const agentRemoveTrack = useCallback(async (index: number): Promise<string> => {
+    if (!musicKit) return 'Apple Music is not connected.';
+
+    if (index < 0 || index >= musicKit.queue.items.length) {
+      return `No track at position ${index + 1}.`;
+    }
+
+    try {
+      await musicKit.queue.remove(index);
+      syncMusicKitState();
+      return `Removed track at position ${index + 1}.`;
+    } catch (e) {
+      console.error('[Agent] remove_track error:', e);
+      const classified = classifyError(e);
+      if (classified.category === ErrorCategory.AUTH_EXPIRED) {
+        handleAuthLost();
+        return 'Apple Music session expired. Please reconnect.';
+      }
+      return `Error removing track: ${String(e)}`;
+    }
   }, [musicKit, syncMusicKitState, handleAuthLost]);
 
   // ==========================================================================
@@ -973,7 +972,10 @@ export default function useAppleMusic({
     skipNext,
     skipPrev,
     isInitializing,
-    executeAgentActions,
+    agentPlayTrack,
+    agentAddToQueue,
+    agentSkipNext,
+    agentRemoveTrack,
     syncMusicKitState,
     syncPlaylistToBackend,
     restoreStateFromBackend,

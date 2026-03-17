@@ -7,7 +7,7 @@
  *
  * Ported from apps/backend/agent.py
  */
-import { AIChatAgent } from "@cloudflare/ai-chat";
+import { AIChatAgent, createToolsFromClientSchemas } from "@cloudflare/ai-chat";
 import { streamText, convertToModelMessages, stepCountIs } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createMusicTools } from "./tools";
@@ -97,11 +97,14 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
     onFinish?: Parameters<AIChatAgent<Env, PlaybackState>["onChatMessage"]>[0],
     options?: Parameters<AIChatAgent<Env, PlaybackState>["onChatMessage"]>[1]
   ) {
-    // Create tools bound to current context
-    const tools = createMusicTools({
+    // Merge server tools with client tool stubs (player control tools
+    // are defined on the frontend and execute against MusicKit JS).
+    const serverTools = createMusicTools({
       env: this.env,
       state: this.state,
     });
+    const clientToolStubs = createToolsFromClientSchemas(options?.clientTools);
+    const tools = { ...serverTools, ...clientToolStubs };
 
     // Route through Cloudflare AI Gateway
     const anthropic = createAnthropic({

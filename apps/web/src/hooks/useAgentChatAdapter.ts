@@ -2,19 +2,31 @@
  * Adapter hook that wraps Cloudflare Agents SDK's useAgentChat
  * and maps UIMessage format to our app's Message format.
  *
- * This allows existing rendering components (TranscriptOverlay, MessageList)
- * to work without changes while using the new WebSocket-based agent protocol.
+ * Player control tools (play_track, add_to_queue, skip_next,
+ * remove_from_playlist) are registered as client tools so they
+ * execute directly against MusicKit JS on the frontend.
  */
-import { useRef, useMemo, useCallback, useEffect } from "react";
+import { useMemo, useCallback } from "react";
 import { useAgent } from "agents/react";
 import { useAgentChat } from "@cloudflare/ai-chat/react";
 import type { UIMessage } from "ai";
-import type { Message, MessagePart, AgentAction } from "../types/chat";
+import type { Message, MessagePart } from "../types/chat";
+
+/**
+ * Music action callbacks provided by useAppleMusic.
+ * Each returns a string result that is sent back to the AI.
+ */
+export interface MusicActions {
+  playTrack: (index: number) => Promise<string>;
+  addToQueue: (trackId: string) => Promise<string>;
+  skipNext: () => Promise<string>;
+  removeTrack: (index: number) => Promise<string>;
+}
 
 interface UseAgentChatAdapterParams {
   sessionId: string;
   userId: string;
-  onAgentActions?: (actions: AgentAction[]) => Promise<void> | void;
+  musicActions?: MusicActions;
   onMessageSent?: () => void;
 }
 
@@ -86,64 +98,95 @@ function mapUIMessagesToMessages(uiMessages: UIMessage[]): Message[] {
 }
 
 /**
- * Music action tool names that trigger MusicKit commands on the frontend.
+ * Build client tool definitions for player control.
+ * These tools execute on the frontend via MusicKit JS; their schemas
+ * are automatically sent to the server by useAgentChat.
  */
-const ACTION_TOOLS = new Set([
-  "add_to_queue",
-  "play_track",
-  "skip_next",
-  "remove_from_playlist",
-]);
-
-/**
- * Extract MusicKit actions from tool invocation results.
- * Tools return { message, action } objects where action contains MusicKit command data.
- */
-function extractActionsFromMessages(uiMessages: UIMessage[]): AgentAction[] {
-  const actions: AgentAction[] = [];
-  for (const msg of uiMessages) {
-    if (msg.role !== "assistant") continue;
-    for (const part of msg.parts) {
-      if (part.type !== "dynamic-tool" && !part.type.startsWith("tool-")) continue;
-      const toolPart = part as unknown as {
-        toolCallId: string;
-        toolName?: string;
-        state: string;
-        output?: unknown;
-      };
-      if (toolPart.state !== "output-available") continue;
-      const toolName = toolPart.toolName || part.type.replace(/^tool-/, "");
-      if (!ACTION_TOOLS.has(toolName)) continue;
-
-      const result = toolPart.output;
-      if (result && typeof result === "object" && "action" in result) {
-        const actionData = (result as { action: Record<string, unknown> }).action;
-        if (actionData && typeof actionData.type === "string") {
-          actions.push({
-            type: actionData.type as AgentAction["type"],
-            data: actionData,
-          });
-        }
-      }
-    }
-  }
-  return actions;
+function buildClientTools(actions: MusicActions) {
+  return {
+    play_track: {
+      description:
+        "Play a specific track from the playlist by its position number (1-indexed).",
+      parameters: {
+        type: "object" as const,
+        properties: {
+          index: {
+            type: "string" as const,
+            description: "Track position number starting from 1",
+          },
+        },
+        required: ["index"] as const,
+      },
+      execute: async (input: { index: string }) => {
+        const idx = parseInt(input.index);
+        if (isNaN(idx)) return "Please provide a valid track number.";
+        return await actions.playTrack(idx - 1);
+      },
+    },
+    add_to_queue: {
+      description:
+        "Add a track to the queue by its Apple Music ID (from search_music results).",
+      parameters: {
+        type: "object" as const,
+        properties: {
+          track_id: {
+            type: "string" as const,
+            description:
+              'Apple Music song ID (e.g. "12345" from search results)',
+          },
+        },
+        required: ["track_id"] as const,
+      },
+      execute: async (input: { track_id: string }) => {
+        return await actions.addToQueue(input.track_id);
+      },
+    },
+    skip_next: {
+      description: "Skip to the next track in the playlist.",
+      parameters: { type: "object" as const, properties: {} },
+      execute: async () => {
+        return await actions.skipNext();
+      },
+    },
+    remove_from_playlist: {
+      description:
+        "Remove a track from the playlist by its position number (1-indexed).",
+      parameters: {
+        type: "object" as const,
+        properties: {
+          index: {
+            type: "string" as const,
+            description: "Track position number starting from 1",
+          },
+        },
+        required: ["index"] as const,
+      },
+      execute: async (input: { index: string }) => {
+        const idx = parseInt(input.index);
+        if (isNaN(idx)) return "Please provide a valid track number.";
+        return await actions.removeTrack(idx - 1);
+      },
+    },
+  };
 }
 
 export function useAgentChatAdapter({
   sessionId,
   userId,
-  onAgentActions,
+  musicActions,
   onMessageSent,
 }: UseAgentChatAdapterParams): UseAgentChatAdapterReturn {
-  // Track which actions we've already dispatched to avoid duplicates
-  const processedActionsRef = useRef(new Set<string>());
-
   // Connect to the MusicChatAgent DO keyed by sessionId
   const agent = useAgent({
     agent: "MusicChatAgent",
     name: sessionId,
   });
+
+  // Build client tools from musicActions (stable reference via useMemo)
+  const clientTools = useMemo(
+    () => (musicActions ? buildClientTools(musicActions) : undefined),
+    [musicActions]
+  );
 
   const {
     messages: uiMessages,
@@ -153,6 +196,9 @@ export function useAgentChatAdapter({
   } = useAgentChat({
     agent,
     body: { session_id: sessionId, user_id: userId },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    tools: clientTools as any,
+    experimental_automaticToolResolution: !!clientTools,
   });
 
   // Map UIMessage[] → Message[]
@@ -160,27 +206,6 @@ export function useAgentChatAdapter({
     () => mapUIMessagesToMessages(uiMessages),
     [uiMessages]
   );
-
-  // Process music actions from tool results
-  useEffect(() => {
-    if (!onAgentActions) return;
-
-    const allActions = extractActionsFromMessages(uiMessages);
-    const newActions: AgentAction[] = [];
-
-    for (const action of allActions) {
-      // Create a stable key for deduplication
-      const key = JSON.stringify(action);
-      if (!processedActionsRef.current.has(key)) {
-        processedActionsRef.current.add(key);
-        newActions.push(action);
-      }
-    }
-
-    if (newActions.length > 0) {
-      onAgentActions(newActions);
-    }
-  }, [uiMessages, onAgentActions]);
 
   // Wrap sendMessage to match our interface
   const sendMessage = useCallback(
