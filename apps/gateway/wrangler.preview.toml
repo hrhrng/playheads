@@ -19,6 +19,10 @@ service = "playheads-backend"
 binding = "ADMIN"
 service = "playheads-admin"
 
+[[services]]
+binding = "AGENT"
+service = "playheads-agent"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "playheads-db"
@@ -36,3 +40,4 @@ head_sampling_rate = 1
 APP_HOSTNAME = ""
 ADMIN_HOSTNAME = ""
 PREVIEW_DOMAIN = ""
+USE_NEW_AGENT = "false"

@@ -173,7 +173,7 @@ export function useAgentChatAdapter({
   // Wrap sendMessage to match our interface
   const sendMessage = useCallback(
     (text: string) => {
-      agentSendMessage({ prompt: text });
+      agentSendMessage({ text });
       onMessageSent?.();
     },
     [agentSendMessage, onMessageSent]
