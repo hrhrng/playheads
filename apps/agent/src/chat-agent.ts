@@ -86,16 +86,10 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
     onFinish?: Parameters<AIChatAgent<Env, PlaybackState>["onChatMessage"]>[0],
     options?: Parameters<AIChatAgent<Env, PlaybackState>["onChatMessage"]>[1]
   ) {
-    // Collect MusicKit actions emitted by tools during this request
-    const pendingActions: Array<{ type: string; data: Record<string, unknown> }> = [];
-
     // Create tools bound to current context
     const tools = createMusicTools({
       env: this.env,
       state: this.state,
-      emitAction: (type, data) => {
-        pendingActions.push({ type, data });
-      },
     });
 
     // Select LLM provider via AI Gateway

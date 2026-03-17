@@ -15,7 +15,6 @@ import type { Env, PlaybackState } from "../types";
 export interface ToolContext {
   env: Env;
   state: PlaybackState;
-  emitAction: (type: string, data: Record<string, unknown>) => void;
 }
 
 /**
@@ -82,24 +81,25 @@ export function createMusicTools(ctx: ToolContext) {
           const songs =
             (result.data as Array<Record<string, unknown>>) || [];
           if (!songs.length) {
-            return `No track found for ID '${track_id}'.`;
+            return { message: `No track found for ID '${track_id}'.` };
           }
 
           const track = parseTrackFromSong(songs[0]);
 
-          ctx.emitAction("add_to_queue", {
-            query: `${track.name} ${track.artist}`,
-            track_id: track.id,
-            name: track.name,
-            artist: track.artist,
-            album: track.album,
-            artwork_url: track.artwork_url,
-            duration: track.duration,
-          });
-
-          return `Added '${track.name}' by ${track.artist} to queue.`;
+          return {
+            message: `Added '${track.name}' by ${track.artist} to queue.`,
+            action: {
+              type: "add_to_queue",
+              track_id: track.id,
+              name: track.name,
+              artist: track.artist,
+              album: track.album,
+              artwork_url: track.artwork_url,
+              duration: track.duration,
+            },
+          };
         } catch (e) {
-          return `Error adding to queue: ${String(e)}`;
+          return { message: `Error adding to queue: ${String(e)}` };
         }
       },
     }),
@@ -115,10 +115,12 @@ export function createMusicTools(ctx: ToolContext) {
       execute: async ({ index }) => {
         const idx = parseInt(index);
         if (isNaN(idx)) {
-          return "Please provide a valid track number.";
+          return { message: "Please provide a valid track number." };
         }
-        ctx.emitAction("play_track", { index: idx - 1 });
-        return `Playing track ${idx}.`;
+        return {
+          message: `Playing track ${idx}.`,
+          action: { type: "play_track", index: idx - 1 },
+        };
       },
     }),
 
@@ -126,8 +128,10 @@ export function createMusicTools(ctx: ToolContext) {
       description: "Skip to the next track in the playlist.",
       parameters: z.object({}),
       execute: async () => {
-        ctx.emitAction("skip_next", {});
-        return "Skipping to the next track.";
+        return {
+          message: "Skipping to the next track.",
+          action: { type: "skip_next" },
+        };
       },
     }),
 
@@ -142,10 +146,12 @@ export function createMusicTools(ctx: ToolContext) {
       execute: async ({ index }) => {
         const idx = parseInt(index);
         if (isNaN(idx)) {
-          return "Please provide a valid track number.";
+          return { message: "Please provide a valid track number." };
         }
-        ctx.emitAction("remove_track", { index: idx - 1 });
-        return `Removed track ${idx} from playlist.`;
+        return {
+          message: `Removed track ${idx} from playlist.`,
+          action: { type: "remove_track", index: idx - 1 },
+        };
       },
     }),
 

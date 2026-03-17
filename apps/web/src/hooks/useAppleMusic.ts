@@ -9,7 +9,6 @@ import { classifyError, showErrorToast } from '../utils/errorHandling';
 import { ErrorCategory } from '../types/errors';
 import { API_BASE } from '../config/api';
 import type { MusicKitConfig } from '../types/musicKit';
-import { useChatStore } from '../store/chatStore';
 import type {
   Track,
   PlaybackTime,

@@ -1,13 +1,19 @@
 /**
- * Main chat hook - handles chat lifecycle and session management
+ * Main chat hook - handles chat lifecycle and session management.
+ *
+ * Uses useAgentChatAdapter for WebSocket-based communication with
+ * the Cloudflare AIChatAgent (MusicChatAgent DO).
+ *
  * @module hooks/useChat
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { flushSync } from 'react-dom';
 import { toast } from 'sonner';
 import { useLocation, useNavigate, type NavigateFunction } from 'react-router-dom';
+import { useAgentChatAdapter } from './useAgentChatAdapter';
 import { useChatStore } from '../store/chatStore';
+import { API_BASE } from '../config/api';
 import type { Message, AgentAction } from '../types/chat';
 
 interface UseChatParams {
@@ -35,10 +41,8 @@ interface UseChatReturn {
 }
 
 /**
- * Main chat hook - manages chat lifecycle, session loading, and message sending
- *
- * @param params - Chat hook parameters
- * @returns Chat state and methods
+ * Main chat hook - manages chat lifecycle, session loading, and message sending.
+ * Delegates messaging to useAgentChatAdapter (WebSocket to AIChatAgent).
  */
 export function useChat({
   sessionId,
@@ -47,112 +51,72 @@ export function useChat({
   onMessageSent,
   onSessionCreated,
 }: UseChatParams): UseChatReturn {
-  const location = useLocation();
   const navigate = useNavigate() as NavigateFunction;
   const {
-    messages,
     input,
-    isLoading,
-    isLoadingHistory,
     showHistory,
     setInput,
     setShowHistory,
     toggleHistory,
-    sendMessage,
-    addUserMessage,
-    createSession,
-    loadHistory,
-    initialize
   } = useChatStore();
 
-  // Track the last loaded sessionId to know when we need to reload
-  const lastSessionIdRef = useRef<string | null>(null);
+  // Use the agent chat adapter when we have a session
+  const adapter = useAgentChatAdapter({
+    sessionId: sessionId || "__no_session__",
+    userId: userId || "",
+    onAgentActions,
+    onMessageSent,
+  });
 
-  // Initialize chat based on sessionId from URL
-  useEffect(() => {
-    // Sync userId to store
-    if (userId) {
-      initialize(sessionId, userId);
-    }
+  // Track whether we have a valid session for the adapter
+  const hasSession = !!sessionId && !!userId;
 
-    // No sessionId = new chat, clear everything
-    if (!sessionId) {
-      console.log('[useChat] No sessionId, clearing messages');
-      useChatStore.setState({ messages: [], sessionId: null, viewedPlaylist: [], isLoadingHistory: false });
-      lastSessionIdRef.current = null;
-      return;
-    }
+  // Messages come from the adapter when connected, empty otherwise
+  const messages = hasSession ? adapter.messages : [];
+  const isLoading = hasSession ? adapter.isLoading : false;
 
-    if (!userId) return;
-
-    // sessionId changed, load new session
-    if (sessionId !== lastSessionIdRef.current) {
-      console.log('[useChat] SessionId changed, loading:', sessionId);
-      lastSessionIdRef.current = sessionId;
-
-      // Check if we have preserved messages from navigation (newly created session)
-      const preservedMessages = location.state?.preservedMessages as Message[] | undefined;
-      const isNewlyCreated = location.state?.isNewlyCreated as boolean | undefined;
-
-      if (isNewlyCreated && preservedMessages) {
-        console.log('[useChat] Using preserved messages:', preservedMessages.length);
-        useChatStore.setState({ messages: preservedMessages, sessionId, viewedPlaylist: [] });
-        return;
-      }
-
-      // Load from backend
-      loadHistory(sessionId, userId).then(status => {
-        if (status === 'not_found') {
-          console.log('[useChat] Session not found, redirecting to home');
-          navigate('/', { replace: true });
-        }
-      });
-    }
-  }, [sessionId, userId]);
+  // No separate history loading needed - useAgentChat auto-loads from DO SQLite
+  const [isLoadingHistory] = useState(false);
 
   /**
    * Send message handler - creates session for new chats first
-   * Uses flushSync to ensure user message appears immediately
    */
   const creatingSessionRef = useRef(false);
 
-  const handleSendMessage = async (
+  const handleSendMessage = useCallback(async (
     text?: string,
-    skipAddingUserMessage = false
+    _skipAddingUserMessage = false
   ): Promise<void> => {
     const messageText = text || input;
     if (!messageText.trim() || isLoading) return;
 
     // For new chats without session, create session first and navigate
     if (!sessionId) {
-      if (creatingSessionRef.current) return; // prevent duplicate creates
+      if (creatingSessionRef.current) return;
       creatingSessionRef.current = true;
-      useChatStore.setState({ isLoading: true });
       try {
         if (!userId) {
           throw new Error('User ID is required');
         }
 
-        const newSessionId = await createSession(userId);
+        // Create session in D1 (for conversation listing)
+        const res = await fetch(`${API_BASE}/session/create`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: userId })
+        });
+        if (!res.ok) throw new Error('Failed to create session');
+        const { session_id: newSessionId } = await res.json() as { session_id: string };
 
-        // Add user message to preserved messages so it shows immediately on navigation
+        // Navigate to the new session - useAgentChat will connect automatically
         const userMessage: Message = { role: 'user', content: messageText };
         const preservedMessages = [...messages, userMessage];
 
-        // Reset loading before navigation so useInitialMessage can send
-        useChatStore.setState({ isLoading: false });
-
-        // Call onSessionCreated to trigger navigation
-        // Pass: (sessionId, messages with user message already included, initial message to send)
         if (onSessionCreated) {
           onSessionCreated(newSessionId, preservedMessages, messageText);
         }
-
-        // After navigation, the new ChatInterface instance will auto-send the message
-        // via useInitialMessage hook
       } catch (error) {
         console.error('Failed to create session:', error);
-        useChatStore.setState({ isLoading: false });
         toast.error('Failed to create chat session', {
           description: 'Please refresh the page or try again'
         });
@@ -160,18 +124,11 @@ export function useChat({
         creatingSessionRef.current = false;
       }
     } else {
-      // For existing chats, add user message synchronously first (unless skipped)
-      // This ensures the message appears immediately before "ON AIR..." loading
-      if (!skipAddingUserMessage) {
-        flushSync(() => {
-          addUserMessage(messageText);
-        });
-      }
-
-      // Send to backend — graph completes in a single pass, no interrupt/resume
-      await sendMessage(messageText, onAgentActions, onMessageSent);
+      // Clear input and send via WebSocket
+      useChatStore.setState({ input: '' });
+      adapter.sendMessage(messageText);
     }
-  };
+  }, [input, isLoading, sessionId, userId, messages, onSessionCreated, adapter]);
 
   return {
     messages,

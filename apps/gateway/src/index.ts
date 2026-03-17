@@ -68,6 +68,11 @@ export default {
       return env.ADMIN.fetch(request);
     }
 
+    // /agents/* → agent worker (WebSocket + HTTP for useAgentChat)
+    if (url.pathname.startsWith("/agents/") && env.USE_NEW_AGENT === "true" && env.AGENT) {
+      return env.AGENT.fetch(request);
+    }
+
     // /api/auth/* → better-auth handler
     if (url.pathname.startsWith("/api/auth")) {
       const db = drizzle(env.DB);

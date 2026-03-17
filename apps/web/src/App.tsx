@@ -155,26 +155,16 @@ function App() {
   const playlistSyncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSyncedPlaylistRef = useRef<string>('');
   const lastSyncedSessionRef = useRef<string | null>(null);
-  const isLoadingHistory = useChatStore(s => s.isLoadingHistory);
-
-  // Mark playlist sync as ready after first history load completes.
-  // This decouples playlist persistence from Apple Music auth — playlists
-  // created before connecting Apple Music will be synced to backend.
-  const historyLoadedOnce = useRef(false);
+  // With useAgentChat, messages load automatically via WebSocket —
+  // no separate loading state needed. Enable playlist sync immediately.
   useEffect(() => {
-    if (isLoadingHistory) {
-      historyLoadedOnce.current = true;
-    } else if (historyLoadedOnce.current) {
-      playlistSyncReady.current = true;
-    }
-  }, [isLoadingHistory]);
+    playlistSyncReady.current = true;
+  }, []);
 
   useEffect(() => {
     // Don't sync until history has loaded at least once — otherwise the empty
     // default viewedPlaylist overwrites the real playlist in the backend.
     if (!playlistSyncReady.current) return;
-    if (isLoadingHistory) return;
-
     if (activeSessionId !== lastSyncedSessionRef.current) {
       lastSyncedSessionRef.current = activeSessionId;
       lastSyncedPlaylistRef.current = '';
@@ -194,7 +184,7 @@ function App() {
     return () => {
       if (playlistSyncTimer.current) clearTimeout(playlistSyncTimer.current);
     };
-  }, [viewedPlaylist, activeSessionId, effectiveSession?.user?.id, isLoadingHistory, syncPlaylistToBackend, updatePlayingPlaylist]);
+  }, [viewedPlaylist, activeSessionId, effectiveSession?.user?.id, syncPlaylistToBackend, updatePlayingPlaylist]);
 
   const startPlaybackFromConversation = useCallback(async (trackIndex: number) => {
     if (!activeSessionId) return;
