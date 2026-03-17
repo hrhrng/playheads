@@ -903,8 +903,12 @@ export default function useAppleMusic({
       const currentIdx = playlist.findIndex(t => t.id === currentId);
       const nextTrack = playlist[currentIdx + 1];
       if (nextTrack?.id) {
+        const wasPlaying = (musicKit.playbackState as any) === 2 || (musicKit.playbackState as any) === 'playing';
         lastPlayingTrackIdRef.current = nextTrack.id;
-        await musicKit.setQueue({ song: nextTrack.id, startPlaying: true } as any);
+        await musicKit.setQueue({ song: nextTrack.id, startPlaying: wasPlaying } as any);
+        if (!wasPlaying) {
+          setCurrentTrack(musicKit.nowPlayingItem || { id: nextTrack.id, name: nextTrack.name, artistName: nextTrack.artist } as any);
+        }
         syncMusicKitState().catch(() => {});
       }
     } catch (e) {
@@ -931,8 +935,12 @@ export default function useAppleMusic({
       const currentIdx = playlist.findIndex(t => t.id === currentId);
       const prevTrack = playlist[currentIdx - 1];
       if (prevTrack?.id) {
+        const wasPlaying = (musicKit.playbackState as any) === 2 || (musicKit.playbackState as any) === 'playing';
         lastPlayingTrackIdRef.current = prevTrack.id;
-        await musicKit.setQueue({ song: prevTrack.id, startPlaying: true } as any);
+        await musicKit.setQueue({ song: prevTrack.id, startPlaying: wasPlaying } as any);
+        if (!wasPlaying) {
+          setCurrentTrack(musicKit.nowPlayingItem || { id: prevTrack.id, name: prevTrack.name, artistName: prevTrack.artist } as any);
+        }
         syncMusicKitState().catch(() => {});
       }
     } catch (e) {
