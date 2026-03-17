@@ -17,6 +17,7 @@ import { LoginScreen } from './components/LoginScreen';
 import { WaitlistGate } from './components/WaitlistGate';
 import { useWaitlistGate } from './hooks/useWaitlistGate';
 import { useChatStore } from './store/chatStore';
+import { API_BASE } from './config/api';
 import type { MusicActions } from './hooks/useAgentChatAdapter';
 
 function App() {
@@ -154,11 +155,29 @@ function App() {
 
     initialRestoreDone.current = true;
 
+    const returningToPlayingSession = playingSessionId && playingSessionId === activeSessionId;
     const alreadyPlayingElsewhere = playingSessionId && playingSessionId !== activeSessionId;
 
     let cancelled = false;
     (async () => {
-      if (alreadyPlayingElsewhere) {
+      if (returningToPlayingSession) {
+        // Navigating back to the session that already owns playback.
+        // MusicKit is already in the correct state — just refresh the
+        // viewed playlist from backend without touching MusicKit at all.
+        try {
+          const url = effectiveSession?.user?.id
+            ? `${API_BASE}/state?session_id=${activeSessionId}&user_id=${effectiveSession.user.id}`
+            : `${API_BASE}/state?session_id=${activeSessionId}`;
+          const res = await fetch(url);
+          if (!cancelled && res.ok) {
+            const data = await res.json();
+            const backendPlaylist = data.playlist || [];
+            if (backendPlaylist.length > 0 || viewedPlaylist.length === 0) {
+              setViewedPlaylist(backendPlaylist);
+            }
+          }
+        } catch { /* ignore — MusicKit state is already correct */ }
+      } else if (alreadyPlayingElsewhere) {
         // Restore playing session's state for MusicKit playback refs
         const playingData = await restoreStateFromBackend(playingSessionId);
         if (!cancelled && playingData) {
@@ -170,12 +189,10 @@ function App() {
           setViewedPlaylist(viewedData?.playlist || []);
         }
       } else {
+        // No playback session yet — full restore for this conversation
         const data = await restoreStateFromBackend(activeSessionId);
         if (!cancelled && data) {
           updatePlayingPlaylist(activeSessionId, data.playlist || []);
-          // Only overwrite local playlist if backend has actual data;
-          // otherwise keep the locally-created playlist (e.g. from SSE actions
-          // before Apple Music was connected).
           const backendPlaylist = data.playlist || [];
           if (backendPlaylist.length > 0 || viewedPlaylist.length === 0) {
             setViewedPlaylist(backendPlaylist);
