@@ -84,15 +84,18 @@ export async function appleMusicGet(
     }
   }
 
+  console.log("[appleMusicGet] %s %s", "GET", url.toString());
   const response = await fetch(url.toString(), {
     headers: buildHeaders(token, userToken),
   });
 
   if (!response.ok) {
     const text = await response.text();
+    console.error("[appleMusicGet] %d %s — %s", response.status, url.pathname, text.slice(0, 200));
     throw new AppleMusicError(response.status, text);
   }
 
+  console.log("[appleMusicGet] %d %s", response.status, url.pathname);
   return (await response.json()) as Record<string, unknown>;
 }
 

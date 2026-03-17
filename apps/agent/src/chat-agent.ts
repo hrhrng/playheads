@@ -113,6 +113,16 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
     const storefront = (body.storefront as string) || "us";
     const messageCount = this.messages.length;
 
+    console.log("[MusicChatAgent] onChatMessage", {
+      sessionId,
+      userId,
+      storefront,
+      messageCount,
+      playlistLength: this.state.playlist.length,
+      currentTrack: this.state.currentTrack?.name || null,
+      isPlaying: this.state.isPlaying,
+    });
+
     // All tools have `execute` on the server. Player control tools embed
     // `_action` in their results — the frontend picks these up and dispatches
     // MusicKit JS operations as a side effect (same as old SSE action pattern).
@@ -138,6 +148,7 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
       stopWhen: stepCountIs(10), // Allow multi-turn tool calling (replaces LangGraph agentic loop)
       abortSignal: options?.abortSignal,
       onFinish: async ({ text }) => {
+        console.log("[MusicChatAgent] onFinish sessionId=%s textLen=%d", sessionId, text?.length || 0);
         if (!sessionId) return;
 
         // streamText's onFinish fires when the LLM is done, BEFORE the SDK
