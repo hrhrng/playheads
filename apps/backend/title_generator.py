@@ -46,8 +46,17 @@ async def generate_conversation_title(messages: list[dict], timeout: int = 15) -
             return "New Conversation"
 
         # Build conversation context from first 5 messages
+        def _extract_text(m: dict) -> str:
+            if m.get('content'):
+                return m['content']
+            if m.get('parts'):
+                return " ".join(
+                    p.get('content', '') for p in m['parts'] if p.get('type') == 'text'
+                )
+            return ''
+
         conversation_text = "\n".join([
-            f"{m.get('role', 'unknown')}: {m.get('content', '')}"
+            f"{m.get('role', 'unknown')}: {_extract_text(m)}"
             for m in messages[:5]
         ])
 
