@@ -169,6 +169,7 @@ deploy-secrets-agent-preview:
 	cd apps/agent && npx wrangler secret put OPENAI_API_KEY
 	cd apps/agent && npx wrangler secret put CLOUDFLARE_ACCOUNT_ID
 	cd apps/agent && npx wrangler secret put AI_GATEWAY_ID
+	cd apps/agent && npx wrangler secret put CF_AIG_TOKEN
 	cd apps/agent && npx wrangler secret put APPLE_MUSIC_TEAM_ID
 	cd apps/agent && npx wrangler secret put APPLE_MUSIC_KEY_ID
 	cd apps/agent && npx wrangler secret put APPLE_MUSIC_PRIVATE_KEY

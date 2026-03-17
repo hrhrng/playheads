@@ -40,6 +40,7 @@ export async function generateConversationTitle(
     const aigateway = createAiGateway({
       accountId: env.CLOUDFLARE_ACCOUNT_ID,
       gateway: env.AI_GATEWAY_ID,
+      apiKey: env.CF_AIG_TOKEN,
     });
     const openai = createOpenAI({ apiKey: env.OPENAI_API_KEY });
 

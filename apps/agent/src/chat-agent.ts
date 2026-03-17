@@ -99,6 +99,7 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
     const aigateway = createAiGateway({
       accountId: this.env.CLOUDFLARE_ACCOUNT_ID,
       gateway: this.env.AI_GATEWAY_ID,
+      apiKey: this.env.CF_AIG_TOKEN,
     });
 
     let model;
