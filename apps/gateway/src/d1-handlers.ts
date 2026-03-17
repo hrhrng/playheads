@@ -268,6 +268,35 @@ export async function handleUpdateConversation(
 }
 
 // ---------------------------------------------------------------------------
+// GET /api/conversations/:id/title?user_id=...
+// ---------------------------------------------------------------------------
+export async function handleGetConversationTitle(
+  conversationId: string,
+  request: Request,
+  DB: D1,
+): Promise<Response> {
+  const url = new URL(request.url);
+  const userId = url.searchParams.get("user_id");
+  if (!userId) {
+    return Response.json({ error: "user_id required" }, { status: 400 });
+  }
+
+  const db = drizzle(DB);
+  const t = schema.conversation;
+
+  const [row] = await db
+    .select({ title: t.title })
+    .from(t)
+    .where(and(eq(t.id, conversationId), eq(t.userId, userId)));
+
+  if (!row) {
+    return Response.json({ error: "Not found" }, { status: 404 });
+  }
+
+  return Response.json({ title: row.title });
+}
+
+// ---------------------------------------------------------------------------
 // POST /api/session/create  { user_id }
 // ---------------------------------------------------------------------------
 export async function handleCreateSession(

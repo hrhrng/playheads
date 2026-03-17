@@ -42,7 +42,11 @@ function App() {
   // Waitlist gate (reads user_metadata from session, no external dependency)
   const waitlistStatus = useWaitlistGate(effectiveSession);
 
-  // Conversations CRUD
+  // Extract active session ID from URL
+  const pathParts = location.pathname.split('/');
+  const activeSessionId = (pathParts[1] === 'chat' && pathParts[2]) ? pathParts[2] : null;
+
+  // Conversations CRUD (with title polling for active session)
   const {
     conversations,
     fetchConversations,
@@ -52,7 +56,7 @@ function App() {
     loadMore: loadMoreConversations,
     hasMore: hasMoreConversations,
     isLoadingMore: isLoadingMoreConversations,
-  } = useConversations(session?.user?.id);
+  } = useConversations(session?.user?.id, activeSessionId);
 
   // Per-conversation playback state
   const [playingSessionId, setPlayingSessionId] = useState<string | null>(null);
@@ -60,10 +64,6 @@ function App() {
   const setViewedPlaylist = useChatStore(s => s.setViewedPlaylist);
   const initialRestoreDone = useRef(false);
   const playlistSyncReady = useRef(false);
-
-  // Extract active session ID from URL
-  const pathParts = location.pathname.split('/');
-  const activeSessionId = (pathParts[1] === 'chat' && pathParts[2]) ? pathParts[2] : null;
 
   // Apple Music account linking
   const {

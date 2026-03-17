@@ -1,11 +1,13 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { toast } from 'sonner';
 import { API_BASE } from '../config/api';
 import type { Conversation } from '../types';
 
 const PAGE_SIZE = 20;
+const TITLE_POLL_INTERVAL = 3000;
+const TITLE_POLL_MAX_ATTEMPTS = 20;
 
-export function useConversations(userId: string | null | undefined) {
+export function useConversations(userId: string | null | undefined, activeSessionId?: string | null) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -135,6 +137,51 @@ export function useConversations(userId: string | null | undefined) {
       fetchConversations();
     }
   }, [userId, fetchConversations]);
+
+  // ---------------------------------------------------------------------------
+  // Poll for title when the active conversation has no title yet
+  // ---------------------------------------------------------------------------
+  const conversationsRef = useRef(conversations);
+  conversationsRef.current = conversations;
+
+  useEffect(() => {
+    if (!userId || !activeSessionId) return;
+
+    // Already has a title — skip
+    const conv = conversationsRef.current.find(c => c.id === activeSessionId);
+    if (conv?.title) return;
+
+    let cancelled = false;
+    let attempts = 0;
+    let timer: ReturnType<typeof setTimeout>;
+
+    const poll = async () => {
+      if (cancelled) return;
+      try {
+        const res = await fetch(
+          `${API_BASE}/conversations/${activeSessionId}/title?user_id=${userId}`,
+        );
+        if (cancelled || !res.ok) return;
+        const data = await res.json();
+        if (data.title) {
+          setConversations(prev =>
+            prev.map(c =>
+              c.id === activeSessionId ? { ...c, title: data.title } : c,
+            ),
+          );
+          return; // Got title, stop polling
+        }
+      } catch { /* ignore */ }
+
+      attempts++;
+      if (!cancelled && attempts < TITLE_POLL_MAX_ATTEMPTS) {
+        timer = setTimeout(poll, TITLE_POLL_INTERVAL);
+      }
+    };
+
+    timer = setTimeout(poll, TITLE_POLL_INTERVAL);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [userId, activeSessionId]);
 
   return {
     conversations,
