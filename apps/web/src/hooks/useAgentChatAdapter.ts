@@ -24,6 +24,7 @@ export interface MusicActions {
   addToQueue: (trackId: string) => Promise<void>;
   skipNext: () => Promise<void>;
   removeTrack: (index: number) => Promise<void>;
+  storefront?: string;
 }
 
 /** Action payload embedded in server tool results. */
@@ -155,7 +156,7 @@ export function useAgentChatAdapter({
     status,
   } = useAgentChat({
     agent,
-    body: { session_id: sessionId, user_id: userId },
+    body: { session_id: sessionId, user_id: userId, storefront: musicActions?.storefront || 'us' },
   });
 
   // ── Side-effect: dispatch MusicKit actions from tool results ──

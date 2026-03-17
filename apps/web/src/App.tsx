@@ -91,6 +91,7 @@ function App() {
     syncPlaylistToBackend,
     restoreStateFromBackend,
     updatePlayingPlaylist,
+    storefrontId,
   } = useAppleMusic({
     userId: effectiveSession?.user.id || null,
     activeSessionId,
@@ -133,7 +134,8 @@ function App() {
       ensurePlayingSession();
       await agentRemoveTrack(index);
     },
-  }), [ensurePlayingSession, agentPlayTrack, agentAddToQueue, agentSkipNext, agentRemoveTrack]);
+    storefront: storefrontId,
+  }), [ensurePlayingSession, agentPlayTrack, agentAddToQueue, agentSkipNext, agentRemoveTrack, storefrontId]);
 
   const wrappedPlayAppleTrack = useCallback(async (index: number) => {
     if (activeSessionId) {

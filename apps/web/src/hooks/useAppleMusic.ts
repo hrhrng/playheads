@@ -65,6 +65,8 @@ interface UseAppleMusicReturn {
   restoreStateFromBackend: (targetSessionId?: string) => Promise<{ playlist?: FormattedTrack[]; current_track?: FormattedTrack | null; is_playing?: boolean; playback_position?: number } | null>;
   /** Update the playing session's playlist snapshot and session ID atomically */
   updatePlayingPlaylist: (targetSessionId: string, playlist: FormattedTrack[]) => void;
+  /** Apple Music storefront ID (e.g. 'us', 'cn', 'jp') */
+  storefrontId: string;
 }
 
 /**
@@ -990,6 +992,7 @@ export default function useAppleMusic({
     syncMusicKitState,
     syncPlaylistToBackend,
     restoreStateFromBackend,
-    updatePlayingPlaylist
+    updatePlayingPlaylist,
+    storefrontId: musicKit?.storefrontId || 'us',
   };
 }

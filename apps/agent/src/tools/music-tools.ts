@@ -20,6 +20,7 @@ import type { Env, PlaybackState } from "../types";
 export interface ToolContext {
   env: Env;
   state: PlaybackState;
+  storefront: string;
 }
 
 /** Action payload embedded in tool results for client-side MusicKit dispatch. */
@@ -51,7 +52,7 @@ export function createMusicTools(ctx: ToolContext) {
         try {
           // Fetch full track info from Apple Music catalog (like old Python backend)
           const result = await appleMusicGet(
-            `v1/catalog/us/songs/${track_id}`,
+            `v1/catalog/${ctx.storefront}/songs/${track_id}`,
             ctx.env
           );
           const songs = (result.data as Array<Record<string, unknown>>) || [];
@@ -165,7 +166,7 @@ export function createMusicTools(ctx: ToolContext) {
       execute: async ({ query }) => {
         try {
           const result = await appleMusicGet(
-            "v1/catalog/us/search",
+            `v1/catalog/${ctx.storefront}/search`,
             ctx.env,
             { term: query, types: "songs", limit: 5 }
           );

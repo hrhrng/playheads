@@ -106,12 +106,20 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
     onFinish?: Parameters<AIChatAgent<Env, PlaybackState>["onChatMessage"]>[0],
     options?: Parameters<AIChatAgent<Env, PlaybackState>["onChatMessage"]>[1]
   ) {
+    // Extract session context from custom body
+    const body = (options?.body || {}) as Record<string, unknown>;
+    const sessionId = body.session_id as string | undefined;
+    const userId = body.user_id as string | undefined;
+    const storefront = (body.storefront as string) || "us";
+    const messageCount = this.messages.length;
+
     // All tools have `execute` on the server. Player control tools embed
     // `_action` in their results — the frontend picks these up and dispatches
     // MusicKit JS operations as a side effect (same as old SSE action pattern).
     const tools = createMusicTools({
       env: this.env,
       state: this.state,
+      storefront,
     });
 
     // Route through Cloudflare AI Gateway
@@ -120,11 +128,6 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
       baseURL: `https://gateway.ai.cloudflare.com/v1/${this.env.CLOUDFLARE_ACCOUNT_ID}/${this.env.AI_GATEWAY_ID}/anthropic`,
     });
     const model = anthropic(this.env.ANTHROPIC_MODEL || "claude-sonnet-4-6");
-
-    // Extract session context from custom body
-    const sessionId = (options?.body as Record<string, unknown>)?.session_id as string | undefined;
-    const userId = (options?.body as Record<string, unknown>)?.user_id as string | undefined;
-    const messageCount = this.messages.length;
 
     const result = streamText({
       model,
