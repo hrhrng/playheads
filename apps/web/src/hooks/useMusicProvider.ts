@@ -119,7 +119,8 @@ export function useMusicProvider({
   const { playback, isAuthorized, isInitializing, storefrontId } = snapshot;
 
   // Global play queue
-  const queue = usePlayQueue({ provider, userId });
+  const queueHook = usePlayQueue({ provider, userId });
+  const finishRestore = (queueHook as any).finishRestore as () => void;
 
   // Restore queue + track display from backend once provider is ready.
   // Does NOT require Apple Music auth — displaying the track is independent.
@@ -135,7 +136,7 @@ export function useMusicProvider({
         if (queueRes.ok) {
           const data = await queueRes.json();
           if (data.queue?.length > 0) {
-            queue.setQueue(data.queue);
+            queueHook.setQueue(data.queue);
             const idx = data.currentIndex ?? -1;
             if (idx >= 0 && idx < data.queue.length) {
               provider.restoreTrackDisplay(data.queue[idx], 0);
@@ -144,18 +145,12 @@ export function useMusicProvider({
         }
       } catch (e) {
         console.error('[useMusicProvider] restore error:', e);
+      } finally {
+        // Mark restore complete — future state changes will sync to backend
+        finishRestore();
       }
     })();
   }, [provider, isInitializing, userId]);
-
-  // Periodic sync every 10s while playing
-  useEffect(() => {
-    if (!playback.isPlaying) return;
-    const interval = setInterval(() => {
-      // Just trigger a queue sync — the queue hook handles debounced sync
-    }, 10_000);
-    return () => clearInterval(interval);
-  }, [playback.isPlaying]);
 
   const login = useCallback(async () => {
     if (provider) await provider.login();
@@ -168,7 +163,7 @@ export function useMusicProvider({
   return {
     provider,
     playback,
-    queue,
+    queue: queueHook,
     storefrontId,
     isAuthorized,
     isInitializing,

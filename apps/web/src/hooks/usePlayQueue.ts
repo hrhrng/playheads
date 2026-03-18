@@ -5,7 +5,8 @@
  * Mirrors our track array to MusicKit via playWithQueue / addToNativeQueue.
  * Syncs currentIndex from MusicKit's nowPlayingItemDidChange events.
  *
- * If the user switches provider, the queue should be cleared externally.
+ * Backend sync is driven by a useEffect on queue/currentIndex state —
+ * any state change triggers a sync, regardless of the source.
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
@@ -39,33 +40,23 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
   const currentIndexRef = useRef(currentIndex);
   currentIndexRef.current = currentIndex;
 
-  // ── Backend sync (debounced) ────────────────────────────────────
-  const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastSyncedRef = useRef<string>('');
+  // ── Backend sync: driven by React state changes ─────────────────
+  // Skip the very first render (initial empty state) and restore-driven
+  // setQueue calls (we don't want to sync back what we just fetched).
+  const isRestoringRef = useRef(true);
 
-  const doSync = useCallback((q: UnifiedTrack[], idx: number) => {
+  useEffect(() => {
+    // Skip during restore phase
+    if (isRestoringRef.current) return;
     if (!userId) return;
-    const serialized = JSON.stringify(q.map(t => t.id)) + ':' + idx;
-    if (serialized === lastSyncedRef.current) return;
-    lastSyncedRef.current = serialized;
+
+    const body = JSON.stringify({ user_id: userId, queue, currentIndex });
     fetch(`${API_BASE}/queue/sync`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: userId, queue: q, currentIndex: idx }),
+      body,
     }).catch(e => console.error('[PlayQueue] sync error:', e));
-  }, [userId]);
-
-  /** Debounced sync — for high-frequency updates (playback position, etc.) */
-  const syncToBackend = useCallback((q: UnifiedTrack[], idx: number) => {
-    if (syncTimer.current) clearTimeout(syncTimer.current);
-    syncTimer.current = setTimeout(() => doSync(q, idx), 500);
-  }, [doSync]);
-
-  /** Immediate sync — for queue mutations (add/remove/reorder) */
-  const syncToBackendNow = useCallback((q: UnifiedTrack[], idx: number) => {
-    if (syncTimer.current) clearTimeout(syncTimer.current);
-    doSync(q, idx);
-  }, [doSync]);
+  }, [queue, currentIndex, userId]);
 
   // ── Sync from MusicKit nowPlayingItemDidChange ──────────────────
   // When MusicKit auto-advances, remove all tracks before the new one
@@ -84,15 +75,13 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
         const remaining = q.slice(newIdx);
         setQueue(remaining);
         setCurrentIndex(0);
-        syncToBackendNow(remaining, 0);
       } else {
         // Moved backward (skipPrev) or first play — just update index
         setCurrentIndex(newIdx);
-        syncToBackendNow(q, newIdx);
       }
     });
     return unsub;
-  }, [provider, syncToBackend]);
+  }, [provider]);
 
   // ── Queue operations ────────────────────────────────────────────
 
@@ -102,10 +91,9 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
       if (provider) {
         provider.addToNativeQueue(track.id).catch(console.error);
       }
-      syncToBackendNow(next, currentIndexRef.current);
       return next;
     });
-  }, [provider, syncToBackendNow]);
+  }, [provider]);
 
   const removeTrack = useCallback((index: number) => {
     setQueue(prev => {
@@ -118,10 +106,9 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
         const songIds = next.map(t => t.id);
         provider.playWithQueue(songIds, newIndex).catch(console.error);
       }
-      syncToBackendNow(next, newIndex);
       return next;
     });
-  }, [provider, syncToBackendNow]);
+  }, [provider]);
 
   const playAtIndex = useCallback(async (index: number) => {
     const q = queueRef.current;
@@ -130,12 +117,10 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
     setCurrentIndex(index);
     const songIds = q.map(t => t.id);
     await provider.playWithQueue(songIds, index);
-    syncToBackendNow(q, index);
-  }, [provider, syncToBackendNow]);
+  }, [provider]);
 
   const skipNext = useCallback(async () => {
     if (!provider) return;
-    // MusicKit handles skip natively — nowPlayingChange listener updates currentIndex
     await provider.skipToNext();
   }, [provider]);
 
@@ -144,19 +129,20 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
     await provider.skipToPrev();
   }, [provider]);
 
+  /** Called by useMusicProvider during restore — sets queue without triggering sync */
   const setQueueFn = useCallback((tracks: UnifiedTrack[]) => {
     setQueue(tracks);
-    // setQueue from restore — don't sync back what we just fetched
+  }, []);
+
+  /** Mark restore as complete — subsequent state changes will sync to backend */
+  const finishRestore = useCallback(() => {
+    isRestoringRef.current = false;
   }, []);
 
   const clear = useCallback(() => {
     setQueue([]);
     setCurrentIndex(-1);
-    syncToBackendNow([], -1);
-  }, [syncToBackendNow]);
-
-  // No self-restore here — useMusicProvider handles the full restore
-  // (queue + track display) in a single fetch to avoid double-fetching.
+  }, []);
 
   return {
     queue,
@@ -168,5 +154,6 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
     skipPrev,
     setQueue: setQueueFn,
     clear,
-  };
+    finishRestore,
+  } as UsePlayQueueReturn & { finishRestore: () => void };
 }
