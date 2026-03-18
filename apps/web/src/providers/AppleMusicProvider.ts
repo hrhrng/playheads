@@ -112,17 +112,8 @@ export class AppleMusicProvider implements MusicProvider {
       }
 
       this.playerReadyRef = false;
-      try {
-        Object.keys(localStorage).forEach(key => {
-          if (key.includes('media-user-token')) return;
-          if (key.startsWith('music.') || key.startsWith('mk-')) localStorage.removeItem(key);
-        });
-        const dbs = await (indexedDB.databases?.() ?? Promise.resolve([]));
-        for (const db of dbs) {
-          if (db.name && (db.name.includes('music') || db.name.includes('MusicKit')))
-            indexedDB.deleteDatabase(db.name);
-        }
-      } catch (_) { /* storage access may be restricted */ }
+      // Don't clear MusicKit's localStorage/IndexedDB — preserve queue across refreshes.
+      // MusicKit local state is the source of truth.
 
       const mk = await window.MusicKit.configure({
         developerToken: this.developerToken!,
@@ -130,6 +121,8 @@ export class AppleMusicProvider implements MusicProvider {
       } as any) as MusicKitInstance;
       this.musicKit = mk;
 
+      // Stop playback but preserve queue — MusicKit local state is source of truth.
+      // On refresh, we read the queue from MusicKit rather than clearing it.
       try { mk.stop(); } catch (_) { /* ignore */ }
 
       if (this.config.storedMusicUserToken && !mk.isAuthorized) {
@@ -426,6 +419,7 @@ export class AppleMusicProvider implements MusicProvider {
   }
 
   // ── Restore from backend ────────────────────────────────────────
+  /** Set the UI track display without starting playback. Does NOT open the event gate. */
   restoreTrackDisplay(track: UnifiedTrack, playbackPosition = 0): void {
     this.lastPlayingTrackId = track.id;
     const alreadyPlaying = this.musicKit?.nowPlayingItem?.id === track.id;
@@ -442,7 +436,7 @@ export class AppleMusicProvider implements MusicProvider {
         ? this._playbackState.playbackTime
         : { current: playbackPosition, total: track.durationSeconds },
     });
-    this.playerReadyRef = true;
+    // Don't set playerReadyRef here — caller controls gate via markReady()
   }
 
   // ── Internal ────────────────────────────────────────────────────
@@ -462,8 +456,32 @@ export class AppleMusicProvider implements MusicProvider {
     }
   }
 
+  /** Open the event gate — call after restore is complete */
+  markReady(): void {
+    this.playerReadyRef = true;
+  }
+
   getMusicUserToken(): string | null {
     return (this.musicKit as any)?.musicUserToken || null;
+  }
+
+  /**
+   * Read MusicKit's current native queue as UnifiedTrack[].
+   * Returns the queue items + the current playing index.
+   * This is the local source of truth after a page refresh.
+   */
+  getLocalQueue(): { tracks: UnifiedTrack[]; currentIndex: number } {
+    if (!this.musicKit) return { tracks: [], currentIndex: -1 };
+    const items = this.musicKit.queue?.items || [];
+    if (items.length === 0) return { tracks: [], currentIndex: -1 };
+
+    const tracks = items.map((item: any) => this.formatMusicKitTrack(item));
+    const nowPlayingId = this.musicKit.nowPlayingItem?.id;
+    const currentIndex = nowPlayingId
+      ? items.findIndex((item: any) => item.id === nowPlayingId)
+      : 0;
+
+    return { tracks, currentIndex: currentIndex >= 0 ? currentIndex : 0 };
   }
 
   destroy(): void {

@@ -122,8 +122,9 @@ export function useMusicProvider({
   const queueHook = usePlayQueue({ provider, userId });
   const finishRestore = (queueHook as any).finishRestore as () => void;
 
-  // Restore queue + track display from backend once provider is ready.
-  // Does NOT require Apple Music auth — displaying the track is independent.
+  // Restore queue: LOCAL FIRST (MusicKit), backend fallback.
+  // MusicKit preserves its queue across page refreshes via browser storage.
+  // We read from MusicKit first; only fall back to backend if MusicKit is empty.
   const initialRestoreDone = useRef(false);
   useEffect(() => {
     if (!provider || isInitializing || initialRestoreDone.current) return;
@@ -132,6 +133,23 @@ export function useMusicProvider({
 
     (async () => {
       try {
+        // 1. Try local MusicKit queue (source of truth)
+        const local = provider.getLocalQueue();
+        if (local.tracks.length > 0) {
+          console.log('[Restore] Using MusicKit local queue:', local.tracks.length, 'tracks, index:', local.currentIndex);
+          queueHook.setQueue(local.tracks);
+          // Set currentIndex via the track display restore
+          if (local.currentIndex >= 0 && local.currentIndex < local.tracks.length) {
+            provider.restoreTrackDisplay(local.tracks[local.currentIndex], 0);
+          }
+          // Open the gate so MusicKit events flow through
+          provider.markReady();
+          finishRestore();
+          return;
+        }
+
+        // 2. Fallback: restore from backend
+        console.log('[Restore] MusicKit queue empty, falling back to backend');
         const queueRes = await fetch(`${API_BASE}/queue?user_id=${userId}`);
         if (queueRes.ok) {
           const data = await queueRes.json();
@@ -146,7 +164,7 @@ export function useMusicProvider({
       } catch (e) {
         console.error('[useMusicProvider] restore error:', e);
       } finally {
-        // Mark restore complete — future state changes will sync to backend
+        provider.markReady();
         finishRestore();
       }
     })();
