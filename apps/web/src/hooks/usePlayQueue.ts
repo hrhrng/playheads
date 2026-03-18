@@ -97,13 +97,13 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
   // ── Queue operations ────────────────────────────────────────────
 
   const addTrack = useCallback((track: UnifiedTrack) => {
-    setQueue(prev => {
-      const next = [...prev, track];
-      if (provider) {
-        provider.addToNativeQueue(track.id).catch(console.error);
-      }
-      return next;
-    });
+    // Optimistic update: immediately show in UI
+    setQueue(prev => [...prev, track]);
+    // MusicKit call outside updater — don't rely on .then() for state;
+    // onQueueChange listener handles final sync from MusicKit.
+    if (provider) {
+      provider.addToNativeQueue(track.id).catch(console.error);
+    }
   }, [provider]);
 
   const removeTrack = useCallback((index: number) => {
