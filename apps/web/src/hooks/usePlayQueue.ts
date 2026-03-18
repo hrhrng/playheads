@@ -1,12 +1,11 @@
 /**
- * Global play queue hook — single queue for all conversations.
+ * Global play queue hook — derives queue state from MusicKit.
  *
- * Model: queue[0] = now playing, queue.slice(1) = up next.
- * No currentIndex — position is implicit.
+ * MusicKit queue is the single source of truth for ordering and position.
+ * React state here is derived from MusicKit's queueItemsDidChange events.
  *
- * Uses MusicKit native queue for playback ordering and auto-advance.
- * MusicKit persists its own queue across page reloads — we read it
- * back on init via provider.getNativeQueue().
+ * Metadata cache: tracks added via addTrack() are cached locally so the UI
+ * can display name/artist/artwork immediately (before MusicKit resolves them).
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
@@ -35,17 +34,19 @@ export function usePlayQueue({ provider }: UsePlayQueueParams): UsePlayQueueRetu
   const queueRef = useRef(queue);
   queueRef.current = queue;
 
-  // ── Sync from MusicKit nowPlayingItemDidChange ──────────────────
-  // When MusicKit auto-advances or changes track, slice the queue so
-  // the new track becomes queue[0]. Everything before it is gone.
+  // Metadata cache: tracks added locally before MusicKit resolves them
+  const metadataCache = useRef<Map<string, UnifiedTrack>>(new Map());
+
+  // ── Sync from MusicKit queueItemsDidChange ───────────────────────
+  // MusicKit is ground truth — read queue from it whenever it changes.
   useEffect(() => {
     if (!provider) return;
-    const unsub = provider.onNowPlayingChange((trackId) => {
-      if (!trackId) return;
-      const q = queueRef.current;
-      const idx = q.findIndex(t => t.id === trackId);
-      if (idx <= 0) return; // already at head or not found
-      setQueue(q.slice(idx));
+    const unsub = provider.onQueueChange(() => {
+      const mkItems = provider.getNativeQueue();
+      // Merge: use MusicKit data when available, fall back to local cache
+      setQueue(mkItems.map(t =>
+        t.name !== 'Unknown' ? t : (metadataCache.current.get(t.id) ?? t)
+      ));
     });
     return unsub;
   }, [provider]);
@@ -55,6 +56,7 @@ export function usePlayQueue({ provider }: UsePlayQueueParams): UsePlayQueueRetu
     if (!provider) return;
     const unsub = provider.onUnresolvableIds((badIds) => {
       setQueue(prev => prev.filter(t => !badIds.has(t.id)));
+      for (const id of badIds) metadataCache.current.delete(id);
     });
     return unsub;
   }, [provider]);
@@ -62,42 +64,37 @@ export function usePlayQueue({ provider }: UsePlayQueueParams): UsePlayQueueRetu
   // ── Queue operations ────────────────────────────────────────────
 
   const addTrack = useCallback((track: UnifiedTrack) => {
-    setQueue(prev => {
-      const next = [...prev, track];
-      if (provider) {
-        provider.addToNativeQueue(track.id).catch(console.error);
-      }
-      return next;
-    });
+    metadataCache.current.set(track.id, track);
+    if (provider) {
+      provider.addToNativeQueue(track.id).catch(console.error);
+      // queue[] will update via queueItemsDidChange
+    }
   }, [provider]);
 
   const removeTrack = useCallback((index: number) => {
-    setQueue(prev => {
-      const next = prev.filter((_, i) => i !== index);
-      if (index === 0 && provider && next.length > 0) {
-        // Removed the now-playing track — play the new head
-        const songIds = next.map(t => t.id);
-        provider.playWithQueue(songIds, 0).catch(console.error);
-      }
-      return next;
-    });
+    if (!provider) return;
+    const q = queueRef.current;
+    if (index === 0 && q.length > 1) {
+      // Removing now-playing track — restart queue from next track
+      const remaining = q.slice(1);
+      const songIds = remaining.map(t => t.id);
+      provider.playWithQueue(songIds, 0).catch(console.error);
+    } else {
+      provider.removeFromQueue(index).catch(console.error);
+      // queue[] will update via queueItemsDidChange
+    }
   }, [provider]);
 
   const playAtIndex = useCallback(async (index: number) => {
     const q = queueRef.current;
     if (index < 0 || index >= q.length || !provider) return;
-
-    // Slice so clicked track becomes queue[0]
-    const newQueue = q.slice(index);
-    setQueue(newQueue);
-    const songIds = newQueue.map(t => t.id);
+    const songIds = q.slice(index).map(t => t.id);
     await provider.playWithQueue(songIds, 0);
   }, [provider]);
 
   const skipNext = useCallback(async () => {
     if (!provider) return;
     await provider.skipToNext();
-    // MusicKit's nowPlayingItemDidChange will trigger the queue slice
   }, [provider]);
 
   const skipPrev = useCallback(async () => {
@@ -105,11 +102,15 @@ export function usePlayQueue({ provider }: UsePlayQueueParams): UsePlayQueueRetu
     await provider.skipToPrev();
   }, [provider]);
 
+  // setQueue: used externally to seed initial display (e.g. from localStorage restore)
+  // This is a display-only operation — actual MusicKit queue is set via restoreQueue.
   const setQueueFn = useCallback((tracks: UnifiedTrack[]) => {
+    for (const t of tracks) metadataCache.current.set(t.id, t);
     setQueue(tracks);
   }, []);
 
   const clear = useCallback(() => {
+    metadataCache.current.clear();
     setQueue([]);
   }, []);
 

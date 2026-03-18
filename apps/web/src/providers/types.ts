@@ -36,7 +36,7 @@ export interface MusicProvider {
 
   login(): Promise<void>;
   logout(): Promise<void>;
-  play(trackId?: string, startTime?: number): Promise<void>;
+  play(): Promise<void>;
   pause(): Promise<void>;
   togglePlay(): Promise<void>;
   seekTo(seconds: number): void;
