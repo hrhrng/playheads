@@ -115,44 +115,38 @@ export function useMusicProvider({
   const snapshot = useSyncExternalStore(subscribe, getSnapshot);
   const { playback, isAuthorized, isInitializing, storefrontId } = snapshot;
 
-  // Global play queue
+  // Global play queue — localStorage is ground truth, loaded on init
   const queueHook = usePlayQueue({ provider, userId });
-  const finishRestore = (queueHook as any).finishRestore as () => void;
 
-  // Restore queue from backend (server-authoritative).
-  // Deduplicate by ID, set queue[0] as display track.
-  const initialRestoreDone = useRef(false);
+  // If queue is empty on init, fetch a suggestion from the backend
+  const suggestionFetched = useRef(false);
   useEffect(() => {
-    if (!provider || isInitializing || initialRestoreDone.current) return;
+    if (!provider || isInitializing || suggestionFetched.current) return;
     if (!userId) return;
-    initialRestoreDone.current = true;
+    if (queueHook.queue.length > 0) return; // localStorage already has a queue
+    suggestionFetched.current = true;
 
     (async () => {
       try {
-        const queueRes = await fetch(`${API_BASE}/queue?user_id=${userId}`);
-        if (queueRes.ok) {
-          const data = await queueRes.json();
-          if (data.queue?.length > 0) {
-            // Deduplicate by track ID, preserving order
-            const seen = new Set<string>();
-            const deduped = data.queue.filter((t: any) => {
-              if (seen.has(t.id)) return false;
-              seen.add(t.id);
-              return true;
-            });
-            queueHook.setQueue(deduped);
-            if (deduped.length > 0) {
-              provider.restoreTrackDisplay(deduped[0], deduped, 0, 0);
-            }
-          }
+        const res = await fetch(`${API_BASE}/queue/suggestion?user_id=${userId}`);
+        if (!res.ok) return;
+        const data = await res.json() as { tracks?: unknown[] };
+        if (!data.tracks?.length) return;
+        const seen = new Set<string>();
+        const deduped = (data.tracks as Array<{ id: string }>).filter(t => {
+          if (seen.has(t.id)) return false;
+          seen.add(t.id);
+          return true;
+        });
+        if (deduped.length > 0) {
+          queueHook.setQueue(deduped as any);
+          provider.restoreTrackDisplay(deduped[0] as any, deduped as any, 0, 0);
         }
       } catch (e) {
-        console.error('[useMusicProvider] restore error:', e);
-      } finally {
-        finishRestore();
+        console.error('[useMusicProvider] suggestion error:', e);
       }
     })();
-  }, [provider, isInitializing, userId]);
+  }, [provider, isInitializing, userId, queueHook.queue.length]);
 
   const login = useCallback(async () => {
     if (provider) await provider.login();

@@ -138,6 +138,9 @@ export default {
     if (url.pathname === "/api/queue/sync" && request.method === "POST") {
       return handleSyncQueue(request, env.DB);
     }
+    if (url.pathname === "/api/queue/suggestion" && request.method === "GET") {
+      return Response.json({ tracks: [] });
+    }
 
     // /api/* → backend worker (agent/chat, apple-music, actions)
     if (url.pathname.startsWith("/api/")) {

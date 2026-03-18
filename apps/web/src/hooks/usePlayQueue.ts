@@ -7,14 +7,32 @@
  * Uses MusicKit native queue for playback ordering and auto-advance.
  * Syncs from MusicKit's nowPlayingItemDidChange to slice played tracks.
  *
- * Backend sync is driven by a useEffect on queue state —
- * any state change triggers a sync, regardless of the source.
+ * Persisted locally via localStorage — frontend is ground truth.
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { API_BASE } from '../config/api';
 import type { UnifiedTrack } from '../providers/types';
 import type { AppleMusicProvider } from '../providers/AppleMusicProvider';
+
+const STORAGE_KEY = 'playheads_queue';
+
+function loadFromLocalStorage(): UnifiedTrack[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
+    return JSON.parse(raw) as UnifiedTrack[];
+  } catch {
+    return [];
+  }
+}
+
+function saveToLocalStorage(queue: UnifiedTrack[]): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(queue));
+  } catch {
+    // ignore storage errors
+  }
+}
 
 export interface UsePlayQueueReturn {
   queue: UnifiedTrack[];
@@ -32,43 +50,16 @@ interface UsePlayQueueParams {
   userId: string | null;
 }
 
-export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQueueReturn {
-  const [queue, setQueue] = useState<UnifiedTrack[]>([]);
+export function usePlayQueue({ provider }: UsePlayQueueParams): UsePlayQueueReturn {
+  const [queue, setQueue] = useState<UnifiedTrack[]>(() => loadFromLocalStorage());
 
   const queueRef = useRef(queue);
   queueRef.current = queue;
 
-  // ── Backend sync: driven by React state changes ─────────────────
-  // Skip the very first render (initial empty state) and restore-driven
-  // setQueue calls (we don't want to sync back what we just fetched).
-  const isRestoringRef = useRef(true);
-
+  // ── Persist to localStorage on every state change ───────────────
   useEffect(() => {
-    if (isRestoringRef.current) return;
-    if (!userId) return;
-
-    const body = JSON.stringify({ user_id: userId, queue });
-    fetch(`${API_BASE}/queue/sync`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body,
-    }).catch(e => console.error('[PlayQueue] sync error:', e));
-  }, [queue, userId]);
-
-  // ── beforeunload: persist queue via sendBeacon ──────────────────
-  useEffect(() => {
-    if (!userId) return;
-    const handler = () => {
-      const body = JSON.stringify({
-        user_id: userId,
-        queue: queueRef.current,
-      });
-      const blob = new Blob([body], { type: 'application/json' });
-      navigator.sendBeacon(`${API_BASE}/queue/sync`, blob);
-    };
-    window.addEventListener('beforeunload', handler);
-    return () => window.removeEventListener('beforeunload', handler);
-  }, [userId]);
+    saveToLocalStorage(queue);
+  }, [queue]);
 
   // ── Sync from MusicKit nowPlayingItemDidChange ──────────────────
   // When MusicKit auto-advances or changes track, slice the queue so
@@ -140,14 +131,8 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
     await provider.skipToPrev();
   }, [provider]);
 
-  /** Called by useMusicProvider during restore — sets queue without triggering sync */
   const setQueueFn = useCallback((tracks: UnifiedTrack[]) => {
     setQueue(tracks);
-  }, []);
-
-  /** Mark restore as complete — subsequent state changes will sync to backend */
-  const finishRestore = useCallback(() => {
-    isRestoringRef.current = false;
   }, []);
 
   const clear = useCallback(() => {
@@ -163,6 +148,5 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
     skipPrev,
     setQueue: setQueueFn,
     clear,
-    finishRestore,
-  } as UsePlayQueueReturn & { finishRestore: () => void };
+  };
 }
