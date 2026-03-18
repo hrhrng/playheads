@@ -341,12 +341,12 @@ export class AppleMusicProvider implements MusicProvider {
     return q.items.slice(pos).map(item => this.formatMusicKitTrack(item));
   }
 
-  /** Set display track without starting playback (for first-track-added UX). */
-  setDisplayTrack(track: UnifiedTrack): void {
+  /** Set display track without starting playback (for first-track-added UX or restore). */
+  setDisplayTrack(track: UnifiedTrack, currentTime = 0): void {
     this.updateState({
       currentTrack: track,
       isPlaying: false,
-      playbackTime: { current: 0, total: track.durationSeconds },
+      playbackTime: { current: currentTime, total: track.durationSeconds },
     });
   }
 

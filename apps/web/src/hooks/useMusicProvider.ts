@@ -127,6 +127,7 @@ export function useMusicProvider({
   // ── Queue restore from localStorage (no autoplay) ──────────────
   const initialRestoreDone = useRef(false);
   const QUEUE_STORAGE_KEY = 'playheads_queue';
+  const PLAYBACK_POS_KEY = 'playheads_playback_pos';
 
   useEffect(() => {
     if (!provider || isInitializing || initialRestoreDone.current) return;
@@ -139,7 +140,14 @@ export function useMusicProvider({
         if (Array.isArray(tracks) && tracks.length > 0) {
           console.log('[useMusicProvider] restore:', tracks.length, 'tracks from localStorage');
           queueHook.setQueue(tracks);
-          provider.setDisplayTrack(tracks[0]);
+
+          // Restore playback position for display (visual only — no seek)
+          let savedPos = 0;
+          try {
+            savedPos = parseFloat(localStorage.getItem(PLAYBACK_POS_KEY) || '0') || 0;
+          } catch { /* ignore */ }
+          provider.setDisplayTrack(tracks[0], savedPos);
+
           // Prime MusicKit queue (no play, no changeToMediaAtIndex).
           // React state is authoritative; queueItemsDidChange is not subscribed.
           provider.setQueueWithoutPlaying(tracks.map((t: any) => t.id));
@@ -156,6 +164,15 @@ export function useMusicProvider({
       localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(queueHook.queue));
     } catch { /* ignore */ }
   }, [queueHook.queue]);
+
+  // ── Persist playback position to localStorage ─────────────────
+  useEffect(() => {
+    if (!initialRestoreDone.current) return;
+    const pos = playback.playbackTime.current;
+    if (pos > 0) {
+      try { localStorage.setItem(PLAYBACK_POS_KEY, String(pos)); } catch { /* ignore */ }
+    }
+  }, [playback.playbackTime.current]);
 
   const login = useCallback(async () => {
     if (provider) await provider.login();
