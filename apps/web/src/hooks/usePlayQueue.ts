@@ -92,10 +92,8 @@ export function usePlayQueue({ provider }: UsePlayQueueParams): UsePlayQueueRetu
   }, [provider]);
 
   const playAtIndex = useCallback(async (index: number) => {
-    const q = queueRef.current;
-    if (index < 0 || index >= q.length || !provider) return;
-    const songIds = q.slice(index).map(t => t.id);
-    await provider.playWithQueue(songIds, 0);
+    if (index < 0 || !provider) return;
+    await provider.changeToMediaAtIndex(index);
   }, [provider]);
 
   const skipNext = useCallback(async () => {

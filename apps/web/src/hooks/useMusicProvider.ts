@@ -8,6 +8,7 @@ import { useState, useEffect, useRef, useSyncExternalStore, useCallback } from '
 import { AppleMusicProvider } from '../providers/AppleMusicProvider';
 import { usePlayQueue, type UsePlayQueueReturn } from './usePlayQueue';
 import type { PlaybackState, UnifiedTrack } from '../providers/types';
+import { API_BASE } from '../config/api';
 
 const QUEUE_STORAGE_KEY = 'playheads_queue';
 
@@ -143,13 +144,38 @@ export function useMusicProvider({
     }
   }, [provider, isInitializing]);
 
-  // Persist queue to localStorage — gated until restore completes
+  // Persist queue to localStorage + debounced backend sync
+  const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!queueRestored.current) return;
+    // localStorage — immediate (cheap)
     try {
       localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(queueHook.queue));
     } catch { /* ignore */ }
-  }, [queueHook.queue]);
+    // Backend sync — debounced 500ms
+    if (syncTimer.current) clearTimeout(syncTimer.current);
+    if (userId) {
+      syncTimer.current = setTimeout(() => {
+        fetch(`${API_BASE}/queue/sync`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: userId, queue: queueHook.queue }),
+        }).catch(e => console.error('[useMusicProvider] sync error:', e));
+      }, 500);
+    }
+    return () => { if (syncTimer.current) clearTimeout(syncTimer.current); };
+  }, [queueHook.queue, userId]);
+
+  // Flush queue to backend on page close
+  useEffect(() => {
+    if (!userId) return;
+    const handler = () => {
+      const body = JSON.stringify({ user_id: userId, queue: queueHook.queue });
+      navigator.sendBeacon(`${API_BASE}/queue/sync`, new Blob([body], { type: 'application/json' }));
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [userId, queueHook.queue]);
 
   const login = useCallback(async () => {
     if (provider) await provider.login();

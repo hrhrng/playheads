@@ -39,7 +39,6 @@ export class AppleMusicProvider implements MusicProvider {
   private destroyed = false;
 
   // Playback control
-  private playbackLock = false;
   private lastPlayingTrackId: string | null = null;
   private transitionTimeout: ReturnType<typeof setTimeout> | null = null;
   private developerToken: string | null = null;
@@ -110,20 +109,6 @@ export class AppleMusicProvider implements MusicProvider {
         this.emit();
         return;
       }
-
-      // Clear MusicKit's persisted state so our localStorage-managed queue
-      // controls restore timing (we call restoreQueue explicitly).
-      try {
-        Object.keys(localStorage).filter(k => k.startsWith('music.')).forEach(k => localStorage.removeItem(k));
-      } catch (_) { /* ignore */ }
-      try {
-        const dbs = await indexedDB.databases?.();
-        if (dbs) {
-          for (const db of dbs) {
-            if (db.name && /musickit/i.test(db.name)) indexedDB.deleteDatabase(db.name);
-          }
-        }
-      } catch (_) { /* ignore */ }
 
       const mk = await window.MusicKit.configure({
         developerToken: this.developerToken!,
@@ -266,8 +251,7 @@ export class AppleMusicProvider implements MusicProvider {
 
   /** Set MusicKit queue to all song IDs and start playback at startIndex. */
   async playWithQueue(songIds: string[], startIndex: number, retried = false): Promise<void> {
-    if (!this.musicKit || this.playbackLock || songIds.length === 0) return;
-    this.playbackLock = true;
+    if (!this.musicKit || songIds.length === 0) return;
     this.startTransition();
     try {
       await this.musicKit.setQueue({ songs: songIds, startPlaying: false } as any);
@@ -281,7 +265,6 @@ export class AppleMusicProvider implements MusicProvider {
         const badIds = new Set(match[1].split(/[,\s]+/).filter(Boolean));
         const filtered = songIds.filter(id => !badIds.has(id));
         for (const cb of this.unresolvableListeners) cb(badIds);
-        this.playbackLock = false;
         if (filtered.length > 0) {
           await this.playWithQueue(filtered, 0, true);
         }
@@ -290,8 +273,6 @@ export class AppleMusicProvider implements MusicProvider {
       const classified = classifyError(e);
       if (classified.category === ErrorCategory.AUTH_EXPIRED) this.handleAuthLost();
       else showErrorToast(e, 'playback');
-    } finally {
-      this.playbackLock = false;
     }
   }
 
@@ -340,8 +321,7 @@ export class AppleMusicProvider implements MusicProvider {
 
   /** Skip to next track in MusicKit native queue. */
   async skipToNext(): Promise<void> {
-    if (!this.musicKit || this.playbackLock) return;
-    this.playbackLock = true;
+    if (!this.musicKit) return;
     this.startTransition();
     try {
       await this.musicKit.skipToNextItem();
@@ -349,15 +329,12 @@ export class AppleMusicProvider implements MusicProvider {
       const classified = classifyError(e);
       if (classified.category === ErrorCategory.AUTH_EXPIRED) this.handleAuthLost();
       else showErrorToast(e, 'playback');
-    } finally {
-      this.playbackLock = false;
     }
   }
 
   /** Skip to previous track in MusicKit native queue. */
   async skipToPrev(): Promise<void> {
-    if (!this.musicKit || this.playbackLock) return;
-    this.playbackLock = true;
+    if (!this.musicKit) return;
     this.startTransition();
     try {
       await this.musicKit.skipToPreviousItem();
@@ -365,15 +342,12 @@ export class AppleMusicProvider implements MusicProvider {
       const classified = classifyError(e);
       if (classified.category === ErrorCategory.AUTH_EXPIRED) this.handleAuthLost();
       else showErrorToast(e, 'playback');
-    } finally {
-      this.playbackLock = false;
     }
   }
 
   /** Resume playback. */
   async play(): Promise<void> {
-    if (!this.musicKit || this.playbackLock) return;
-    this.playbackLock = true;
+    if (!this.musicKit) return;
     this.startTransition();
     try {
       await this.musicKit.play();
@@ -382,14 +356,11 @@ export class AppleMusicProvider implements MusicProvider {
       const classified = classifyError(e);
       if (classified.category === ErrorCategory.AUTH_EXPIRED) this.handleAuthLost();
       else showErrorToast(e, 'playback');
-    } finally {
-      this.playbackLock = false;
     }
   }
 
   async pause(): Promise<void> {
-    if (!this.musicKit || this.playbackLock) return;
-    this.playbackLock = true;
+    if (!this.musicKit) return;
     this.startTransition();
     try {
       await this.musicKit.pause();
@@ -398,14 +369,11 @@ export class AppleMusicProvider implements MusicProvider {
       const classified = classifyError(e);
       if (classified.category === ErrorCategory.AUTH_EXPIRED) this.handleAuthLost();
       else showErrorToast(e, 'playback');
-    } finally {
-      this.playbackLock = false;
     }
   }
 
   async togglePlay(): Promise<void> {
-    if (!this.musicKit || this.playbackLock) return;
-    this.playbackLock = true;
+    if (!this.musicKit) return;
     this.startTransition();
     try {
       const currentlyPlaying = this.musicKit.playbackState === 'playing' || (this.musicKit.playbackState as any) === 2;
@@ -420,8 +388,20 @@ export class AppleMusicProvider implements MusicProvider {
       const classified = classifyError(e);
       if (classified.category === ErrorCategory.AUTH_EXPIRED) this.handleAuthLost();
       else showErrorToast(e, 'playback');
-    } finally {
-      this.playbackLock = false;
+    }
+  }
+
+  /** Jump to a track already in MusicKit's queue by index. */
+  async changeToMediaAtIndex(index: number): Promise<void> {
+    if (!this.musicKit) return;
+    this.startTransition();
+    try {
+      await this.musicKit.changeToMediaAtIndex(index);
+      await this.musicKit.play();
+    } catch (e) {
+      const classified = classifyError(e);
+      if (classified.category === ErrorCategory.AUTH_EXPIRED) this.handleAuthLost();
+      else showErrorToast(e, 'playback');
     }
   }
 
