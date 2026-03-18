@@ -37,16 +37,30 @@ export function usePlayQueue({ provider }: UsePlayQueueParams): UsePlayQueueRetu
   // Metadata cache: tracks added locally before MusicKit resolves them
   const metadataCache = useRef<Map<string, UnifiedTrack>>(new Map());
 
+  // Pending IDs: tracks optimistically added but not yet confirmed by MusicKit
+  const pendingIds = useRef<Set<string>>(new Set());
+
   // ── Sync from MusicKit queueItemsDidChange ───────────────────────
-  // MusicKit is ground truth — read queue from it whenever it changes.
+  // MusicKit is ground truth. Merge with pending optimistic additions
+  // so tracks don't flicker out while MusicKit is still resolving them.
   useEffect(() => {
     if (!provider) return;
     const unsub = provider.onQueueChange(() => {
       const mkItems = provider.getNativeQueue();
-      // Merge: use MusicKit data when available, fall back to local cache
-      setQueue(mkItems.map(t =>
+      const mkIds = new Set(mkItems.map(t => t.id));
+
+      // Clear pending IDs that MusicKit has now confirmed
+      for (const id of mkIds) pendingIds.current.delete(id);
+
+      // Build merged queue: MusicKit items (with cache fallback) + still-pending items
+      const merged = mkItems.map(t =>
         t.name !== 'Unknown' ? t : (metadataCache.current.get(t.id) ?? t)
-      ));
+      );
+      for (const id of pendingIds.current) {
+        const cached = metadataCache.current.get(id);
+        if (cached) merged.push(cached);
+      }
+      setQueue(merged);
     });
     return unsub;
   }, [provider]);
@@ -65,6 +79,7 @@ export function usePlayQueue({ provider }: UsePlayQueueParams): UsePlayQueueRetu
 
   const addTrack = useCallback((track: UnifiedTrack) => {
     metadataCache.current.set(track.id, track);
+    pendingIds.current.add(track.id);
     // Optimistic update: immediately show in UI
     setQueue(prev => [...prev, track]);
     if (provider) {
@@ -109,12 +124,16 @@ export function usePlayQueue({ provider }: UsePlayQueueParams): UsePlayQueueRetu
   // setQueue: used externally to seed initial display (e.g. from localStorage restore)
   // This is a display-only operation — actual MusicKit queue is set via restoreQueue.
   const setQueueFn = useCallback((tracks: UnifiedTrack[]) => {
-    for (const t of tracks) metadataCache.current.set(t.id, t);
+    for (const t of tracks) {
+      metadataCache.current.set(t.id, t);
+      pendingIds.current.add(t.id);
+    }
     setQueue(tracks);
   }, []);
 
   const clear = useCallback(() => {
     metadataCache.current.clear();
+    pendingIds.current.clear();
     setQueue([]);
   }, []);
 
