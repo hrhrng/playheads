@@ -65,18 +65,7 @@ function buildSystemPrompt(state: PlaybackState): string {
     lines.push("Nothing is currently playing.");
   }
 
-  if (state.playlist.length) {
-    lines.push(`Playlist has ${state.playlist.length} tracks:`);
-    for (let i = 0; i < Math.min(state.playlist.length, 5); i++) {
-      const track = state.playlist[i];
-      lines.push(`  ${i + 1}. ${track.name} - ${track.artist}`);
-    }
-    if (state.playlist.length > 5) {
-      lines.push(`  ... and ${state.playlist.length - 5} more`);
-    }
-  } else {
-    lines.push("Playlist is empty.");
-  }
+  // Playlist is intentionally omitted — use get_playlist() to read it.
 
   return SYSTEM_PROMPT_TEMPLATE.replace("{state_context}", lines.join("\n"));
 }
