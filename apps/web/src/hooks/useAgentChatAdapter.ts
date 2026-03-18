@@ -29,6 +29,7 @@ export interface MusicActions {
  * Queue operations for adding/removing tracks globally.
  */
 export interface QueueOperations {
+  queue?: UnifiedTrack[];
   addTrack: (track: UnifiedTrack) => void;
   removeTrack: (index: number) => void;
   playAtIndex: (index: number) => Promise<void>;
@@ -153,6 +154,15 @@ export function useAgentChatAdapter({
     name: sessionId,
   });
 
+  // ── Refs — kept stable across renders ──
+  const musicActionsRef = useRef(musicActions);
+  musicActionsRef.current = musicActions;
+  const queueOpsRef = useRef(queueOps);
+  queueOpsRef.current = queueOps;
+  // Always reflects the latest queue for onToolCall (get_playlist)
+  const queueRef = useRef<UnifiedTrack[]>(queueOps?.queue ?? []);
+  useEffect(() => { queueRef.current = queueOps?.queue ?? []; }, [queueOps?.queue]);
+
   const {
     messages: uiMessages,
     sendMessage: agentSendMessage,
@@ -161,13 +171,21 @@ export function useAgentChatAdapter({
   } = useAgentChat({
     agent,
     body: { session_id: sessionId, user_id: userId, storefront: musicActions?.storefront || 'us' },
+    onToolCall: async ({ toolCall }) => {
+      if (toolCall.toolName === 'get_playlist') {
+        const tracks = queueRef.current;
+        if (!tracks.length) return "The playlist is empty.";
+        const lines = [`Playlist has ${tracks.length} tracks:`];
+        tracks.slice(0, 10).forEach((t, i) => {
+          lines.push(`  ${i + 1}. ${t.name} - ${t.artist}`);
+        });
+        if (tracks.length > 10) lines.push(`... and ${tracks.length - 10} more tracks`);
+        return lines.join('\n');
+      }
+    },
   });
 
   // ── Side-effect: dispatch queue actions from tool results ──
-  const musicActionsRef = useRef(musicActions);
-  musicActionsRef.current = musicActions;
-  const queueOpsRef = useRef(queueOps);
-  queueOpsRef.current = queueOps;
   const processedActionIds = useRef(new Set<string>());
   // On first non-empty render, mark all existing historical messages as
   // already processed — their state effects are already in localStorage.

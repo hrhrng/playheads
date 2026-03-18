@@ -308,6 +308,9 @@ export class AppleMusicProvider implements MusicProvider {
         isPlaying: false,
         playbackTime: { current: startTime, total: currentTrack.durationSeconds },
       });
+      // MusicKit does not reliably fire queueItemsDidChange for setQueue(startPlaying: false).
+      // Manually notify subscribers so React state stays in sync with MusicKit.
+      for (const cb of this.queueChangeListeners) cb();
     } catch (e) {
       console.error('[AppleMusicProvider] restoreQueue error:', e);
     }

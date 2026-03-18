@@ -228,33 +228,9 @@ export function createMusicTools(ctx: ToolContext) {
     }),
 
     get_playlist: tool({
-      description: "Get the current playlist/queue of tracks.",
+      description: "Get the current playlist/queue of tracks. Executes client-side — returns live queue from the browser.",
       inputSchema: z.object({}),
-      execute: async () => {
-        console.log("[tool:get_playlist] playlist length=%d", ctx.state.playlist.length);
-        if (!ctx.state.playlist.length) {
-          return "The playlist is empty.";
-        }
-
-        const lines = [
-          `Playlist has ${ctx.state.playlist.length} tracks:`,
-        ];
-        const show = ctx.state.playlist.slice(0, 10);
-        for (let i = 0; i < show.length; i++) {
-          const track = show[i];
-          const marker =
-            ctx.state.currentTrack?.id === track.id ? "▶" : " ";
-          lines.push(
-            `${marker} ${i + 1}. ${track.name} - ${track.artist}`
-          );
-        }
-        if (ctx.state.playlist.length > 10) {
-          lines.push(
-            `... and ${ctx.state.playlist.length - 10} more tracks`
-          );
-        }
-        return lines.join("\n");
-      },
+      // No execute — handled by onToolCall in useAgentChatAdapter (reads live React queue).
     }),
   };
 }
