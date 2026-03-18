@@ -168,7 +168,9 @@ export function useAgentChatAdapter({
   musicActionsRef.current = musicActions;
   const queueOpsRef = useRef(queueOps);
   queueOpsRef.current = queueOps;
-  const processedActionIds = useRef(new Set<string>());
+  const processedActionIds = useRef(new Set<string>(
+    (() => { try { return JSON.parse(sessionStorage.getItem('processedActionIds') || '[]'); } catch { return []; } })()
+  ));
 
   useEffect(() => {
     const actions = musicActionsRef.current;
@@ -191,6 +193,7 @@ export function useAgentChatAdapter({
         if (!action) continue;
 
         processedActionIds.current.add(toolPart.toolCallId);
+        try { sessionStorage.setItem('processedActionIds', JSON.stringify([...processedActionIds.current])); } catch { /* ignore */ }
         console.log('[ActionDispatch] Dispatching:', action.type, action.data);
 
         // Update global queue immediately

@@ -121,14 +121,25 @@ export class AppleMusicProvider implements MusicProvider {
 
       this.playerReadyRef = false;
 
+      // Clear MusicKit's persisted state so restored queue doesn't conflict
+      // with our localStorage-managed queue.
+      try {
+        Object.keys(localStorage).filter(k => k.startsWith('music.')).forEach(k => localStorage.removeItem(k));
+      } catch (_) { /* ignore */ }
+      try {
+        const dbs = await indexedDB.databases?.();
+        if (dbs) {
+          for (const db of dbs) {
+            if (db.name && /musickit/i.test(db.name)) indexedDB.deleteDatabase(db.name);
+          }
+        }
+      } catch (_) { /* ignore */ }
+
       const mk = await window.MusicKit.configure({
         developerToken: this.developerToken!,
         app: { name: 'Playhead', build: '1.0.0' }
       } as any) as MusicKitInstance;
       this.musicKit = mk;
-
-      // Stop playback on init so we start paused.
-      try { mk.stop(); } catch (_) { /* ignore */ }
 
       if (this.config.storedMusicUserToken && !mk.isAuthorized) {
         (mk as any).musicUserToken = this.config.storedMusicUserToken;

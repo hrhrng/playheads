@@ -7,7 +7,18 @@
 import { useState, useEffect, useRef, useSyncExternalStore, useCallback } from 'react';
 import { AppleMusicProvider } from '../providers/AppleMusicProvider';
 import { usePlayQueue, type UsePlayQueueReturn } from './usePlayQueue';
-import type { PlaybackState } from '../providers/types';
+import type { PlaybackState, UnifiedTrack } from '../providers/types';
+
+const QUEUE_STORAGE_KEY = 'playheads_queue';
+
+function loadQueueFromStorage(): UnifiedTrack[] {
+  try {
+    const raw = localStorage.getItem(QUEUE_STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as UnifiedTrack[]) : [];
+  } catch {
+    return [];
+  }
+}
 
 interface UseMusicProviderParams {
   userId: string | null;
@@ -114,19 +125,29 @@ export function useMusicProvider({
   const snapshot = useSyncExternalStore(subscribe, getSnapshot);
   const { playback, isAuthorized, isInitializing, storefrontId } = snapshot;
 
-  // Global play queue — localStorage is ground truth, loaded on init
+  // Global play queue
   const queueHook = usePlayQueue({ provider, userId });
 
-  // On init, read MusicKit's native queue as the source of truth
-  const nativeQueueRead = useRef(false);
+  // On init, restore queue from localStorage and set up pendingQueue so
+  // the first play call resolves tracks fresh through MusicKit.
+  const queueRestored = useRef(false);
   useEffect(() => {
-    if (!provider || isInitializing || nativeQueueRead.current) return;
-    nativeQueueRead.current = true;
-    const native = provider.getNativeQueue();
-    if (native.length > 0) {
-      queueHook.setQueue(native);
+    if (!provider || isInitializing || queueRestored.current) return;
+    queueRestored.current = true;
+    const saved = loadQueueFromStorage();
+    if (saved.length > 0) {
+      queueHook.setQueue(saved);
+      // Set pendingQueue so togglePlay → flushPendingQueue resolves tracks freshly
+      provider.restoreTrackDisplay(saved[0], saved, 0, 0);
     }
   }, [provider, isInitializing]);
+
+  // Persist queue to localStorage on every change
+  useEffect(() => {
+    try {
+      localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(queueHook.queue));
+    } catch { /* ignore */ }
+  }, [queueHook.queue]);
 
   const login = useCallback(async () => {
     if (provider) await provider.login();
