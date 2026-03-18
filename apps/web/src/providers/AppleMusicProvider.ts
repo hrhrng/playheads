@@ -165,6 +165,8 @@ export class AppleMusicProvider implements MusicProvider {
         this.lastPlayingTrackId = item.id;
         this.updateState({ currentTrack: this.formatMusicKitTrack(item) });
       }
+      // Queue position changed — notify subscribers so UP NEXT display updates.
+      for (const cb of this.queueChangeListeners) cb();
     });
 
     this.on(mk, 'playbackStateDidChange', (e: any) => {
@@ -446,11 +448,13 @@ export class AppleMusicProvider implements MusicProvider {
     }
   }
 
-  /** Read MusicKit's current native queue as UnifiedTrack[]. */
+  /** Read MusicKit's current native queue as UnifiedTrack[], starting from current position.
+   *  queue[0] = now playing, queue[1..] = up next. */
   getNativeQueue(): UnifiedTrack[] {
-    const items = this.musicKit?.queue?.items;
-    if (!items?.length) return [];
-    return items.map(item => this.formatMusicKitTrack(item));
+    const q = this.musicKit?.queue;
+    if (!q?.items?.length) return [];
+    const pos = (q.position as number | undefined) ?? 0;
+    return q.items.slice(pos).map(item => this.formatMusicKitTrack(item));
   }
 
   /**
