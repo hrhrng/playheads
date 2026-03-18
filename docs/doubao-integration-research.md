@@ -141,9 +141,57 @@ DOUBAO_API_KEY = "your-api-key"
 豆包支持 SSE 流式输出（`stream=True`），与现有 SSE 架构兼容。
 
 ### Web Search 工具
-目前 `web_search` 是 Claude 原生工具（`web_search_20250305`），切换豆包后此工具不可用。可考虑：
-- 通过 [Tavily](https://tavily.com/) 或 [Serper](https://serper.dev/) 实现独立 web search 工具，供所有 provider 共用
-- 或直接移除该功能
+
+**火山方舟官方内置了联网搜索（Web Search）能力**，每月有 2 万次免费额度。不过其实现方式与 Claude 原生 tool 不同：
+
+#### 调用方式：Bot 应用
+
+联网搜索通过创建一个**带联网插件的 Bot 应用**来实现，使用专属端点和 Bot ID：
+
+```
+# 普通推理端点（无联网）
+POST https://ark.cn-beijing.volces.com/api/v3/chat/completions
+model: "doubao-1.5-pro-32k"
+
+# Bot 联网搜索端点
+POST https://ark.cn-beijing.volces.com/api/v3/bots/chat/completions
+model: "bot-xxxxxxxxxxxxxxxx"   ← Bot ID，非模型 ID
+```
+
+创建步骤：火山方舟控制台 → 创建应用（零代码/单聊）→ 选择模型 → 开启"联网内容插件" → 发布 → 获取 Bot ID。
+
+#### 与当前架构的集成
+
+对 `agent.py` 的改动方式：新增 `doubao` provider，当检测到时使用 Bot 端点：
+
+```python
+# .env 配置
+LLM_PROVIDER=doubao
+DOUBAO_API_KEY=<火山方舟 API Key>
+DOUBAO_BOT_ID=bot-xxxxxxxxxxxxxxxx   # 带联网插件的 Bot
+DOUBAO_MODEL=doubao-1.5-pro-32k      # fallback（无联网时用）
+
+# agent.py 新增分支
+elif llm_provider == "doubao":
+    bot_id = os.getenv("DOUBAO_BOT_ID")
+    model = ChatOpenAI(
+        model=bot_id,  # 填 Bot ID
+        api_key=os.getenv("DOUBAO_API_KEY"),
+        base_url="https://ark.cn-beijing.volces.com/api/v3/bots",
+        streaming=True,
+    )
+```
+
+这样联网搜索由平台自动处理，无需在代码里声明 web_search 工具。
+
+#### 与 Claude 原生 web_search 的对比
+
+| 特性 | Claude `web_search_20250305` | 火山方舟 Bot 联网搜索 |
+|------|----------------------------|--------------------|
+| 触发方式 | LangChain tool call | 平台自动决策 |
+| 可见性 | 可拦截/观测 tool 调用过程 | 对应用层透明 |
+| 免费额度 | 无（按 token 计费） | 每月 2 万次免费 |
+| 配置 | 代码声明 | 控制台配置 |
 
 ### 中文支持
 豆包在中文理解和生成方面显著优于大多数模型，适合面向中文用户的场景。
@@ -167,5 +215,8 @@ DOUBAO_API_KEY = "your-api-key"
 
 - [火山方舟官网](https://www.volcengine.com/product/ark)
 - [模型价格](https://www.volcengine.com/docs/82379/1544106)
+- [联网搜索 Web Search 文档](https://www.volcengine.com/docs/82379/1756990)
+- [联网内容插件说明](https://www.volcengine.com/docs/82379/1338552)
+- [Function Calling 文档](https://www.volcengine.com/docs/82379/1262342)
 - [知乎：豆包API接口兼容OpenAI](https://zhuanlan.zhihu.com/p/715145094)
 - [Doubao API 完全指南](https://www.cursor-ide.com/blog/doubao-api-guide)
