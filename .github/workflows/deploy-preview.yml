@@ -161,6 +161,16 @@ jobs:
           npx wrangler deploy --config wrangler.branch.toml \
             --name "playheads-admin-${SLUG}"
 
+      - name: Sync admin secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          WORKER="playheads-admin-${{ steps.branch.outputs.slug }}"
+          if [ -n "${{ secrets.RESEND_API_KEY }}" ]; then
+            printf '%s' "${{ secrets.RESEND_API_KEY }}" | npx wrangler secret put RESEND_API_KEY --name "$WORKER" && echo "✓ RESEND_API_KEY" || echo "✗ RESEND_API_KEY failed"
+          fi
+
       - name: Sync gateway secrets
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
