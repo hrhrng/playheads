@@ -121,22 +121,21 @@ export function useMusicProvider({
   // Global play queue
   const queue = usePlayQueue({ provider, userId });
 
-  // Restore playback state from backend once authorized
+  // Restore queue + track display from backend once provider is ready.
+  // Does NOT require Apple Music auth — displaying the track is independent.
   const initialRestoreDone = useRef(false);
   useEffect(() => {
-    if (!provider || !isAuthorized || isInitializing || initialRestoreDone.current) return;
+    if (!provider || isInitializing || initialRestoreDone.current) return;
     if (!userId) return;
     initialRestoreDone.current = true;
 
     (async () => {
       try {
-        // Restore queue from backend
         const queueRes = await fetch(`${API_BASE}/queue?user_id=${userId}`);
         if (queueRes.ok) {
           const data = await queueRes.json();
           if (data.queue?.length > 0) {
             queue.setQueue(data.queue);
-            // Restore current track display
             const idx = data.currentIndex ?? -1;
             if (idx >= 0 && idx < data.queue.length) {
               provider.restoreTrackDisplay(data.queue[idx], 0);
@@ -147,7 +146,7 @@ export function useMusicProvider({
         console.error('[useMusicProvider] restore error:', e);
       }
     })();
-  }, [provider, isAuthorized, isInitializing, userId]);
+  }, [provider, isInitializing, userId]);
 
   // Periodic sync every 10s while playing
   useEffect(() => {

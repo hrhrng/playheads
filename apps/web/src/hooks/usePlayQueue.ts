@@ -138,24 +138,8 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
     syncToBackend([], -1);
   }, [syncToBackend]);
 
-  // ── Restore from backend on mount ───────────────────────────────
-  useEffect(() => {
-    if (!userId) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch(`${API_BASE}/queue?user_id=${userId}`);
-        if (cancelled || !res.ok) return;
-        const data = await res.json();
-        if (data.queue?.length > 0) {
-          setQueue(data.queue);
-          setCurrentIndex(data.currentIndex ?? -1);
-          lastSyncedRef.current = JSON.stringify(data.queue.map((t: UnifiedTrack) => t.id)) + ':' + (data.currentIndex ?? -1);
-        }
-      } catch { /* network error — start with empty queue */ }
-    })();
-    return () => { cancelled = true; };
-  }, [userId]);
+  // No self-restore here — useMusicProvider handles the full restore
+  // (queue + track display) in a single fetch to avoid double-fetching.
 
   return {
     queue,

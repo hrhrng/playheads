@@ -274,9 +274,9 @@ export class AppleMusicProvider implements MusicProvider {
       this.playerReadyRef = true;
       this.pendingQueue = null;
       await this.musicKit.setQueue({ songs: songIds, startPlaying: false } as any);
-      if (startIndex > 0) {
-        await this.musicKit.changeToMediaAtIndex(startIndex);
-      }
+      // Always seek to the desired index — even index 0 needs explicit positioning
+      // because setQueue may not default to the first item reliably.
+      await this.musicKit.changeToMediaAtIndex(startIndex);
       await this.musicKit.play();
       this.updateState({ isPlaying: true });
     } catch (e) {
