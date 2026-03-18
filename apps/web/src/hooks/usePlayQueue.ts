@@ -82,6 +82,7 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
       if (!trackId) return;
       const q = queueRef.current;
       const idx = q.findIndex(t => t.id === trackId);
+      console.log('[usePlayQueue] nowPlayingChange: trackId=', trackId, 'idx=', idx, 'queueLen=', q.length);
       if (idx <= 0) return; // already at head or not found
       setQueue(q.slice(idx));
     });
@@ -95,9 +96,11 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
     if (!provider) return;
     const unsub = provider.onQueueChange(() => {
       const mkItems = provider.getNativeQueue();
-      setQueue(mkItems.map(t =>
+      const enriched = mkItems.map(t =>
         t.name !== 'Unknown' ? t : (metadataCache.current.get(t.id) ?? t)
-      ));
+      );
+      console.log('[usePlayQueue] onQueueChange: mkItems=', mkItems.length, mkItems.map(t => `${t.id}:${t.name}`));
+      setQueue(enriched);
     });
     return unsub;
   }, [provider]);

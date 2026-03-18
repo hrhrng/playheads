@@ -153,6 +153,7 @@ export class AppleMusicProvider implements MusicProvider {
   /** Read MusicKit's persisted queue on startup and notify React. */
   private readInitialQueue(): void {
     const items = this.getNativeQueue();
+    console.log('[AppleMusic] readInitialQueue:', items.length, 'items', items.map(i => i.name));
     if (items.length > 0) {
       this.playerReadyRef = true;
       for (const cb of this.queueChangeListeners) cb();
@@ -173,8 +174,9 @@ export class AppleMusicProvider implements MusicProvider {
     });
 
     this.on(mk, 'nowPlayingItemDidChange', () => {
-      if (!this.playerReadyRef) return;
       const item = mk.nowPlayingItem;
+      console.log('[AppleMusic] nowPlayingItemDidChange: playerReady=', this.playerReadyRef, 'item=', item?.id, item?.attributes?.name);
+      if (!this.playerReadyRef) return;
       if (item) {
         this.lastPlayingTrackId = item.id;
         this.updateState({ currentTrack: this.formatMusicKitTrack(item) });
@@ -183,6 +185,7 @@ export class AppleMusicProvider implements MusicProvider {
     });
 
     this.on(mk, 'playbackStateDidChange', (e: any) => {
+      console.log('[AppleMusic] playbackStateDidChange:', e.state, 'playerReady=', this.playerReadyRef);
       if (!this.playerReadyRef) return;
       const state = e.state;
       const playing = state === 'playing' || state === 2;
@@ -199,6 +202,8 @@ export class AppleMusicProvider implements MusicProvider {
     });
 
     this.on(mk, 'queueItemsDidChange', () => {
+      const items = this.getNativeQueue();
+      console.log('[AppleMusic] queueItemsDidChange: playerReady=', this.playerReadyRef, 'items=', items.length, items.map(i => `${i.id}:${i.name}`));
       if (!this.playerReadyRef) return;
       for (const cb of this.queueChangeListeners) cb();
     });
@@ -282,6 +287,7 @@ export class AppleMusicProvider implements MusicProvider {
 
   /** Set MusicKit queue to all song IDs and start playback at startIndex. */
   async playWithQueue(songIds: string[], startIndex: number, retried = false): Promise<void> {
+    console.log('[AppleMusic] playWithQueue:', songIds.length, 'songs, startIndex=', startIndex, 'retried=', retried);
     if (!this.musicKit || this.playbackLock || songIds.length === 0) return;
     this.playbackLock = true;
     this.startTransition();
@@ -391,6 +397,7 @@ export class AppleMusicProvider implements MusicProvider {
 
   /** Resume or start playback. */
   async play(trackId?: string, startTime?: number): Promise<void> {
+    console.log('[AppleMusic] play() called, trackId=', trackId, 'startTime=', startTime);
     if (!this.musicKit || this.playbackLock) return;
     this.playbackLock = true;
     this.startTransition();

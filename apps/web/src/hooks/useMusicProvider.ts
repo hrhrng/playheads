@@ -132,6 +132,7 @@ export function useMusicProvider({
         // MusicKit restores its own queue from storage (readInitialQueue already notified React).
         // Only fall back to backend if MusicKit queue is empty (e.g. browser cache cleared).
         const mkQueue = provider.getNativeQueue();
+        console.log('[useMusicProvider] restore: mkQueue=', mkQueue.length, mkQueue.map(t => `${t.id}:${t.name}`));
         if (mkQueue.length === 0) {
           const queueRes = await fetch(`${API_BASE}/queue?user_id=${userId}`);
           if (queueRes.ok) {
