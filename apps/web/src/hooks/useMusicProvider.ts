@@ -8,7 +8,6 @@ import { useState, useEffect, useRef, useSyncExternalStore, useCallback } from '
 import { AppleMusicProvider } from '../providers/AppleMusicProvider';
 import { usePlayQueue, type UsePlayQueueReturn } from './usePlayQueue';
 import type { PlaybackState } from '../providers/types';
-import { API_BASE } from '../config/api';
 
 interface UseMusicProviderParams {
   userId: string | null;
@@ -119,45 +118,37 @@ export function useMusicProvider({
   const queueHook = usePlayQueue({ provider, userId });
   const finishRestore = (queueHook as any).finishRestore as () => void;
 
-  // ── Queue restore (MusicKit first, backend fallback) ───────────
+  // ── Queue restore from localStorage (no autoplay) ──────────────
   const initialRestoreDone = useRef(false);
+  const QUEUE_STORAGE_KEY = 'playheads_queue';
 
   useEffect(() => {
     if (!provider || isInitializing || initialRestoreDone.current) return;
-    if (!userId) return;
     initialRestoreDone.current = true;
 
-    (async () => {
-      try {
-        // MusicKit restores its own queue from storage (readInitialQueue already notified React).
-        // Only fall back to backend if MusicKit queue is empty (e.g. browser cache cleared).
-        const mkQueue = provider.getNativeQueue();
-        console.log('[useMusicProvider] restore: mkQueue=', mkQueue.length, mkQueue.map(t => `${t.id}:${t.name}`));
-        if (mkQueue.length === 0) {
-          const queueRes = await fetch(`${API_BASE}/queue?user_id=${userId}`);
-          if (queueRes.ok) {
-            const data = await queueRes.json();
-            if (data.queue?.length > 0) {
-              const seen = new Set<string>();
-              const tracks = data.queue.filter((t: any) => {
-                if (seen.has(t.id)) return false;
-                seen.add(t.id);
-                return true;
-              });
-              // Fill metadataCache so enrichment works
-              queueHook.setQueue(tracks);
-              // Restore MusicKit queue → queueItemsDidChange → React state
-              await provider.playWithQueue(tracks.map((t: any) => t.id), 0);
-            }
-          }
+    try {
+      const raw = localStorage.getItem(QUEUE_STORAGE_KEY);
+      if (raw) {
+        const tracks = JSON.parse(raw);
+        if (Array.isArray(tracks) && tracks.length > 0) {
+          console.log('[useMusicProvider] restore:', tracks.length, 'tracks from localStorage');
+          queueHook.setQueue(tracks);
+          provider.setDisplayTrack(tracks[0]);
+          // Set MusicKit queue but don't play — avoids autoplay violation
+          provider.setQueueWithoutPlaying(tracks.map((t: any) => t.id));
         }
-      } catch (e) {
-        console.error('[useMusicProvider] restore error:', e);
-      } finally {
-        finishRestore();
       }
-    })();
-  }, [provider, isInitializing, userId]);
+    } catch { /* ignore corrupt localStorage */ }
+    finishRestore();
+  }, [provider, isInitializing]);
+
+  // ── Persist queue to localStorage ─────────────────────────────
+  useEffect(() => {
+    if (!initialRestoreDone.current) return;
+    try {
+      localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(queueHook.queue));
+    } catch { /* ignore */ }
+  }, [queueHook.queue]);
 
   const login = useCallback(async () => {
     if (provider) await provider.login();
