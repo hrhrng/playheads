@@ -206,7 +206,6 @@ export function ChatRoute({
           currentTrack={currentTrack}
           isPlaying={isPlaying}
           queue={queue.queue}
-          currentIndex={queue.currentIndex}
           onPlayTrack={(index) => queue.playAtIndex(index)}
           collapsed={collapsed}
           toggleCollapse={toggleCollapse}

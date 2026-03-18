@@ -1,11 +1,13 @@
 /**
  * Global play queue hook — single queue for all conversations.
  *
- * Uses MusicKit native queue for playback ordering and auto-advance.
- * Mirrors our track array to MusicKit via playWithQueue / addToNativeQueue.
- * Syncs currentIndex from MusicKit's nowPlayingItemDidChange events.
+ * Model: queue[0] = now playing, queue.slice(1) = up next.
+ * No currentIndex — position is implicit.
  *
- * Backend sync is driven by a useEffect on queue/currentIndex state —
+ * Uses MusicKit native queue for playback ordering and auto-advance.
+ * Syncs from MusicKit's nowPlayingItemDidChange to slice played tracks.
+ *
+ * Backend sync is driven by a useEffect on queue state —
  * any state change triggers a sync, regardless of the source.
  */
 
@@ -16,7 +18,6 @@ import type { AppleMusicProvider } from '../providers/AppleMusicProvider';
 
 export interface UsePlayQueueReturn {
   queue: UnifiedTrack[];
-  currentIndex: number;
   addTrack(track: UnifiedTrack): void;
   removeTrack(index: number): void;
   playAtIndex(index: number): Promise<void>;
@@ -33,12 +34,9 @@ interface UsePlayQueueParams {
 
 export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQueueReturn {
   const [queue, setQueue] = useState<UnifiedTrack[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(-1);
 
   const queueRef = useRef(queue);
   queueRef.current = queue;
-  const currentIndexRef = useRef(currentIndex);
-  currentIndexRef.current = currentIndex;
 
   // ── Backend sync: driven by React state changes ─────────────────
   // Skip the very first render (initial empty state) and restore-driven
@@ -46,39 +44,52 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
   const isRestoringRef = useRef(true);
 
   useEffect(() => {
-    // Skip during restore phase
     if (isRestoringRef.current) return;
     if (!userId) return;
 
-    const body = JSON.stringify({ user_id: userId, queue, currentIndex });
+    const body = JSON.stringify({ user_id: userId, queue });
     fetch(`${API_BASE}/queue/sync`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body,
     }).catch(e => console.error('[PlayQueue] sync error:', e));
-  }, [queue, currentIndex, userId]);
+  }, [queue, userId]);
+
+  // ── beforeunload: persist queue via sendBeacon ──────────────────
+  useEffect(() => {
+    if (!userId) return;
+    const handler = () => {
+      const body = JSON.stringify({
+        user_id: userId,
+        queue: queueRef.current,
+      });
+      const blob = new Blob([body], { type: 'application/json' });
+      navigator.sendBeacon(`${API_BASE}/queue/sync`, blob);
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [userId]);
 
   // ── Sync from MusicKit nowPlayingItemDidChange ──────────────────
-  // When MusicKit auto-advances, remove all tracks before the new one
-  // (they've been played) and keep currentIndex at 0.
+  // When MusicKit auto-advances or changes track, slice the queue so
+  // the new track becomes queue[0]. Everything before it is gone.
   useEffect(() => {
     if (!provider) return;
     const unsub = provider.onNowPlayingChange((trackId) => {
       if (!trackId) return;
       const q = queueRef.current;
-      const prevIdx = currentIndexRef.current;
-      const newIdx = q.findIndex(t => t.id === trackId);
-      if (newIdx < 0 || newIdx === prevIdx) return;
+      const idx = q.findIndex(t => t.id === trackId);
+      if (idx <= 0) return; // already at head or not found
+      setQueue(q.slice(idx));
+    });
+    return unsub;
+  }, [provider]);
 
-      if (newIdx > prevIdx && prevIdx >= 0) {
-        // Moved forward — remove played tracks (indices 0..newIdx-1)
-        const remaining = q.slice(newIdx);
-        setQueue(remaining);
-        setCurrentIndex(0);
-      } else {
-        // Moved backward (skipPrev) or first play — just update index
-        setCurrentIndex(newIdx);
-      }
+  // ── Listen for unresolvable IDs from the provider ───────────────
+  useEffect(() => {
+    if (!provider) return;
+    const unsub = provider.onUnresolvableIds((badIds) => {
+      setQueue(prev => prev.filter(t => !badIds.has(t.id)));
     });
     return unsub;
   }, [provider]);
@@ -98,13 +109,10 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
   const removeTrack = useCallback((index: number) => {
     setQueue(prev => {
       const next = prev.filter((_, i) => i !== index);
-      let newIndex = currentIndexRef.current;
-      if (index < newIndex) newIndex--;
-      else if (index === newIndex) newIndex = -1;
-      setCurrentIndex(newIndex);
-      if (provider && next.length > 0 && newIndex >= 0) {
+      if (index === 0 && provider && next.length > 0) {
+        // Removed the now-playing track — play the new head
         const songIds = next.map(t => t.id);
-        provider.playWithQueue(songIds, newIndex).catch(console.error);
+        provider.playWithQueue(songIds, 0).catch(console.error);
       }
       return next;
     });
@@ -114,14 +122,17 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
     const q = queueRef.current;
     if (index < 0 || index >= q.length || !provider) return;
 
-    setCurrentIndex(index);
-    const songIds = q.map(t => t.id);
-    await provider.playWithQueue(songIds, index);
+    // Slice so clicked track becomes queue[0]
+    const newQueue = q.slice(index);
+    setQueue(newQueue);
+    const songIds = newQueue.map(t => t.id);
+    await provider.playWithQueue(songIds, 0);
   }, [provider]);
 
   const skipNext = useCallback(async () => {
     if (!provider) return;
     await provider.skipToNext();
+    // MusicKit's nowPlayingItemDidChange will trigger the queue slice
   }, [provider]);
 
   const skipPrev = useCallback(async () => {
@@ -141,12 +152,10 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
 
   const clear = useCallback(() => {
     setQueue([]);
-    setCurrentIndex(-1);
   }, []);
 
   return {
     queue,
-    currentIndex,
     addTrack,
     removeTrack,
     playAtIndex,

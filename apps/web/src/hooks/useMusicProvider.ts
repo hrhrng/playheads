@@ -84,8 +84,6 @@ export function useMusicProvider({
   }, [isTokenChecked, storedMusicUserToken]);
 
   // Bridge ALL provider state to React via useSyncExternalStore.
-  // getSnapshot builds a composite object so React re-renders when
-  // isInitializing/isAuthorized change, not just playbackState.
   const lastSnapshotRef = useRef<ProviderSnapshot>(DEFAULT_SNAPSHOT);
 
   const subscribe = useCallback((onStoreChange: () => void) => {
@@ -101,7 +99,6 @@ export function useMusicProvider({
       isInitializing: provider.isInitializing,
       storefrontId: provider.storefrontId,
     };
-    // Maintain referential equality when nothing changed
     const prev = lastSnapshotRef.current;
     if (
       prev.playback === next.playback &&
@@ -122,9 +119,8 @@ export function useMusicProvider({
   const queueHook = usePlayQueue({ provider, userId });
   const finishRestore = (queueHook as any).finishRestore as () => void;
 
-  // Restore queue: LOCAL FIRST (MusicKit), backend fallback.
-  // MusicKit preserves its queue across page refreshes via browser storage.
-  // We read from MusicKit first; only fall back to backend if MusicKit is empty.
+  // Restore queue from backend (server-authoritative).
+  // Deduplicate by ID, set queue[0] as display track.
   const initialRestoreDone = useRef(false);
   useEffect(() => {
     if (!provider || isInitializing || initialRestoreDone.current) return;
@@ -133,38 +129,26 @@ export function useMusicProvider({
 
     (async () => {
       try {
-        // 1. Try local MusicKit queue (source of truth)
-        const local = provider.getLocalQueue();
-        if (local.tracks.length > 0) {
-          console.log('[Restore] Using MusicKit local queue:', local.tracks.length, 'tracks, index:', local.currentIndex);
-          queueHook.setQueue(local.tracks);
-          // Set currentIndex via the track display restore
-          if (local.currentIndex >= 0 && local.currentIndex < local.tracks.length) {
-            provider.restoreTrackDisplay(local.tracks[local.currentIndex], 0);
-          }
-          // Open the gate so MusicKit events flow through
-          provider.markReady();
-          finishRestore();
-          return;
-        }
-
-        // 2. Fallback: restore from backend
-        console.log('[Restore] MusicKit queue empty, falling back to backend');
         const queueRes = await fetch(`${API_BASE}/queue?user_id=${userId}`);
         if (queueRes.ok) {
           const data = await queueRes.json();
           if (data.queue?.length > 0) {
-            queueHook.setQueue(data.queue);
-            const idx = data.currentIndex ?? -1;
-            if (idx >= 0 && idx < data.queue.length) {
-              provider.restoreTrackDisplay(data.queue[idx], 0);
+            // Deduplicate by track ID, preserving order
+            const seen = new Set<string>();
+            const deduped = data.queue.filter((t: any) => {
+              if (seen.has(t.id)) return false;
+              seen.add(t.id);
+              return true;
+            });
+            queueHook.setQueue(deduped);
+            if (deduped.length > 0) {
+              provider.restoreTrackDisplay(deduped[0], deduped, 0, 0);
             }
           }
         }
       } catch (e) {
         console.error('[useMusicProvider] restore error:', e);
       } finally {
-        provider.markReady();
         finishRestore();
       }
     })();
