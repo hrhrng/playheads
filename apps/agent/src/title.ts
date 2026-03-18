@@ -4,6 +4,7 @@
  */
 import { generateText } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
+import { createOpenAI } from "@ai-sdk/openai";
 import type { Env } from "./types";
 
 const TITLE_PROMPT = `Based on this music conversation, generate a short, descriptive title (max 5 words).
@@ -32,13 +33,26 @@ export async function generateConversationTitle(
 
     const prompt = TITLE_PROMPT.replace("{conversation}", conversationText);
 
-    const anthropic = createAnthropic({
-      apiKey: env.CF_AIG_TOKEN,
-      baseURL: `https://gateway.ai.cloudflare.com/v1/${env.CLOUDFLARE_ACCOUNT_ID}/${env.AI_GATEWAY_ID}/anthropic`,
-    });
+    const llmProvider = env.LLM_PROVIDER || "anthropic";
+    let titleModel: Parameters<typeof generateText>[0]["model"];
+
+    if (llmProvider === "doubao") {
+      const doubao = createOpenAI({
+        apiKey: env.DOUBAO_API_KEY,
+        baseURL: "https://ark.cn-beijing.volces.com/api/v3",
+      });
+      // Use the lite model for cost-efficient title generation
+      titleModel = doubao("doubao-1.5-lite-32k");
+    } else {
+      const anthropic = createAnthropic({
+        apiKey: env.CF_AIG_TOKEN,
+        baseURL: `https://gateway.ai.cloudflare.com/v1/${env.CLOUDFLARE_ACCOUNT_ID}/${env.AI_GATEWAY_ID}/anthropic`,
+      });
+      titleModel = anthropic("claude-haiku-4-5-20251001");
+    }
 
     const { text } = await generateText({
-      model: anthropic("claude-haiku-4-5-20251001"),
+      model: titleModel,
       prompt,
       temperature: 0.7,
       maxOutputTokens: 20,

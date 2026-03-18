@@ -12,14 +12,26 @@ export interface Env {
   // D1 database
   DB: D1Database;
 
-  // LLM configuration
+  // LLM provider selection ("anthropic" | "doubao", default: "anthropic")
+  LLM_PROVIDER: string;
+
+  // Anthropic configuration
   ANTHROPIC_MODEL: string;
   ANTHROPIC_THINKING_BUDGET: string;
 
-  // Cloudflare AI Gateway
+  // Cloudflare AI Gateway (used with Anthropic)
   CLOUDFLARE_ACCOUNT_ID: string;
   AI_GATEWAY_ID: string;
   CF_AIG_TOKEN: string;
+
+  // Doubao (ByteDance / Volcano Engine Ark) configuration
+  DOUBAO_API_KEY: string;
+  // Model ID for direct inference (no web search), e.g. "doubao-1.5-pro-32k"
+  DOUBAO_MODEL: string;
+  // Bot ID for inference with platform-native web search plugin enabled.
+  // Create a bot with the 联网内容插件 in the Volcano Engine console.
+  // When set, this ID is used as the model and the /bots endpoint is called.
+  DOUBAO_BOT_ID: string;
 
   // Apple Music
   APPLE_MUSIC_TEAM_ID: string;

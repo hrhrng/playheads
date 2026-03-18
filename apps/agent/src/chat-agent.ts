@@ -10,6 +10,7 @@
 import { AIChatAgent } from "@cloudflare/ai-chat";
 import { streamText, convertToModelMessages, stepCountIs } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
+import { createOpenAI } from "@ai-sdk/openai";
 import { createMusicTools } from "./tools";
 import { generateAndUpdateTitle } from "./title";
 import type { Env, PlaybackState } from "./types";
@@ -149,33 +150,78 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
       isPlaying: globalState.isPlaying,
     });
 
-    // Route through Cloudflare AI Gateway
-    const anthropic = createAnthropic({
-      apiKey: this.env.CF_AIG_TOKEN,
-      baseURL: `https://gateway.ai.cloudflare.com/v1/${this.env.CLOUDFLARE_ACCOUNT_ID}/${this.env.AI_GATEWAY_ID}/anthropic`,
-    });
-    const model = anthropic(this.env.ANTHROPIC_MODEL || "claude-sonnet-4-6");
+    // Build model + tools based on LLM_PROVIDER env var.
+    // Supported values: "anthropic" (default), "doubao"
+    const llmProvider = this.env.LLM_PROVIDER || "anthropic";
 
-    // All tools have `execute` on the server. Player control tools embed
-    // `_action` in their results — the frontend picks these up and dispatches
-    // MusicKit JS operations as a side effect (same as old SSE action pattern).
-    // Claude's native web_search is added as a server-side tool for discovery.
-    const tools = {
-      ...createMusicTools({ env: this.env, state: globalState, storefront }),
-      web_search: anthropic.tools.webSearch_20250305({ maxUses: 5 }),
-    };
+    let model: Parameters<typeof streamText>[0]["model"];
+    let tools: Parameters<typeof streamText>[0]["tools"];
+    let maxOutputTokens: number;
+    let providerOptions: Parameters<typeof streamText>[0]["providerOptions"];
 
-    // Extended thinking (configurable via ANTHROPIC_THINKING_BUDGET env var)
-    const thinkingBudget = parseInt(this.env.ANTHROPIC_THINKING_BUDGET || "0");
+    if (llmProvider === "doubao") {
+      // -----------------------------------------------------------------------
+      // Doubao (ByteDance Volcano Engine Ark)
+      // API is fully OpenAI-compatible.
+      //
+      // Two modes:
+      //   1. Bot endpoint (DOUBAO_BOT_ID set): calls /api/v3/bots/chat/completions
+      //      The bot has the 联网内容插件 (web search plugin) enabled in the
+      //      console, so web search is handled transparently by the platform.
+      //   2. Direct endpoint (no bot ID): calls /api/v3/chat/completions,
+      //      no web search available.
+      // -----------------------------------------------------------------------
+      const botId = this.env.DOUBAO_BOT_ID;
+      const baseURL = botId
+        ? "https://ark.cn-beijing.volces.com/api/v3/bots"
+        : "https://ark.cn-beijing.volces.com/api/v3";
+      const modelId = botId || this.env.DOUBAO_MODEL || "doubao-1.5-pro-32k";
 
-    const result = streamText({
-      model,
-      maxOutputTokens: thinkingBudget > 0 ? 16384 : 4096,
-      providerOptions: thinkingBudget > 0 ? {
+      const doubao = createOpenAI({
+        apiKey: this.env.DOUBAO_API_KEY,
+        baseURL,
+      });
+
+      model = doubao(modelId);
+      // Music tools work with any provider. Web search is handled by the
+      // Doubao Bot platform plugin — no explicit tool declaration needed.
+      tools = createMusicTools({ env: this.env, state: globalState, storefront });
+      maxOutputTokens = 4096;
+      providerOptions = undefined;
+    } else {
+      // -----------------------------------------------------------------------
+      // Anthropic (default) — routed through Cloudflare AI Gateway
+      // -----------------------------------------------------------------------
+      const anthropic = createAnthropic({
+        apiKey: this.env.CF_AIG_TOKEN,
+        baseURL: `https://gateway.ai.cloudflare.com/v1/${this.env.CLOUDFLARE_ACCOUNT_ID}/${this.env.AI_GATEWAY_ID}/anthropic`,
+      });
+
+      model = anthropic(this.env.ANTHROPIC_MODEL || "claude-sonnet-4-6");
+
+      // All tools have `execute` on the server. Player control tools embed
+      // `_action` in their results — the frontend picks these up and dispatches
+      // MusicKit JS operations as a side effect (same as old SSE action pattern).
+      // Claude's native web_search is added as a server-side tool for discovery.
+      tools = {
+        ...createMusicTools({ env: this.env, state: globalState, storefront }),
+        web_search: anthropic.tools.webSearch_20250305({ maxUses: 5 }),
+      };
+
+      // Extended thinking (configurable via ANTHROPIC_THINKING_BUDGET env var)
+      const thinkingBudget = parseInt(this.env.ANTHROPIC_THINKING_BUDGET || "0");
+      maxOutputTokens = thinkingBudget > 0 ? 16384 : 4096;
+      providerOptions = thinkingBudget > 0 ? {
         anthropic: {
           thinking: { type: "enabled" as const, budgetTokens: thinkingBudget },
         },
-      } : undefined,
+      } : undefined;
+    }
+
+    const result = streamText({
+      model,
+      maxOutputTokens,
+      providerOptions,
       system: buildSystemPrompt(globalState),
       messages: await convertToModelMessages(this.messages),
       tools,
