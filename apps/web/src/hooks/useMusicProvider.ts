@@ -134,8 +134,13 @@ export function useMusicProvider({
           console.log('[useMusicProvider] restore:', tracks.length, 'tracks from localStorage');
           queueHook.setQueue(tracks);
           provider.setDisplayTrack(tracks[0]);
-          // Set MusicKit queue but don't play — avoids autoplay violation
-          provider.setQueueWithoutPlaying(tracks.map((t: any) => t.id));
+          // Set MusicKit queue but don't play — avoids autoplay violation.
+          // Wait for it to complete + let MusicKit events settle before
+          // unblocking onQueueChange (otherwise the async queueItemsDidChange
+          // fires after isRestoringRef is already false and overwrites React queue).
+          provider.setQueueWithoutPlaying(tracks.map((t: any) => t.id))
+            .finally(() => setTimeout(finishRestore, 200));
+          return; // finishRestore will be called async
         }
       }
     } catch { /* ignore corrupt localStorage */ }
