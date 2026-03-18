@@ -66,6 +66,10 @@ export function usePlayQueue({ provider }: UsePlayQueueParams): UsePlayQueueRetu
   const addTrack = useCallback((track: UnifiedTrack) => {
     metadataCache.current.set(track.id, track);
     if (provider) {
+      // If nothing is showing in the player yet, display this track immediately (paused).
+      if (!provider.playbackState.currentTrack) {
+        provider.setDisplayTrack(track);
+      }
       provider.addToNativeQueue(track.id).catch(console.error);
       // queue[] will update via queueItemsDidChange
     }

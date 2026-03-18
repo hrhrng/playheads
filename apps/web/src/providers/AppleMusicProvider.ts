@@ -453,6 +453,21 @@ export class AppleMusicProvider implements MusicProvider {
     return items.map(item => this.formatMusicKitTrack(item));
   }
 
+  /**
+   * Show a track in the player bar without starting playback.
+   * Only updates display state — does not touch MusicKit.
+   * Used when the first track is added to an empty queue.
+   */
+  setDisplayTrack(track: UnifiedTrack): void {
+    if (!this._playbackState.currentTrack) {
+      this.updateState({
+        currentTrack: track,
+        isPlaying: false,
+        playbackTime: { current: 0, total: track.durationSeconds },
+      });
+    }
+  }
+
   getMusicUserToken(): string | null {
     return (this.musicKit as any)?.musicUserToken || null;
   }
