@@ -171,16 +171,21 @@ export function useAgentChatAdapter({
   } = useAgentChat({
     agent,
     body: { session_id: sessionId, user_id: userId, storefront: musicActions?.storefront || 'us' },
-    onToolCall: async ({ toolCall }) => {
+    onToolCall: async ({ toolCall, addToolOutput }) => {
       if (toolCall.toolName === 'get_playlist') {
         const tracks = queueRef.current;
-        if (!tracks.length) return "The playlist is empty.";
-        const lines = [`Playlist has ${tracks.length} tracks:`];
-        tracks.slice(0, 10).forEach((t, i) => {
-          lines.push(`  ${i + 1}. ${t.name} - ${t.artist}`);
-        });
-        if (tracks.length > 10) lines.push(`... and ${tracks.length - 10} more tracks`);
-        return lines.join('\n');
+        let output: string;
+        if (!tracks.length) {
+          output = "The playlist is empty.";
+        } else {
+          const lines = [`Playlist has ${tracks.length} tracks:`];
+          tracks.slice(0, 10).forEach((t, i) => {
+            lines.push(`  ${i + 1}. ${t.name} - ${t.artist}`);
+          });
+          if (tracks.length > 10) lines.push(`... and ${tracks.length - 10} more tracks`);
+          output = lines.join('\n');
+        }
+        addToolOutput({ toolCallId: toolCall.toolCallId, output });
       }
     },
   });
