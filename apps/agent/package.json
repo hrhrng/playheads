@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.58",
-    "@ai-sdk/openai": "^1.0.0",
+    "@ai-sdk/openai-compatible": "^0.2.0",
     "@cloudflare/ai-chat": "^0.1.0",
     "agents": "^0.7.0",
     "ai": "^6.0.0",

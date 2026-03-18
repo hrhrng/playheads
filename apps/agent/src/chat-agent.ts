@@ -10,7 +10,7 @@
 import { AIChatAgent } from "@cloudflare/ai-chat";
 import { streamText, convertToModelMessages, stepCountIs } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
-import { createOpenAI } from "@ai-sdk/openai";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createMusicTools } from "./tools";
 import { generateAndUpdateTitle } from "./title";
 import type { Env, PlaybackState } from "./types";
@@ -162,30 +162,42 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
     if (llmProvider === "doubao") {
       // -----------------------------------------------------------------------
       // Doubao (ByteDance Volcano Engine Ark)
-      // API is fully OpenAI-compatible.
-      //
-      // Two modes:
-      //   1. Bot endpoint (DOUBAO_BOT_ID set): calls /api/v3/bots/chat/completions
-      //      The bot has the 联网内容插件 (web search plugin) enabled in the
-      //      console, so web search is handled transparently by the platform.
-      //   2. Direct endpoint (no bot ID): calls /api/v3/chat/completions,
-      //      no web search available.
+      // The API is fully OpenAI-compatible, but uses "type": "builtin_function"
+      // for platform-native tools like web_search. The AI SDK always serialises
+      // tools as "type": "function", so we use transformRequestBody to patch the
+      // web_search entry before the request is sent.
+      // The platform handles the search entirely server-side — no execute()
+      // needed on our side.
       // -----------------------------------------------------------------------
-      const botId = this.env.DOUBAO_BOT_ID;
-      const baseURL = botId
-        ? "https://ark.cn-beijing.volces.com/api/v3/bots"
-        : "https://ark.cn-beijing.volces.com/api/v3";
-      const modelId = botId || this.env.DOUBAO_MODEL || "doubao-1.5-pro-32k";
-
-      const doubao = createOpenAI({
+      const doubao = createOpenAICompatible({
+        name: "doubao",
         apiKey: this.env.DOUBAO_API_KEY,
-        baseURL,
+        baseURL: "https://ark.cn-beijing.volces.com/api/v3",
+        transformRequestBody: (body: Record<string, unknown>) => {
+          const toolsArr = body.tools as Array<Record<string, unknown>> | undefined;
+          if (toolsArr) {
+            body.tools = toolsArr.map((t) =>
+              (t.function as Record<string, unknown>)?.name === "web_search"
+                ? { type: "builtin_function", function: { name: "web_search" } }
+                : t
+            );
+          }
+          return body;
+        },
       });
 
-      model = doubao(modelId);
-      // Music tools work with any provider. Web search is handled by the
-      // Doubao Bot platform plugin — no explicit tool declaration needed.
-      tools = createMusicTools({ env: this.env, state: globalState, storefront });
+      model = doubao(this.env.DOUBAO_MODEL || "doubao-1.5-pro-32k");
+      // Include web_search as a tool so the model knows it's available.
+      // transformRequestBody above rewrites it to type: "builtin_function".
+      // The platform executes the search transparently; we never receive a
+      // tool_call for it in the stream.
+      tools = {
+        ...createMusicTools({ env: this.env, state: globalState, storefront }),
+        web_search: {
+          description: "Search the web for music recommendations, artist info, trending songs, or genre exploration.",
+          parameters: { type: "object" as const, properties: { query: { type: "string" } }, required: ["query"] },
+        },
+      };
       maxOutputTokens = 4096;
       providerOptions = undefined;
     } else {

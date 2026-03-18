@@ -4,7 +4,7 @@
  */
 import { generateText } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
-import { createOpenAI } from "@ai-sdk/openai";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { Env } from "./types";
 
 const TITLE_PROMPT = `Based on this music conversation, generate a short, descriptive title (max 5 words).
@@ -37,7 +37,8 @@ export async function generateConversationTitle(
     let titleModel: Parameters<typeof generateText>[0]["model"];
 
     if (llmProvider === "doubao") {
-      const doubao = createOpenAI({
+      const doubao = createOpenAICompatible({
+        name: "doubao",
         apiKey: env.DOUBAO_API_KEY,
         baseURL: "https://ark.cn-beijing.volces.com/api/v3",
       });
