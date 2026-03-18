@@ -168,13 +168,26 @@ export function useAgentChatAdapter({
   musicActionsRef.current = musicActions;
   const queueOpsRef = useRef(queueOps);
   queueOpsRef.current = queueOps;
-  const processedActionIds = useRef(new Set<string>(
-    (() => { try { return JSON.parse(sessionStorage.getItem('processedActionIds') || '[]'); } catch { return []; } })()
-  ));
+  const processedActionIds = useRef(new Set<string>());
+  // On first non-empty render, mark all existing historical messages as
+  // already processed — their state effects are already in localStorage.
+  const baselineSet = useRef(false);
 
   useEffect(() => {
     const actions = musicActionsRef.current;
     const ops = queueOpsRef.current;
+
+    if (!baselineSet.current && uiMessages.length > 0) {
+      baselineSet.current = true;
+      for (const msg of uiMessages) {
+        if (msg.role !== "assistant") continue;
+        for (const part of msg.parts) {
+          const p = part as unknown as { toolCallId?: string };
+          if (p.toolCallId) processedActionIds.current.add(p.toolCallId);
+        }
+      }
+      return;
+    }
 
     for (const msg of uiMessages) {
       if (msg.role !== "assistant") continue;
@@ -193,7 +206,6 @@ export function useAgentChatAdapter({
         if (!action) continue;
 
         processedActionIds.current.add(toolPart.toolCallId);
-        try { sessionStorage.setItem('processedActionIds', JSON.stringify([...processedActionIds.current])); } catch { /* ignore */ }
         console.log('[ActionDispatch] Dispatching:', action.type, action.data);
 
         // Update global queue immediately
