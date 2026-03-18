@@ -1,0 +1,52 @@
+---
+import { getCollection } from 'astro:content';
+import Layout from '../../layouts/Layout.astro';
+import Footer from '../../components/Footer.astro';
+
+export const prerender = true;
+
+const posts = (await getCollection('blog')).sort(
+  (a, b) => b.data.pubDate.valueOf() - a.data.pubDate.valueOf()
+);
+---
+
+<Layout title="Blog | The Playheads" description="Insights on AI music discovery, smart playlists, and the future of listening.">
+  <nav class="sticky top-0 z-50 backdrop-blur-lg bg-air-50/80 border-b border-air-100/60" aria-label="Main navigation">
+    <div class="flex items-center justify-between px-6 py-3 max-w-5xl mx-auto">
+      <a href="/" class="text-sm font-semibold tracking-tight" aria-label="The Playheads - Home">The Playheads</a>
+      <div class="flex items-center gap-6">
+        <a href="/blog" class="text-sm text-air-900 font-medium">Blog</a>
+      </div>
+    </div>
+  </nav>
+
+  <main class="px-6 pt-12 pb-16 max-w-2xl mx-auto">
+    <h1 class="text-2xl font-semibold tracking-tight mb-2">Blog</h1>
+    <p class="text-air-400 text-sm mb-10">Thoughts on AI, music, and how we listen.</p>
+
+    <div class="space-y-8">
+      {posts.map(post => (
+        <a href={`/blog/${post.id.replace(/\.md$/, '')}`} class="block group">
+          <article>
+            <time datetime={post.data.pubDate.toISOString()} class="text-xs text-air-400 font-mono">
+              {post.data.pubDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+            </time>
+            <h2 class="text-lg font-semibold tracking-tight mt-1 group-hover:text-air-500 transition-colors">
+              {post.data.title}
+            </h2>
+            <p class="text-air-400 text-sm mt-1 leading-relaxed">{post.data.description}</p>
+            {post.data.tags.length > 0 && (
+              <div class="flex flex-wrap gap-1.5 mt-2">
+                {post.data.tags.map(tag => (
+                  <span class="text-xs font-mono px-1.5 py-0.5 rounded bg-air-100 text-air-400">{tag}</span>
+                ))}
+              </div>
+            )}
+          </article>
+        </a>
+      ))}
+    </div>
+  </main>
+
+  <Footer />
+</Layout>
