@@ -59,16 +59,28 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
     }, 500);
   }, [userId]);
 
-  // ── Sync currentIndex from MusicKit nowPlayingItemDidChange ─────
+  // ── Sync from MusicKit nowPlayingItemDidChange ──────────────────
+  // When MusicKit auto-advances, remove all tracks before the new one
+  // (they've been played) and keep currentIndex at 0.
   useEffect(() => {
     if (!provider) return;
     const unsub = provider.onNowPlayingChange((trackId) => {
       if (!trackId) return;
       const q = queueRef.current;
-      const idx = q.findIndex(t => t.id === trackId);
-      if (idx >= 0 && idx !== currentIndexRef.current) {
-        setCurrentIndex(idx);
-        syncToBackend(q, idx);
+      const prevIdx = currentIndexRef.current;
+      const newIdx = q.findIndex(t => t.id === trackId);
+      if (newIdx < 0 || newIdx === prevIdx) return;
+
+      if (newIdx > prevIdx && prevIdx >= 0) {
+        // Moved forward — remove played tracks (indices 0..newIdx-1)
+        const remaining = q.slice(newIdx);
+        setQueue(remaining);
+        setCurrentIndex(0);
+        syncToBackend(remaining, 0);
+      } else {
+        // Moved backward (skipPrev) or first play — just update index
+        setCurrentIndex(newIdx);
+        syncToBackend(q, newIdx);
       }
     });
     return unsub;
