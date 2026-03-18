@@ -53,12 +53,17 @@ export function useMusicProvider({
   const [provider, setProvider] = useState<AppleMusicProvider | null>(null);
   const providerRef = useRef<AppleMusicProvider | null>(null);
 
-  // Create and initialize provider when token check is done
+  // Use ref for token so provider is created only once (when isTokenChecked
+  // flips true), not recreated every time the token value changes.
+  const tokenRef = useRef(storedMusicUserToken);
+  tokenRef.current = storedMusicUserToken;
+
+  // Create and initialize provider once when token check is done
   useEffect(() => {
     if (!isTokenChecked) return;
 
     const p = new AppleMusicProvider({
-      storedMusicUserToken,
+      storedMusicUserToken: tokenRef.current,
     });
     providerRef.current = p;
     setProvider(p);
@@ -80,7 +85,8 @@ export function useMusicProvider({
       p.destroy();
       providerRef.current = null;
     };
-  }, [isTokenChecked, storedMusicUserToken]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isTokenChecked]);
 
   // Bridge ALL provider state to React via useSyncExternalStore.
   const lastSnapshotRef = useRef<ProviderSnapshot>(DEFAULT_SNAPSHOT);
