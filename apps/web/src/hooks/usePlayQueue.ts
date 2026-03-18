@@ -94,7 +94,6 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
   useEffect(() => {
     if (!provider) return;
     const unsub = provider.onQueueChange(() => {
-      if (isRestoringRef.current) return; // Don't overwrite localStorage-restored queue
       const mkItems = provider.getNativeQueue();
       setQueue(mkItems.map(t =>
         t.name !== 'Unknown' ? t : (metadataCache.current.get(t.id) ?? t)

@@ -43,9 +43,6 @@ export class AppleMusicProvider implements MusicProvider {
 
   // MusicKit decoupling gate
   private playerReadyRef = false;
-  private isRestoringRef = false;
-  private restoreFinishedAt = 0;
-  private pendingQueue: { songIds: string[]; startIndex: number; startTime?: number } | null = null;
 
   // Serialize playLater calls so queueItemsDidChange fires with monotonically growing queue
   private mutationChain: Promise<void> = Promise.resolve();
@@ -54,7 +51,6 @@ export class AppleMusicProvider implements MusicProvider {
   private playbackLock = false;
   private lastPlayingTrackId: string | null = null;
   private transitionTimeout: ReturnType<typeof setTimeout> | null = null;
-  private isFlushing = false;
   private developerToken: string | null = null;
 
   // Storefront
@@ -132,28 +128,11 @@ export class AppleMusicProvider implements MusicProvider {
 
       this.playerReadyRef = false;
 
-      // Clear MusicKit's local storage so stale queue state doesn't conflict
-      // with the server-authoritative queue restored from backend.
-      try {
-        Object.keys(localStorage).filter(k => k.startsWith('music.')).forEach(k => localStorage.removeItem(k));
-      } catch (_) { /* ignore */ }
-      try {
-        const dbs = await indexedDB.databases?.();
-        if (dbs) {
-          for (const db of dbs) {
-            if (db.name && /musickit/i.test(db.name)) indexedDB.deleteDatabase(db.name);
-          }
-        }
-      } catch (_) { /* ignore */ }
-
       const mk = await window.MusicKit.configure({
         developerToken: this.developerToken!,
         app: { name: 'Playhead', build: '1.0.0' }
       } as any) as MusicKitInstance;
       this.musicKit = mk;
-
-      // Stop playback — backend is source of truth.
-      try { mk.stop(); } catch (_) { /* ignore */ }
 
       if (this.config.storedMusicUserToken && !mk.isAuthorized) {
         (mk as any).musicUserToken = this.config.storedMusicUserToken;
@@ -162,11 +141,21 @@ export class AppleMusicProvider implements MusicProvider {
       this._isAuthorized = mk.isAuthorized;
       this._storefrontId = mk.storefrontId || 'us';
       this.registerEvents(mk);
+      this.readInitialQueue();
     } catch (err) {
       console.error('[AppleMusicProvider] Error initializing:', err);
     } finally {
       this._isInitializing = false;
       this.emit();
+    }
+  }
+
+  /** Read MusicKit's persisted queue on startup and notify React. */
+  private readInitialQueue(): void {
+    const items = this.getNativeQueue();
+    if (items.length > 0) {
+      this.playerReadyRef = true;
+      for (const cb of this.queueChangeListeners) cb();
     }
   }
 
@@ -216,8 +205,6 @@ export class AppleMusicProvider implements MusicProvider {
 
     this.on(mk, 'playbackTimeDidChange', (e: any) => {
       if (!this.playerReadyRef) return;
-      if (this.isRestoringRef) return;
-      if (e.currentPlaybackTime === 0 && Date.now() - this.restoreFinishedAt < 2000) return;
       this.updateState({
         playbackTime: { current: e.currentPlaybackTime, total: e.currentPlaybackDuration },
       });
@@ -300,7 +287,6 @@ export class AppleMusicProvider implements MusicProvider {
     this.startTransition();
     try {
       this.playerReadyRef = true;
-      this.pendingQueue = null;
       await this.musicKit.setQueue({ songs: songIds, startPlaying: false } as any);
       await this.musicKit.changeToMediaAtIndex(startIndex);
       await this.musicKit.play();
@@ -403,7 +389,7 @@ export class AppleMusicProvider implements MusicProvider {
     }
   }
 
-  /** Resume or start playback (single track fallback / pending queue flush). */
+  /** Resume or start playback. */
   async play(trackId?: string, startTime?: number): Promise<void> {
     if (!this.musicKit || this.playbackLock) return;
     this.playbackLock = true;
@@ -411,10 +397,7 @@ export class AppleMusicProvider implements MusicProvider {
     try {
       this.playerReadyRef = true;
       if (trackId) {
-        this.pendingQueue = null;
         await this.musicKit.setQueue({ song: trackId, startPlaying: true, startTime } as any);
-      } else if (this.pendingQueue) {
-        await this.flushPendingQueue();
       } else {
         await this.musicKit.play();
       }
@@ -450,10 +433,7 @@ export class AppleMusicProvider implements MusicProvider {
     this.startTransition();
     try {
       const currentlyPlaying = this.musicKit.playbackState === 'playing' || (this.musicKit.playbackState as any) === 2;
-      if (!currentlyPlaying && this.pendingQueue) {
-        await this.flushPendingQueue();
-        this.updateState({ isPlaying: true });
-      } else if (currentlyPlaying) {
+      if (currentlyPlaying) {
         await this.musicKit.pause();
         this.updateState({ isPlaying: false });
       } else {
@@ -493,72 +473,6 @@ export class AppleMusicProvider implements MusicProvider {
     } catch (e) {
       console.error('[AppleMusicProvider] Search error:', e);
       return [];
-    }
-  }
-
-  // ── Restore from backend ────────────────────────────────────────
-  /** Set the UI track display without starting playback. Stores full queue in pendingQueue. */
-  restoreTrackDisplay(track: UnifiedTrack, allTracks: UnifiedTrack[], startIndex: number, playbackPosition = 0): void {
-    this.lastPlayingTrackId = track.id;
-    const alreadyPlaying = this.musicKit?.nowPlayingItem?.id === track.id;
-
-    if (!alreadyPlaying && track.provider === 'apple-music') {
-      const startTime = playbackPosition > 0 ? playbackPosition : undefined;
-      this.pendingQueue = {
-        songIds: allTracks.map(t => t.id),
-        startIndex,
-        startTime,
-      };
-    }
-
-    this.updateState({
-      currentTrack: track,
-      isPlaying: false,
-      playbackTime: alreadyPlaying
-        ? this._playbackState.playbackTime
-        : { current: playbackPosition, total: track.durationSeconds },
-    });
-    // Open the event gate so MusicKit events flow through after restore
-    this.playerReadyRef = true;
-  }
-
-  // ── Internal ────────────────────────────────────────────────────
-  private async flushPendingQueue() {
-    const pending = this.pendingQueue;
-    if (!pending || !this.musicKit || this.isFlushing) return;
-    this.isFlushing = true;
-    this.pendingQueue = null;
-    this.isRestoringRef = true;
-    try {
-      this.playerReadyRef = true;
-      await this.musicKit.setQueue({ songs: pending.songIds, startPlaying: false } as any);
-      await this.musicKit.changeToMediaAtIndex(pending.startIndex);
-      if (pending.startTime) {
-        await this.musicKit.seekToTime(pending.startTime);
-      }
-      await this.musicKit.play();
-    } catch (e) {
-      // Handle unresolvable IDs during flush
-      const msg = String((e as any)?.message || e);
-      const match = msg.match(/could not be resolved:\s*(.+)/i);
-      if (match) {
-        const badIds = new Set(match[1].split(/[,\s]+/).filter(Boolean));
-        for (const cb of this.unresolvableListeners) cb(badIds);
-        const filtered = pending.songIds.filter(id => !badIds.has(id));
-        if (filtered.length > 0) {
-          this.isFlushing = false;
-          this.isRestoringRef = false;
-          this.restoreFinishedAt = Date.now();
-          // Retry with filtered list — release lock first
-          await this.playWithQueue(filtered, 0);
-          return;
-        }
-      }
-      console.error('[AppleMusicProvider] flushPendingQueue error:', e);
-    } finally {
-      this.isRestoringRef = false;
-      this.restoreFinishedAt = Date.now();
-      this.isFlushing = false;
     }
   }
 
