@@ -27,11 +27,23 @@ interface UseMusicProviderReturn {
   logout: () => Promise<void>;
 }
 
-const DEFAULT_PLAYBACK: PlaybackState = {
-  currentTrack: null,
-  isPlaying: false,
-  isTransitioning: false,
-  playbackTime: { current: 0, total: 0 },
+interface ProviderSnapshot {
+  playback: PlaybackState;
+  isAuthorized: boolean;
+  isInitializing: boolean;
+  storefrontId: string;
+}
+
+const DEFAULT_SNAPSHOT: ProviderSnapshot = {
+  playback: {
+    currentTrack: null,
+    isPlaying: false,
+    isTransitioning: false,
+    playbackTime: { current: 0, total: 0 },
+  },
+  isAuthorized: false,
+  isInitializing: true,
+  storefrontId: 'us',
 };
 
 export function useMusicProvider({
@@ -71,22 +83,40 @@ export function useMusicProvider({
     };
   }, [isTokenChecked, storedMusicUserToken]);
 
-  // Bridge provider.playbackState to React via useSyncExternalStore
+  // Bridge ALL provider state to React via useSyncExternalStore.
+  // getSnapshot builds a composite object so React re-renders when
+  // isInitializing/isAuthorized change, not just playbackState.
+  const lastSnapshotRef = useRef<ProviderSnapshot>(DEFAULT_SNAPSHOT);
+
   const subscribe = useCallback((onStoreChange: () => void) => {
     if (!provider) return () => {};
     return provider.onStateChange(onStoreChange);
   }, [provider]);
 
-  const getSnapshot = useCallback(() => {
-    return provider?.playbackState ?? DEFAULT_PLAYBACK;
+  const getSnapshot = useCallback((): ProviderSnapshot => {
+    if (!provider) return DEFAULT_SNAPSHOT;
+    const next: ProviderSnapshot = {
+      playback: provider.playbackState,
+      isAuthorized: provider.isAuthorized,
+      isInitializing: provider.isInitializing,
+      storefrontId: provider.storefrontId,
+    };
+    // Maintain referential equality when nothing changed
+    const prev = lastSnapshotRef.current;
+    if (
+      prev.playback === next.playback &&
+      prev.isAuthorized === next.isAuthorized &&
+      prev.isInitializing === next.isInitializing &&
+      prev.storefrontId === next.storefrontId
+    ) {
+      return prev;
+    }
+    lastSnapshotRef.current = next;
+    return next;
   }, [provider]);
 
-  const playback = useSyncExternalStore(subscribe, getSnapshot);
-
-  // Bridge auth/initializing state
-  const isAuthorized = provider?.isAuthorized ?? false;
-  const isInitializing = provider?.isInitializing ?? true;
-  const storefrontId = provider?.storefrontId ?? 'us';
+  const snapshot = useSyncExternalStore(subscribe, getSnapshot);
+  const { playback, isAuthorized, isInitializing, storefrontId } = snapshot;
 
   // Global play queue
   const queue = usePlayQueue({ provider, userId });
