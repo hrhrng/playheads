@@ -118,12 +118,12 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
 
   const addTrack = useCallback((track: UnifiedTrack) => {
     metadataCache.current.set(track.id, track);
+    // Directly update React queue — don't rely on MusicKit round-trip
+    setQueue(prev => [...prev, track]);
     if (provider) {
-      // Show first track immediately in player bar
       if (!provider.playbackState.currentTrack) {
         provider.setDisplayTrack(track);
       }
-      // Serialized playLater → queueItemsDidChange will update React state
       provider.addToNativeQueue(track.id).catch(console.error);
     }
   }, [provider]);

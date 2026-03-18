@@ -153,8 +153,9 @@ export class AppleMusicProvider implements MusicProvider {
   async setQueueWithoutPlaying(songIds: string[]): Promise<void> {
     if (!this.musicKit || songIds.length === 0) return;
     try {
-      this.playerReadyRef = true;
       await this.musicKit.setQueue({ songs: songIds, startPlaying: false } as any);
+      // Position at first track so subsequent play() doesn't skip it
+      await this.musicKit.changeToMediaAtIndex(0);
     } catch (e) {
       console.error('[AppleMusicProvider] setQueueWithoutPlaying error:', e);
     }
