@@ -505,14 +505,12 @@ export async function handleGetQueue(
   }
 
   try {
-    const db = drizzle(DB);
-    const [row] = await db
-      .select({
-        queue: schema.profile.queue,
-        queueIndex: schema.profile.queueIndex,
-      })
-      .from(schema.profile)
-      .where(eq(schema.profile.id, userId));
+    // Raw SQL to handle case where columns may not exist yet (migration pending)
+    const row = await DB.prepare(
+      'SELECT "queue", "queueIndex" FROM "profile" WHERE "id" = ?',
+    )
+      .bind(userId)
+      .first<{ queue: string; queueIndex: number }>();
 
     if (!row) {
       return Response.json({ queue: [], currentIndex: -1 });
@@ -523,6 +521,11 @@ export async function handleGetQueue(
       currentIndex: row.queueIndex ?? -1,
     });
   } catch (e) {
+    // If columns don't exist yet (migration not applied), return empty
+    const msg = String(e);
+    if (msg.includes("no such column") || msg.includes("queue")) {
+      return Response.json({ queue: [], currentIndex: -1 });
+    }
     console.error("Failed to get queue:", e);
     return Response.json({ error: "Failed to get queue" }, { status: 500 });
   }
@@ -564,6 +567,11 @@ export async function handleSyncQueue(
       last_sync: new Date(now).toISOString(),
     });
   } catch (e) {
+    // If columns don't exist yet (migration not applied), silently succeed
+    const msg = String(e);
+    if (msg.includes("no such column")) {
+      return Response.json({ status: "skipped", reason: "migration_pending" });
+    }
     console.error("Failed to sync queue:", e);
     return Response.json({ error: "Failed to sync queue" }, { status: 500 });
   }
