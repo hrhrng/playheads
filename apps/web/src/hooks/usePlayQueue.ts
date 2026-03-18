@@ -5,34 +5,13 @@
  * No currentIndex — position is implicit.
  *
  * Uses MusicKit native queue for playback ordering and auto-advance.
- * Syncs from MusicKit's nowPlayingItemDidChange to slice played tracks.
- *
- * Persisted locally via localStorage — frontend is ground truth.
+ * MusicKit persists its own queue across page reloads — we read it
+ * back on init via provider.getNativeQueue().
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { UnifiedTrack } from '../providers/types';
 import type { AppleMusicProvider } from '../providers/AppleMusicProvider';
-
-const STORAGE_KEY = 'playheads_queue';
-
-function loadFromLocalStorage(): UnifiedTrack[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    return JSON.parse(raw) as UnifiedTrack[];
-  } catch {
-    return [];
-  }
-}
-
-function saveToLocalStorage(queue: UnifiedTrack[]): void {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(queue));
-  } catch {
-    // ignore storage errors
-  }
-}
 
 export interface UsePlayQueueReturn {
   queue: UnifiedTrack[];
@@ -51,15 +30,10 @@ interface UsePlayQueueParams {
 }
 
 export function usePlayQueue({ provider }: UsePlayQueueParams): UsePlayQueueReturn {
-  const [queue, setQueue] = useState<UnifiedTrack[]>(() => loadFromLocalStorage());
+  const [queue, setQueue] = useState<UnifiedTrack[]>([]);
 
   const queueRef = useRef(queue);
   queueRef.current = queue;
-
-  // ── Persist to localStorage on every state change ───────────────
-  useEffect(() => {
-    saveToLocalStorage(queue);
-  }, [queue]);
 
   // ── Sync from MusicKit nowPlayingItemDidChange ──────────────────
   // When MusicKit auto-advances or changes track, slice the queue so

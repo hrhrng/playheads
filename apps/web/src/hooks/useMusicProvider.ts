@@ -8,7 +8,6 @@ import { useState, useEffect, useRef, useSyncExternalStore, useCallback } from '
 import { AppleMusicProvider } from '../providers/AppleMusicProvider';
 import { usePlayQueue, type UsePlayQueueReturn } from './usePlayQueue';
 import type { PlaybackState } from '../providers/types';
-import { API_BASE } from '../config/api';
 
 interface UseMusicProviderParams {
   userId: string | null;
@@ -118,35 +117,16 @@ export function useMusicProvider({
   // Global play queue — localStorage is ground truth, loaded on init
   const queueHook = usePlayQueue({ provider, userId });
 
-  // If queue is empty on init, fetch a suggestion from the backend
-  const suggestionFetched = useRef(false);
+  // On init, read MusicKit's native queue as the source of truth
+  const nativeQueueRead = useRef(false);
   useEffect(() => {
-    if (!provider || isInitializing || suggestionFetched.current) return;
-    if (!userId) return;
-    if (queueHook.queue.length > 0) return; // localStorage already has a queue
-    suggestionFetched.current = true;
-
-    (async () => {
-      try {
-        const res = await fetch(`${API_BASE}/queue/suggestion?user_id=${userId}`);
-        if (!res.ok) return;
-        const data = await res.json() as { tracks?: unknown[] };
-        if (!data.tracks?.length) return;
-        const seen = new Set<string>();
-        const deduped = (data.tracks as Array<{ id: string }>).filter(t => {
-          if (seen.has(t.id)) return false;
-          seen.add(t.id);
-          return true;
-        });
-        if (deduped.length > 0) {
-          queueHook.setQueue(deduped as any);
-          provider.restoreTrackDisplay(deduped[0] as any, deduped as any, 0, 0);
-        }
-      } catch (e) {
-        console.error('[useMusicProvider] suggestion error:', e);
-      }
-    })();
-  }, [provider, isInitializing, userId, queueHook.queue.length]);
+    if (!provider || isInitializing || nativeQueueRead.current) return;
+    nativeQueueRead.current = true;
+    const native = provider.getNativeQueue();
+    if (native.length > 0) {
+      queueHook.setQueue(native);
+    }
+  }, [provider, isInitializing]);
 
   const login = useCallback(async () => {
     if (provider) await provider.login();
