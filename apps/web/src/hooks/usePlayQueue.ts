@@ -70,8 +70,14 @@ export function usePlayQueue({ provider }: UsePlayQueueParams): UsePlayQueueRetu
       if (!provider.playbackState.currentTrack) {
         provider.setDisplayTrack(track);
       }
+      // Optimistic update: show the track immediately without waiting for
+      // queueItemsDidChange (MusicKit may not fire it until playback starts).
+      setQueue(prev => {
+        // Avoid duplicates if MusicKit fires queueItemsDidChange before us.
+        if (prev.some(t => t.id === track.id)) return prev;
+        return [...prev, track];
+      });
       provider.addToNativeQueue(track.id).catch(console.error);
-      // queue[] will update via queueItemsDidChange
     }
   }, [provider]);
 
