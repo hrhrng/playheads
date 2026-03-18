@@ -89,25 +89,13 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
     return unsub;
   }, [provider]);
 
-  // ── Sync from MusicKit queueItemsDidChange ──────────────────────
-  // Each time MusicKit's queue changes, read the native queue and update
-  // React state, enriching with cached metadata when MusicKit lacks it.
-  useEffect(() => {
-    if (!provider) return;
-    const unsub = provider.onQueueChange(() => {
-      if (isRestoringRef.current) {
-        console.log('[usePlayQueue] onQueueChange: SKIPPED (isRestoringRef=true, React state is authoritative)');
-        return;
-      }
-      const mkItems = provider.getNativeQueue();
-      const enriched = mkItems.map(t =>
-        t.name !== 'Unknown' ? t : (metadataCache.current.get(t.id) ?? t)
-      );
-      console.log('[usePlayQueue] onQueueChange: mkItems=', mkItems.length, mkItems.map(t => `${t.id}:${t.name}`));
-      setQueue(enriched);
-    });
-    return unsub;
-  }, [provider]);
+  // ── queueItemsDidChange: intentionally NOT subscribed ───────────
+  // React state is the single source of truth for the queue.
+  // All mutations (addTrack, removeTrack, playAtIndex) update React
+  // state directly. Auto-advance is handled by nowPlayingItemDidChange.
+  // Subscribing to onQueueChange caused queue flicker: MusicKit's
+  // internal queue is often incomplete/stale (e.g. 1 track after restore
+  // when React has 12) and would overwrite React state.
 
   // ── Listen for unresolvable IDs from the provider ───────────────
   useEffect(() => {

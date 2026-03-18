@@ -64,6 +64,8 @@ export class AppleMusicProvider implements MusicProvider {
   get isInitializing(): boolean { return this._isInitializing; }
   get playbackState(): PlaybackState { return this._playbackState; }
   get storefrontId(): string { return this._storefrontId; }
+  /** True after first user-initiated playback; false during restore. */
+  get isPlayerReady(): boolean { return this.playerReadyRef; }
 
   // ── State emission ──────────────────────────────────────────────
   private emit() {

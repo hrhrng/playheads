@@ -153,7 +153,16 @@ function App() {
             isPlaying={playback.isPlaying}
             isTransitioning={playback.isTransitioning}
             isAppleMusicAuthorized={isAppleMusicAuthorized}
-            togglePlay={() => provider?.togglePlay()}
+            togglePlay={() => {
+              // After restore, MusicKit's queue may be stale. If player hasn't
+              // played yet, use playAtIndex(0) which calls playWithQueue with
+              // the full React queue. Otherwise just toggle pause/resume.
+              if (!provider?.isPlayerReady && queue.queue.length > 0) {
+                queue.playAtIndex(0);
+              } else {
+                provider?.togglePlay();
+              }
+            }}
             playbackTime={playback.playbackTime}
             seekTo={(t) => provider?.seekTo(t)}
             musicActions={musicActions}
@@ -182,7 +191,16 @@ function App() {
             isPlaying={playback.isPlaying}
             isTransitioning={playback.isTransitioning}
             isAppleMusicAuthorized={isAppleMusicAuthorized}
-            togglePlay={() => provider?.togglePlay()}
+            togglePlay={() => {
+              // After restore, MusicKit's queue may be stale. If player hasn't
+              // played yet, use playAtIndex(0) which calls playWithQueue with
+              // the full React queue. Otherwise just toggle pause/resume.
+              if (!provider?.isPlayerReady && queue.queue.length > 0) {
+                queue.playAtIndex(0);
+              } else {
+                provider?.togglePlay();
+              }
+            }}
             playbackTime={playback.playbackTime}
             seekTo={(t) => provider?.seekTo(t)}
             playAppleTrack={wrappedPlayTrack}
