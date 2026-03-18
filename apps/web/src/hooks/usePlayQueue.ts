@@ -95,6 +95,10 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
   useEffect(() => {
     if (!provider) return;
     const unsub = provider.onQueueChange(() => {
+      if (isRestoringRef.current) {
+        console.log('[usePlayQueue] onQueueChange: SKIPPED (isRestoringRef=true, React state is authoritative)');
+        return;
+      }
       const mkItems = provider.getNativeQueue();
       const enriched = mkItems.map(t =>
         t.name !== 'Unknown' ? t : (metadataCache.current.get(t.id) ?? t)
@@ -170,6 +174,7 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
 
   /** Mark restore as complete — subsequent state changes will sync to backend */
   const finishRestore = useCallback(() => {
+    console.log('[usePlayQueue] finishRestore: restore complete, MusicKit sync re-enabled');
     isRestoringRef.current = false;
   }, []);
 

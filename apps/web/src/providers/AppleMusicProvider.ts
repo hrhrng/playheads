@@ -152,10 +152,9 @@ export class AppleMusicProvider implements MusicProvider {
   /** Set MusicKit queue without starting playback (for restore). */
   async setQueueWithoutPlaying(songIds: string[]): Promise<void> {
     if (!this.musicKit || songIds.length === 0) return;
+    console.log('[AppleMusicProvider] setQueueWithoutPlaying: songIds=', songIds.length, 'playerReadyRef=', this.playerReadyRef);
     try {
       await this.musicKit.setQueue({ songs: songIds, startPlaying: false } as any);
-      // Position at first track so subsequent play() doesn't skip it
-      await this.musicKit.changeToMediaAtIndex(0);
     } catch (e) {
       console.error('[AppleMusicProvider] setQueueWithoutPlaying error:', e);
     }
@@ -201,6 +200,7 @@ export class AppleMusicProvider implements MusicProvider {
     });
 
     this.on(mk, 'queueItemsDidChange', () => {
+      console.log('[AppleMusicProvider] queueItemsDidChange: playerReadyRef=', this.playerReadyRef, this.playerReadyRef ? 'FIRING' : 'GATED');
       if (!this.playerReadyRef) return;
       for (const cb of this.queueChangeListeners) cb();
     });
