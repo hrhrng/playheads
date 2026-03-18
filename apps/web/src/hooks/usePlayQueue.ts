@@ -38,6 +38,9 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
   const queueRef = useRef(queue);
   queueRef.current = queue;
 
+  // Cache metadata for tracks whose MusicKit items may lack full info
+  const metadataCache = useRef<Map<string, UnifiedTrack>>(new Map());
+
   // ── Backend sync: driven by React state changes ─────────────────
   // Skip the very first render (initial empty state) and restore-driven
   // setQueue calls (we don't want to sync back what we just fetched).
@@ -85,6 +88,20 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
     return unsub;
   }, [provider]);
 
+  // ── Sync from MusicKit queueItemsDidChange ──────────────────────
+  // Each time MusicKit's queue changes, read the native queue and update
+  // React state, enriching with cached metadata when MusicKit lacks it.
+  useEffect(() => {
+    if (!provider) return;
+    const unsub = provider.onQueueChange(() => {
+      const mkItems = provider.getNativeQueue();
+      setQueue(mkItems.map(t =>
+        t.name !== 'Unknown' ? t : (metadataCache.current.get(t.id) ?? t)
+      ));
+    });
+    return unsub;
+  }, [provider]);
+
   // ── Listen for unresolvable IDs from the provider ───────────────
   useEffect(() => {
     if (!provider) return;
@@ -97,11 +114,13 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
   // ── Queue operations ────────────────────────────────────────────
 
   const addTrack = useCallback((track: UnifiedTrack) => {
-    // Optimistic update: immediately show in UI
-    setQueue(prev => [...prev, track]);
-    // MusicKit call outside updater — don't rely on .then() for state;
-    // onQueueChange listener handles final sync from MusicKit.
+    metadataCache.current.set(track.id, track);
     if (provider) {
+      // Show first track immediately in player bar
+      if (!provider.playbackState.currentTrack) {
+        provider.setDisplayTrack(track);
+      }
+      // Serialized playLater → queueItemsDidChange will update React state
       provider.addToNativeQueue(track.id).catch(console.error);
     }
   }, [provider]);
@@ -142,6 +161,7 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
 
   /** Called by useMusicProvider during restore — sets queue without triggering sync */
   const setQueueFn = useCallback((tracks: UnifiedTrack[]) => {
+    for (const t of tracks) metadataCache.current.set(t.id, t);
     setQueue(tracks);
   }, []);
 

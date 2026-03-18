@@ -13,6 +13,7 @@ import type { MusicProvider, PlaybackState, UnifiedTrack, ProviderType } from '.
 
 type StateChangeCallback = (state: PlaybackState) => void;
 type NowPlayingChangeCallback = (trackId: string | null) => void;
+type QueueChangeCallback = () => void;
 type UnresolvableIdsCallback = (badIds: Set<string>) => void;
 
 interface AppleMusicProviderConfig {
@@ -34,6 +35,7 @@ export class AppleMusicProvider implements MusicProvider {
 
   private listeners: StateChangeCallback[] = [];
   private nowPlayingListeners: NowPlayingChangeCallback[] = [];
+  private queueChangeListeners: QueueChangeCallback[] = [];
   private unresolvableListeners: UnresolvableIdsCallback[] = [];
   private eventListeners: Array<[string, (...args: any[]) => void]> = [];
   private config: AppleMusicProviderConfig;
@@ -44,6 +46,9 @@ export class AppleMusicProvider implements MusicProvider {
   private isRestoringRef = false;
   private restoreFinishedAt = 0;
   private pendingQueue: { songIds: string[]; startIndex: number; startTime?: number } | null = null;
+
+  // Serialize playLater calls so queueItemsDidChange fires with monotonically growing queue
+  private mutationChain: Promise<void> = Promise.resolve();
 
   // Playback control
   private playbackLock = false;
@@ -90,6 +95,12 @@ export class AppleMusicProvider implements MusicProvider {
   onUnresolvableIds(cb: UnresolvableIdsCallback): () => void {
     this.unresolvableListeners.push(cb);
     return () => { this.unresolvableListeners = this.unresolvableListeners.filter(l => l !== cb); };
+  }
+
+  /** Subscribe to queue item changes — fired by MusicKit's queueItemsDidChange. */
+  onQueueChange(cb: QueueChangeCallback): () => void {
+    this.queueChangeListeners.push(cb);
+    return () => { this.queueChangeListeners = this.queueChangeListeners.filter(l => l !== cb); };
   }
 
   // ── Initialization ──────────────────────────────────────────────
@@ -196,6 +207,11 @@ export class AppleMusicProvider implements MusicProvider {
         this.updateState({ isPlaying: playing, isTransitioning: false, currentTrack });
         if (playing && mk.nowPlayingItem) this.lastPlayingTrackId = mk.nowPlayingItem.id;
       }
+    });
+
+    this.on(mk, 'queueItemsDidChange', () => {
+      if (!this.playerReadyRef) return;
+      for (const cb of this.queueChangeListeners) cb();
     });
 
     this.on(mk, 'playbackTimeDidChange', (e: any) => {
@@ -312,15 +328,46 @@ export class AppleMusicProvider implements MusicProvider {
     }
   }
 
-  /** Append a song to the end of MusicKit's native queue. */
+  /** Append a song to the end of MusicKit's native queue (serialized). */
   async addToNativeQueue(songId: string): Promise<void> {
+    this.mutationChain = this.mutationChain.then(async () => {
+      if (!this.musicKit) return;
+      try {
+        await (this.musicKit as any).playLater({ songs: [songId] });
+      } catch (e) {
+        console.error('[AppleMusicProvider] addToNativeQueue error:', e);
+        const classified = classifyError(e);
+        if (classified.category === ErrorCategory.AUTH_EXPIRED) this.handleAuthLost();
+      }
+    });
+    return this.mutationChain;
+  }
+
+  /** Read MusicKit's native queue from current position onward. */
+  getNativeQueue(): UnifiedTrack[] {
+    if (!this.musicKit) return [];
+    const q = this.musicKit.queue;
+    const pos = (q as any).position ?? 0;
+    return q.items.slice(pos).map(item => this.formatMusicKitTrack(item));
+  }
+
+  /** Set display track without starting playback (for first-track-added UX). */
+  setDisplayTrack(track: UnifiedTrack): void {
+    this.updateState({
+      currentTrack: track,
+      isPlaying: false,
+      playbackTime: { current: 0, total: track.durationSeconds },
+    });
+  }
+
+  /** Remove a track from MusicKit's native queue by relative index. */
+  async removeFromQueue(relativeIndex: number): Promise<void> {
     if (!this.musicKit) return;
     try {
-      await (this.musicKit as any).playLater({ songs: [songId] });
+      const pos = (this.musicKit.queue as any).position ?? 0;
+      await this.musicKit.queue.remove(pos + relativeIndex);
     } catch (e) {
-      console.error('[AppleMusicProvider] playLater error:', e);
-      const classified = classifyError(e);
-      if (classified.category === ErrorCategory.AUTH_EXPIRED) this.handleAuthLost();
+      console.error('[AppleMusicProvider] removeFromQueue error:', e);
     }
   }
 
@@ -532,6 +579,7 @@ export class AppleMusicProvider implements MusicProvider {
     this.eventListeners = [];
     this.listeners = [];
     this.nowPlayingListeners = [];
+    this.queueChangeListeners = [];
     this.unresolvableListeners = [];
   }
 }
