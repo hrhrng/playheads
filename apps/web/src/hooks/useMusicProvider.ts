@@ -128,24 +128,24 @@ export function useMusicProvider({
   // Global play queue
   const queueHook = usePlayQueue({ provider, userId });
 
-  // On init, restore queue from localStorage by setting MusicKit queue directly.
-  // No deferred state — MusicKit resolves tracks in background, user presses play when ready.
+  // ── Queue restore & persist ────────────────────────────────────
+  // queueRestored gates the persist effect so it doesn't overwrite
+  // localStorage with an empty array before restore completes.
   const queueRestored = useRef(false);
   useEffect(() => {
     if (!provider || isInitializing || queueRestored.current) return;
     queueRestored.current = true;
     const saved = loadQueueFromStorage();
     if (saved.length > 0) {
-      // Seed display immediately from localStorage metadata
       queueHook.setQueue(saved);
-      // Set MusicKit queue without starting playback
       const ids = saved.map(t => t.id);
       provider.restoreQueue(ids, saved[0], 0).catch(console.error);
     }
   }, [provider, isInitializing]);
 
-  // Persist queue to localStorage on every change
+  // Persist queue to localStorage — gated until restore completes
   useEffect(() => {
+    if (!queueRestored.current) return;
     try {
       localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(queueHook.queue));
     } catch { /* ignore */ }

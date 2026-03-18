@@ -65,18 +65,15 @@ export function usePlayQueue({ provider }: UsePlayQueueParams): UsePlayQueueRetu
 
   const addTrack = useCallback((track: UnifiedTrack) => {
     metadataCache.current.set(track.id, track);
+    // Optimistic update: immediately show in UI
+    setQueue(prev => [...prev, track]);
     if (provider) {
       // If nothing is showing in the player yet, display this track immediately (paused).
       if (!provider.playbackState.currentTrack) {
         provider.setDisplayTrack(track);
       }
-      provider.addToNativeQueue(track.id).then(() => {
-        // Pull the latest queue from MusicKit after it's been updated.
-        const mkItems = provider.getNativeQueue();
-        setQueue(mkItems.map(t =>
-          t.name !== 'Unknown' ? t : (metadataCache.current.get(t.id) ?? t)
-        ));
-      }).catch(console.error);
+      // MusicKit call — don't setQueue in .then(); onQueueChange listener handles final sync.
+      provider.addToNativeQueue(track.id).catch(console.error);
     }
   }, [provider]);
 
