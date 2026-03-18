@@ -168,9 +168,26 @@ export function useAgentChatAdapter({
   musicActionsRef.current = musicActions;
   const queueOpsRef = useRef(queueOps);
   queueOpsRef.current = queueOps;
-  const processedActionIds = useRef(new Set<string>());
+  const processedActionIds = useRef<Set<string> | null>(null);
 
   useEffect(() => {
+    // On first render, mark all existing tool call IDs as processed
+    // so chat history replay doesn't re-dispatch old actions.
+    if (processedActionIds.current === null) {
+      const existing = new Set<string>();
+      for (const msg of uiMessages) {
+        if (msg.role !== "assistant") continue;
+        for (const part of msg.parts) {
+          if (!part.type.startsWith("tool-") && part.type !== "dynamic-tool") continue;
+          const toolPart = part as unknown as { toolCallId: string };
+          if (toolPart.toolCallId) existing.add(toolPart.toolCallId);
+        }
+      }
+      processedActionIds.current = existing;
+      console.log('[ActionDispatch] Skipped', existing.size, 'historical actions on mount');
+      return;
+    }
+
     const actions = musicActionsRef.current;
     const ops = queueOpsRef.current;
 
