@@ -8,6 +8,7 @@ import Slider from 'rc-slider';
 import 'rc-slider/assets/index.css';
 import type { PlaybackTime } from '../types';
 import type { UnifiedTrack } from '../providers/types';
+import { useLyrics } from '../hooks/useLyrics';
 
 interface RecordPlayerProps {
   /** Current track being played */
@@ -74,6 +75,11 @@ export const RecordPlayer = ({
   const current = playbackTime?.current || 0;
   const total = playbackTime?.total || 1;
   const displayValue = isDragging ? dragValue : current;
+
+  const { lines: lyricsLines, currentIndex: currentLyricIndex } = useLyrics(
+    currentTrack?.id,
+    current,
+  );
 
   const sliderStyles = {
     track: { backgroundColor: '#1a1a1a', height: 4 },
@@ -177,6 +183,32 @@ export const RecordPlayer = ({
             {formatTime(total)}
           </span>
         </div>
+
+        {/* Lyrics */}
+        {lyricsLines.length > 0 && (
+          <div className="w-full max-w-sm mt-3 h-12 flex flex-col items-center justify-center overflow-hidden">
+            {(() => {
+              // Show current line and next line
+              const idx = currentLyricIndex >= 0 ? currentLyricIndex : 0;
+              const currentLine = lyricsLines[idx];
+              const nextLine = lyricsLines[idx + 1];
+              return (
+                <>
+                  {currentLine && (
+                    <p className="text-sm font-medium text-gray-900 text-center leading-tight line-clamp-1 transition-opacity duration-300">
+                      {currentLine.text}
+                    </p>
+                  )}
+                  {nextLine && (
+                    <p className="text-sm text-gray-400 text-center leading-tight line-clamp-1 mt-0.5 transition-opacity duration-300">
+                      {nextLine.text}
+                    </p>
+                  )}
+                </>
+              );
+            })()}
+          </div>
+        )}
       </div>
     </div>
   );
