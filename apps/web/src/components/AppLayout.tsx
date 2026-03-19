@@ -7,6 +7,7 @@
  * - Auto-collapse when dragged below threshold
  * - Persistent width saved to localStorage
  * - Mobile: collapsible nav drawer overlay
+ * - Mobile: bottom sheet for playlist
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react';
@@ -15,6 +16,7 @@ import { DeleteConfirmDialog } from './DeleteConfirmDialog';
 import { UserSettingsPopover } from './UserSettingsPopover';
 import { SettingsModal } from './SettingsModal';
 import { useNavSidebarState } from '../hooks/useNavSidebarState';
+import { PlaylistSheetContext } from '../contexts/PlaylistSheetContext';
 import type { Conversation } from '../types';
 
 interface AppLayoutProps {
@@ -237,29 +239,22 @@ export const AppLayout = ({
     </>
   );
 
-  return (
-    <div className="flex flex-col h-screen bg-gemini-bg font-sans text-gemini-text overflow-hidden selection:bg-gemini-primary selection:text-white">
+  const hasPlaylist = !!rightPanel;
 
-      {/* Mobile Top Bar */}
-      <div className="flex md:hidden items-center h-14 px-2 shrink-0 border-b border-gemini-border/50">
-        <button
-          onClick={() => setMobileNavOpen(true)}
-          className="p-2.5 rounded-xl text-gemini-subtext hover:bg-gemini-hover transition-colors"
-          aria-label="Open menu"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
-        </button>
-        <span className="flex-1 text-center text-sm font-medium text-gemini-text">Playheads</span>
-        <div className="flex items-center gap-1">
-          {rightPanel && (
-            <button
-              onClick={() => setMobilePlaylistOpen(true)}
-              className="p-2.5 rounded-xl text-gemini-subtext hover:bg-gemini-hover transition-colors"
-              aria-label="Open playlist"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19V6l12-3v13M9 10l12-3" /><circle cx="6" cy="19" r="3" /><circle cx="18" cy="16" r="3" /></svg>
-            </button>
-          )}
+  return (
+    <PlaylistSheetContext.Provider value={{ openPlaylist: () => setMobilePlaylistOpen(true), hasPlaylist }}>
+      <div className="flex flex-col h-screen bg-gemini-bg font-sans text-gemini-text overflow-hidden selection:bg-gemini-primary selection:text-white">
+
+        {/* Mobile Top Bar */}
+        <div className="flex md:hidden items-center h-14 px-2 shrink-0 border-b border-gemini-border/50">
+          <button
+            onClick={() => setMobileNavOpen(true)}
+            className="p-2.5 rounded-xl text-gemini-subtext hover:bg-gemini-hover transition-colors"
+            aria-label="Open menu"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
+          </button>
+          <span className="flex-1 text-center text-sm font-medium text-gemini-text">Playheads</span>
           <button
             onClick={onNewChat}
             className="p-2.5 rounded-xl text-gemini-subtext hover:bg-gemini-hover transition-colors"
@@ -268,99 +263,108 @@ export const AppLayout = ({
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
           </button>
         </div>
-      </div>
 
-      {/* Main row: sidebars + content */}
-      <div className="flex flex-1 min-h-0 overflow-hidden">
+        {/* Main row: sidebars + content */}
+        <div className="flex flex-1 min-h-0 overflow-hidden">
 
-        {/* 1. Left Sidebar (Navigation) — desktop only */}
-        <nav
-          ref={navRef}
-          style={{ width: `${width}px` }}
-          className={`relative hidden md:flex flex-col py-6 shrink-0 z-20 ${isResizing ? '' : 'transition-all duration-300 ease-in-out'}`}
-        >
-          {/* Resize Handle - positioned on the right edge */}
-          <div
-            onMouseDown={handleResizeStart}
-            className={`
-              absolute right-0 top-10 bottom-0 w-0.5 cursor-ew-resize z-30
-              hover:bg-blue-400 transition-colors
-              ${isResizing ? 'bg-blue-500' : 'bg-transparent'}
-            `}
-            title="Drag to resize"
-          />
-          {navContent(false)}
-        </nav>
-
-        {/* 2. Main Content Area (Rounded White Card) */}
-        <main className="flex-1 h-full md:pt-4 relative z-10 min-w-0">
-          <div className="bg-white h-full w-full md:rounded-t-3xl shadow-sm overflow-hidden border border-white relative flex flex-col">
-            {children}
-          </div>
-        </main>
-
-        {/* 3. Right Sidebar (Playlist) — desktop only */}
-        <aside className="hidden md:block shrink-0 z-10 h-full overflow-hidden">
-          {rightPanel}
-        </aside>
-
-      </div>
-
-      {/* Mobile Nav Drawer Overlay */}
-      {mobileNavOpen && (
-        <>
-          {/* Backdrop */}
-          <div
-            className="fixed inset-0 bg-black/40 z-40 md:hidden"
-            onClick={() => setMobileNavOpen(false)}
-          />
-          {/* Drawer */}
-          <nav className="fixed inset-y-0 left-0 w-72 z-50 md:hidden bg-gemini-bg flex flex-col py-6 shadow-2xl">
-            {/* Close button */}
-            <div className="mb-4 px-4">
-              <button
-                onClick={() => setMobileNavOpen(false)}
-                className="nav-btn"
-                aria-label="Close menu"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
-            </div>
-            {navContent(true)}
+          {/* 1. Left Sidebar (Navigation) — desktop only */}
+          <nav
+            ref={navRef}
+            style={{ width: `${width}px` }}
+            className={`relative hidden md:flex flex-col py-6 shrink-0 z-20 ${isResizing ? '' : 'transition-all duration-300 ease-in-out'}`}
+          >
+            {/* Resize Handle - positioned on the right edge */}
+            <div
+              onMouseDown={handleResizeStart}
+              className={`
+                absolute right-0 top-10 bottom-0 w-0.5 cursor-ew-resize z-30
+                hover:bg-blue-400 transition-colors
+                ${isResizing ? 'bg-blue-500' : 'bg-transparent'}
+              `}
+              title="Drag to resize"
+            />
+            {navContent(false)}
           </nav>
-        </>
-      )}
 
-      {/* Mobile Playlist Drawer */}
-      {mobilePlaylistOpen && rightPanel && (
-        <>
-          <div
-            className="fixed inset-0 bg-black/40 z-40 md:hidden"
-            onClick={() => setMobilePlaylistOpen(false)}
-          />
-          <div className="fixed inset-y-0 right-0 z-50 md:hidden overflow-hidden" style={{ maxWidth: 'min(100vw, 380px)', width: '100%' }}>
+          {/* 2. Main Content Area (Rounded White Card) */}
+          <main className="flex-1 h-full md:pt-4 relative z-10 min-w-0">
+            <div className="bg-white h-full w-full md:rounded-t-3xl shadow-sm overflow-hidden border border-white relative flex flex-col">
+              {children}
+            </div>
+          </main>
+
+          {/* 3. Right Sidebar (Playlist) — desktop only */}
+          <aside className="hidden md:block shrink-0 z-10 h-full overflow-hidden">
             {rightPanel}
-          </div>
-        </>
-      )}
+          </aside>
 
-      {/* Delete Confirmation Dialog */}
-      <DeleteConfirmDialog
-        isOpen={deleteDialogOpen}
-        onConfirm={handleConfirmDelete}
-        onCancel={handleCancelDelete}
-        conversationTitle={conversationToDelete?.title}
-      />
+        </div>
 
-      {/* Settings Modal */}
-      <SettingsModal
-        isOpen={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-        isAppleMusicAuthorized={isAppleMusicAuthorized}
-        onConnectAppleMusic={onConnectAppleMusic}
-        onDisconnectAppleMusic={onDisconnectAppleMusic}
-      />
+        {/* Mobile Nav Drawer Overlay */}
+        {mobileNavOpen && (
+          <>
+            {/* Backdrop */}
+            <div
+              className="fixed inset-0 bg-black/40 z-40 md:hidden"
+              onClick={() => setMobileNavOpen(false)}
+            />
+            {/* Drawer */}
+            <nav className="fixed inset-y-0 left-0 w-72 z-50 md:hidden bg-gemini-bg flex flex-col py-6 shadow-2xl">
+              {/* Close button */}
+              <div className="mb-4 px-4">
+                <button
+                  onClick={() => setMobileNavOpen(false)}
+                  className="nav-btn"
+                  aria-label="Close menu"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+              {navContent(true)}
+            </nav>
+          </>
+        )}
 
-    </div>
+        {/* Mobile Playlist Bottom Sheet */}
+        {mobilePlaylistOpen && rightPanel && (
+          <>
+            {/* Backdrop */}
+            <div
+              className="fixed inset-0 bg-black/50 z-40 md:hidden"
+              onClick={() => setMobilePlaylistOpen(false)}
+            />
+            {/* Sheet */}
+            <div className="fixed inset-x-0 bottom-0 z-50 md:hidden rounded-t-3xl overflow-hidden bg-gemini-bg animate-slide-up" style={{ maxHeight: '70vh' }}>
+              {/* Drag handle */}
+              <div className="flex justify-center pt-3 pb-1">
+                <div className="w-10 h-1 bg-gray-300 rounded-full" />
+              </div>
+              {/* Playlist content — fill remaining height */}
+              <div className="h-[calc(70vh-24px)] overflow-hidden">
+                {rightPanel}
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Delete Confirmation Dialog */}
+        <DeleteConfirmDialog
+          isOpen={deleteDialogOpen}
+          onConfirm={handleConfirmDelete}
+          onCancel={handleCancelDelete}
+          conversationTitle={conversationToDelete?.title}
+        />
+
+        {/* Settings Modal */}
+        <SettingsModal
+          isOpen={settingsOpen}
+          onClose={() => setSettingsOpen(false)}
+          isAppleMusicAuthorized={isAppleMusicAuthorized}
+          onConnectAppleMusic={onConnectAppleMusic}
+          onDisconnectAppleMusic={onDisconnectAppleMusic}
+        />
+
+      </div>
+    </PlaylistSheetContext.Provider>
   );
 };
