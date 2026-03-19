@@ -367,8 +367,23 @@ export const ChatInterface = ({
 
       {/* Command Console - Fixed at Bottom */}
       <div className="absolute bottom-0 left-0 right-0 px-6 pb-5 pt-10 z-30 bg-gradient-to-t from-white via-white/95 to-transparent">
-        {/* Seek Bar - above toggle button, outside swipe container */}
-        {currentTrack && !showHistory && (
+        {/* Seek Bar or Apple Music link - above toggle button, outside swipe container */}
+        {currentTrack && !showHistory && !isAppleMusicAuthorized && onLinkApple && (
+          <div className="max-w-sm mx-auto mb-3 flex justify-center">
+            <button
+              onClick={onLinkApple}
+              className="text-sm text-pink-500 hover:text-pink-600 transition-colors font-medium flex items-center gap-1.5"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 18V5l12-2v13" />
+                <circle cx="6" cy="18" r="3" />
+                <circle cx="18" cy="16" r="3" />
+              </svg>
+              Connect Apple Music for full playback
+            </button>
+          </div>
+        )}
+        {currentTrack && !showHistory && isAppleMusicAuthorized && (
           <div className="max-w-sm mx-auto mb-3 flex items-center gap-2">
             <span className="text-xs font-mono text-gray-400 tabular-nums shrink-0">
               {formatTime(seekDisplayValue)}

@@ -96,20 +96,6 @@ export const RecordPlayer = ({
         </h2>
         <p className="text-lg text-gray-500 font-medium">{artistName}</p>
 
-        {/* Connect Apple Music link (preview mode) */}
-        {!isAppleMusicAuthorized && onLinkApple && (
-          <button
-            onClick={onLinkApple}
-            className="text-sm text-pink-500 hover:text-pink-600 transition-colors font-medium flex items-center gap-1.5 mt-1"
-          >
-            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 18V5l12-2v13" />
-              <circle cx="6" cy="18" r="3" />
-              <circle cx="18" cy="16" r="3" />
-            </svg>
-            Connect Apple Music for full playback
-          </button>
-        )}
       </div>
     </div>
   );
