@@ -164,7 +164,7 @@ export const RecordPlayer = ({
                 setIsDragging(true);
                 setDragValue(value);
               }}
-              onAfterChange={(val: number | number[]) => {
+              onChangeComplete={(val: number | number[]) => {
                 const value = Array.isArray(val) ? val[0] : val;
                 if (onSeek) onSeek(value);
                 setTimeout(() => setIsDragging(false), 1000);
