@@ -414,30 +414,46 @@ export const ChatInterface = ({
         {/* Seek Bar - outside swipe container so touch drag works */}
         {currentTrack && !showHistory && (
           <div className="max-w-xl mx-auto mb-3 flex items-center gap-3">
-            <span className="text-xs font-mono text-gray-400 w-10 text-right">
+            <span className="text-xs font-mono text-gray-400 w-10 text-right tabular-nums">
               {formatTime(seekDisplayValue)}
             </span>
-            <input
-              type="range"
-              min={0}
-              max={playbackTime?.total || 1}
-              step={0.1}
-              value={seekDisplayValue}
-              onChange={(e) => {
-                const v = parseFloat(e.target.value);
-                console.debug('[SeekBar onChange]', v.toFixed(2));
-                setSeekDragging(true);
-                setSeekDragValue(v);
-              }}
-              onPointerUp={(e) => {
-                const v = parseFloat((e.target as HTMLInputElement).value);
-                console.debug('[SeekBar onPointerUp]', v.toFixed(2));
-                onSeek?.(v);
-                setSeekDragging(false);
-              }}
-              className="flex-1 cursor-pointer accent-gray-900"
-            />
-            <span className="text-xs font-mono text-gray-400 w-10 text-left">
+
+            {/* Custom track + invisible native input overlay */}
+            <div className="relative flex-1 h-4 flex items-center">
+              {/* Track */}
+              <div className="w-full h-px bg-gray-200 rounded-full pointer-events-none">
+                <div
+                  className="h-full bg-gray-400 rounded-full"
+                  style={{ width: `${(seekDisplayValue / (playbackTime?.total || 1)) * 100}%` }}
+                />
+              </div>
+              {/* Handle */}
+              <div
+                className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-white rounded-full shadow border border-gray-300 pointer-events-none"
+                style={{ left: `calc(${(seekDisplayValue / (playbackTime?.total || 1)) * 100}% - 5px)` }}
+              />
+              {/* Invisible native input for interaction */}
+              <input
+                type="range"
+                min={0}
+                max={playbackTime?.total || 1}
+                step={0.1}
+                value={seekDisplayValue}
+                onChange={(e) => {
+                  const v = parseFloat(e.target.value);
+                  setSeekDragging(true);
+                  setSeekDragValue(v);
+                }}
+                onPointerUp={(e) => {
+                  const v = parseFloat((e.target as HTMLInputElement).value);
+                  onSeek?.(v);
+                  setSeekDragging(false);
+                }}
+                className="absolute inset-0 w-full opacity-0 cursor-pointer"
+              />
+            </div>
+
+            <span className="text-xs font-mono text-gray-400 w-10 text-left tabular-nums">
               {formatTime(playbackTime?.total || 0)}
             </span>
           </div>

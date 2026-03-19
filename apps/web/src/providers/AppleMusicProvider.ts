@@ -246,7 +246,6 @@ export class AppleMusicProvider implements MusicProvider {
     // seekTarget suppresses stale time≈0 events that arrive before seekToTime() lands.
     this.on(mk, 'playbackTimeDidChange', (e: any) => {
       if (this.phase === 'init' || this.phase === 'idle') return;
-      console.debug('[playbackTimeDidChange]', e.currentPlaybackTime.toFixed(2), '/', e.currentPlaybackDuration.toFixed(2), 'seekTarget=', this.seekTarget);
       if (this.seekTarget !== null) {
         // seekToTime() can fire events at time≈0 before the seek lands — suppress them.
         if (Math.abs(e.currentPlaybackTime - this.seekTarget) > 1) return;
@@ -514,7 +513,6 @@ export class AppleMusicProvider implements MusicProvider {
 
   seekTo(seconds: number): void {
     if (!this.musicKit) return;
-    console.debug('[seekTo] called with', seconds.toFixed(2), 'seekTarget was=', this.seekTarget);
     // Keep seekTarget set so playbackTimeDidChange events fired during seekToTime() are suppressed.
     this.seekTarget = seconds;
     // Update UI immediately (optimistic) so the slider position sticks.
