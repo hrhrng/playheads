@@ -165,7 +165,7 @@ class TestMultiTurnDeterministic:
         model = FakeChatModelWithTools(responses=[
             # Step 1: search
             AIMessage(content="", tool_calls=[{
-                "name": "search_music", "args": {"query": "Take Five"},
+                "name": "search_music", "args": {"queries": ["Take Five"]},
                 "id": "call_search", "type": "tool_call",
             }]),
             # Step 2: add to queue
@@ -208,7 +208,7 @@ class TestMultiTurnDeterministic:
         """Add to queue → agent calls search_music + add_to_queue, no play_track."""
         model = FakeChatModelWithTools(responses=[
             AIMessage(content="", tool_calls=[{
-                "name": "search_music", "args": {"query": "Take Five"},
+                "name": "search_music", "args": {"queries": ["Take Five"]},
                 "id": "call_search", "type": "tool_call",
             }]),
             AIMessage(content="", tool_calls=[{
@@ -237,7 +237,7 @@ class TestMultiTurnDeterministic:
         model = FakeChatModelWithTools(responses=[
             # Turn 1: search + add
             AIMessage(content="", tool_calls=[{
-                "name": "search_music", "args": {"query": "Song A"},
+                "name": "search_music", "args": {"queries": ["Song A"]},
                 "id": "call_s1", "type": "tool_call",
             }]),
             AIMessage(content="", tool_calls=[{
@@ -247,7 +247,7 @@ class TestMultiTurnDeterministic:
             AIMessage(content="Added Song A."),
             # Turn 2: search + add
             AIMessage(content="", tool_calls=[{
-                "name": "search_music", "args": {"query": "Song B"},
+                "name": "search_music", "args": {"queries": ["Song B"]},
                 "id": "call_s2", "type": "tool_call",
             }]),
             AIMessage(content="", tool_calls=[{
@@ -257,7 +257,7 @@ class TestMultiTurnDeterministic:
             AIMessage(content="Added Song B."),
             # Turn 3: search + add
             AIMessage(content="", tool_calls=[{
-                "name": "search_music", "args": {"query": "Song C"},
+                "name": "search_music", "args": {"queries": ["Song C"]},
                 "id": "call_s3", "type": "tool_call",
             }]),
             AIMessage(content="", tool_calls=[{
@@ -281,7 +281,7 @@ class TestMultiTurnDeterministic:
         model = FakeChatModelWithTools(responses=[
             # Turn 1: three-step play
             AIMessage(content="", tool_calls=[{
-                "name": "search_music", "args": {"query": "Take Five"},
+                "name": "search_music", "args": {"queries": ["Take Five"]},
                 "id": "call_search", "type": "tool_call",
             }]),
             AIMessage(content="", tool_calls=[{
