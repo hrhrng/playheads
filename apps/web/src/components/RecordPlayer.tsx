@@ -4,8 +4,6 @@
  */
 
 import React, { useState } from 'react';
-import Slider from 'rc-slider';
-import 'rc-slider/assets/index.css';
 import type { PlaybackTime } from '../types';
 import type { UnifiedTrack } from '../providers/types';
 
@@ -75,20 +73,6 @@ export const RecordPlayer = ({
   const total = playbackTime?.total || 1;
   const displayValue = isDragging ? dragValue : current;
 
-  const sliderStyles = {
-    track: { backgroundColor: '#1a1a1a', height: 4 },
-    rail: { backgroundColor: '#e5e5e5', height: 4 },
-    handle: {
-      backgroundColor: '#fff',
-      border: 'none' as const,
-      width: 16,
-      height: 16,
-      marginTop: -6,
-      boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-      opacity: 1,
-    },
-  };
-
   return (
     <div className="flex flex-col items-center gap-8 group w-full">
       {/* Cover Art */}
@@ -153,24 +137,44 @@ export const RecordPlayer = ({
             {formatTime(displayValue)}
           </span>
 
-          <div className="flex-1">
-            <Slider
-              min={0}
-              max={total}
-              step={0.1}
-              value={displayValue}
-              onChange={(val: number | number[]) => {
-                const value = Array.isArray(val) ? val[0] : val;
-                setIsDragging(true);
-                setDragValue(value);
-              }}
-              onChangeComplete={(val: number | number[]) => {
-                const value = Array.isArray(val) ? val[0] : val;
-                if (onSeek) onSeek(value);
-                setIsDragging(false);
-              }}
-              styles={sliderStyles}
-            />
+          <div
+            role="slider"
+            aria-valuenow={displayValue}
+            aria-valuemin={0}
+            aria-valuemax={total}
+            className="flex-1 relative h-5 flex items-center cursor-pointer select-none"
+            style={{ touchAction: 'none' }}
+            onPointerDown={(e) => {
+              e.currentTarget.setPointerCapture(e.pointerId);
+              const rect = e.currentTarget.getBoundingClientRect();
+              const value = Math.max(0, Math.min(total, ((e.clientX - rect.left) / rect.width) * total));
+              setIsDragging(true);
+              setDragValue(value);
+            }}
+            onPointerMove={(e) => {
+              if (!isDragging) return;
+              const rect = e.currentTarget.getBoundingClientRect();
+              const value = Math.max(0, Math.min(total, ((e.clientX - rect.left) / rect.width) * total));
+              setDragValue(value);
+            }}
+            onPointerUp={(e) => {
+              if (!isDragging) return;
+              const rect = e.currentTarget.getBoundingClientRect();
+              const value = Math.max(0, Math.min(total, ((e.clientX - rect.left) / rect.width) * total));
+              if (onSeek) onSeek(value);
+              setIsDragging(false);
+            }}
+          >
+            <div className="w-full h-1 bg-gray-200 rounded-full relative">
+              <div
+                className="h-full bg-gray-900 rounded-full"
+                style={{ width: `${(displayValue / total) * 100}%` }}
+              />
+              <div
+                className="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 bg-white rounded-full shadow border border-gray-300"
+                style={{ left: `calc(${(displayValue / total) * 100}% - 7px)` }}
+              />
+            </div>
           </div>
 
           <span className="text-xs font-mono text-gray-400 w-10 text-left">
