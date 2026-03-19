@@ -3,7 +3,8 @@
  * @module components/RecordPlayer
  */
 
-import React, { useRef, useState } from 'react';
+import React, { useState } from 'react';
+import { useDrag } from '@use-gesture/react';
 import type { PlaybackTime } from '../types';
 import type { UnifiedTrack } from '../providers/types';
 
@@ -41,7 +42,6 @@ export const RecordPlayer = ({
 }: RecordPlayerProps): React.JSX.Element => {
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [dragValue, setDragValue] = useState<number>(0);
-  const isDraggingRef = useRef(false);
 
   const formatArtwork = (url: string | undefined, size = 600): string | null => {
     if (!url) return null;
@@ -73,6 +73,20 @@ export const RecordPlayer = ({
   const current = playbackTime?.current || 0;
   const total = playbackTime?.total || 1;
   const displayValue = isDragging ? dragValue : current;
+
+  const sliderRef = React.useRef<HTMLDivElement>(null);
+  const bind = useDrag(({ first, last, xy: [x] }) => {
+    const el = sliderRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const value = Math.max(0, Math.min(total, ((x - rect.left) / rect.width) * total));
+    if (first) setIsDragging(true);
+    setDragValue(value);
+    if (last) {
+      if (onSeek) onSeek(value);
+      setIsDragging(false);
+    }
+  }, { filterTaps: true });
 
   return (
     <div className="flex flex-col items-center gap-8 group w-full">
@@ -139,34 +153,13 @@ export const RecordPlayer = ({
           </span>
 
           <div
+            ref={sliderRef}
             role="slider"
             aria-valuenow={displayValue}
             aria-valuemin={0}
             aria-valuemax={total}
             className="flex-1 relative h-5 flex items-center cursor-pointer select-none"
-            style={{ touchAction: 'none' }}
-            onPointerDown={(e) => {
-              e.currentTarget.setPointerCapture(e.pointerId);
-              isDraggingRef.current = true;
-              setIsDragging(true);
-              const rect = e.currentTarget.getBoundingClientRect();
-              const value = Math.max(0, Math.min(total, ((e.clientX - rect.left) / rect.width) * total));
-              setDragValue(value);
-            }}
-            onPointerMove={(e) => {
-              if (!isDraggingRef.current) return;
-              const rect = e.currentTarget.getBoundingClientRect();
-              const value = Math.max(0, Math.min(total, ((e.clientX - rect.left) / rect.width) * total));
-              setDragValue(value);
-            }}
-            onPointerUp={(e) => {
-              if (!isDraggingRef.current) return;
-              isDraggingRef.current = false;
-              setIsDragging(false);
-              const rect = e.currentTarget.getBoundingClientRect();
-              const value = Math.max(0, Math.min(total, ((e.clientX - rect.left) / rect.width) * total));
-              if (onSeek) onSeek(value);
-            }}
+            {...bind()}
           >
             <div className="w-full h-1 bg-gray-200 rounded-full relative">
               <div
