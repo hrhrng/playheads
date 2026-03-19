@@ -218,8 +218,10 @@ export class AppleMusicProvider implements MusicProvider {
     this.on(mk, 'playbackTimeDidChange', (e: any) => {
       if (!this.playerReadyRef) return;
       if (this.pendingSeekTime !== null) {
-        console.log('[AppleMusicProvider] playbackTimeDidChange SUPPRESSED: time=', e.currentPlaybackTime, 'pendingSeek=', this.pendingSeekTime);
-        return;
+        // Suppress events until playback reaches the seek target.
+        // seekToTime() is async internally — events at time≈0 fire before the seek lands.
+        if (Math.abs(e.currentPlaybackTime - this.pendingSeekTime) > 1) return;
+        this.pendingSeekTime = null;
       }
       this.updateState({
         playbackTime: { current: e.currentPlaybackTime, total: e.currentPlaybackDuration },
@@ -456,9 +458,8 @@ export class AppleMusicProvider implements MusicProvider {
         this.playerReadyRef = true;
         await this.musicKit.play();
         if (this.pendingSeekTime !== null) {
-          console.log('[AppleMusicProvider] togglePlay: applying pendingSeekTime=', this.pendingSeekTime);
           this.musicKit.seekToTime(this.pendingSeekTime);
-          this.pendingSeekTime = null;
+          // Don't clear pendingSeekTime here — playbackTimeDidChange clears it once seek lands.
         }
         this.updateState({ isPlaying: true });
       }
