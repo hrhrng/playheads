@@ -2,6 +2,16 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Safe-area inset support for iPhone notch / home indicator */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .mb-safe {
+    margin-bottom: env(safe-area-inset-bottom);
+  }
+}
+
 /* Animations */
 @keyframes music-bar {
 
