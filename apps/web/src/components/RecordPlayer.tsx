@@ -3,7 +3,8 @@
  * @module components/RecordPlayer
  */
 
-import React from 'react';
+import React, { useState } from 'react';
+import type { PlaybackTime } from '../types';
 import type { UnifiedTrack } from '../providers/types';
 
 interface RecordPlayerProps {
@@ -15,6 +16,10 @@ interface RecordPlayerProps {
   isTransitioning?: boolean;
   /** Toggle play/pause */
   togglePlay: () => void;
+  /** Current playback position and duration */
+  playbackTime: PlaybackTime;
+  /** Seek to specific position */
+  onSeek?: (time: number) => void;
   /** Whether Apple Music is fully authorized (not just preview) */
   isAppleMusicAuthorized?: boolean;
   /** Callback to link Apple Music account */
@@ -29,13 +34,28 @@ export const RecordPlayer = ({
   isPaused,
   isTransitioning = false,
   togglePlay,
+  playbackTime,
+  onSeek,
   isAppleMusicAuthorized,
   onLinkApple,
 }: RecordPlayerProps): React.JSX.Element => {
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragValue, setDragValue] = useState(0);
+
+  const total = playbackTime?.total || 1;
+  const displayValue = isDragging ? dragValue : (playbackTime?.current || 0);
+  const pct = (displayValue / total) * 100;
 
   const formatArtwork = (url: string | undefined, size = 600): string | null => {
     if (!url) return null;
     return url.replace('{w}', size.toString()).replace('{h}', size.toString());
+  };
+
+  const formatTime = (seconds: number): string => {
+    if (!seconds) return '0:00';
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
   if (!currentTrack) {
@@ -89,7 +109,7 @@ export const RecordPlayer = ({
         </div>
       </div>
 
-      {/* Track Info */}
+      {/* Track Info & Progress */}
       <div className="text-center space-y-2 max-w-lg px-4 w-full flex flex-col items-center">
         <h2 className="text-3xl font-semibold text-gray-900 tracking-tight leading-tight line-clamp-1">
           {trackName}
@@ -110,6 +130,46 @@ export const RecordPlayer = ({
             Connect Apple Music for full playback
           </button>
         )}
+
+        {/* Progress Bar */}
+        <div className="w-full max-w-sm mt-4 flex items-center gap-3">
+          <span className="text-xs font-mono text-gray-400 w-10 text-right tabular-nums">
+            {formatTime(displayValue)}
+          </span>
+
+          <div className="relative flex-1 h-5 flex items-center">
+            {/* Track */}
+            <div className="w-full h-1 bg-gray-200 rounded-full pointer-events-none">
+              <div className="h-full bg-gray-900 rounded-full" style={{ width: `${pct}%` }} />
+            </div>
+            {/* Handle */}
+            <div
+              className="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 bg-white rounded-full shadow border border-gray-300 pointer-events-none"
+              style={{ left: `calc(${pct}% - 7px)` }}
+            />
+            {/* Invisible native input */}
+            <input
+              type="range"
+              min={0}
+              max={total}
+              step={0.1}
+              value={displayValue}
+              onChange={(e) => {
+                setIsDragging(true);
+                setDragValue(parseFloat(e.target.value));
+              }}
+              onPointerUp={(e) => {
+                onSeek?.(parseFloat((e.target as HTMLInputElement).value));
+                setIsDragging(false);
+              }}
+              className="absolute inset-0 w-full opacity-0 cursor-pointer"
+            />
+          </div>
+
+          <span className="text-xs font-mono text-gray-400 w-10 text-left tabular-nums">
+            {formatTime(total)}
+          </span>
+        </div>
       </div>
     </div>
   );
