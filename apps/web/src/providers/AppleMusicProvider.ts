@@ -215,6 +215,8 @@ export class AppleMusicProvider implements MusicProvider {
 
     this.on(mk, 'playbackTimeDidChange', (e: any) => {
       if (!this.playerReadyRef) return;
+      // Suppress time updates while seeking to saved position (avoids 0→saved flash)
+      if (this.pendingSeekTime != null) return;
       this.updateState({
         playbackTime: { current: e.currentPlaybackTime, total: e.currentPlaybackDuration },
       });
