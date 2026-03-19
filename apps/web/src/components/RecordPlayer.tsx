@@ -3,7 +3,7 @@
  * @module components/RecordPlayer
  */
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import type { PlaybackTime } from '../types';
 import type { UnifiedTrack } from '../providers/types';
 
@@ -41,6 +41,7 @@ export const RecordPlayer = ({
 }: RecordPlayerProps): React.JSX.Element => {
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [dragValue, setDragValue] = useState<number>(0);
+  const isDraggingRef = useRef(false);
 
   const formatArtwork = (url: string | undefined, size = 600): string | null => {
     if (!url) return null;
@@ -146,23 +147,25 @@ export const RecordPlayer = ({
             style={{ touchAction: 'none' }}
             onPointerDown={(e) => {
               e.currentTarget.setPointerCapture(e.pointerId);
+              isDraggingRef.current = true;
+              setIsDragging(true);
               const rect = e.currentTarget.getBoundingClientRect();
               const value = Math.max(0, Math.min(total, ((e.clientX - rect.left) / rect.width) * total));
-              setIsDragging(true);
               setDragValue(value);
             }}
             onPointerMove={(e) => {
-              if (!isDragging) return;
+              if (!isDraggingRef.current) return;
               const rect = e.currentTarget.getBoundingClientRect();
               const value = Math.max(0, Math.min(total, ((e.clientX - rect.left) / rect.width) * total));
               setDragValue(value);
             }}
             onPointerUp={(e) => {
-              if (!isDragging) return;
+              if (!isDraggingRef.current) return;
+              isDraggingRef.current = false;
+              setIsDragging(false);
               const rect = e.currentTarget.getBoundingClientRect();
               const value = Math.max(0, Math.min(total, ((e.clientX - rect.left) / rect.width) * total));
               if (onSeek) onSeek(value);
-              setIsDragging(false);
             }}
           >
             <div className="w-full h-1 bg-gray-200 rounded-full relative">
