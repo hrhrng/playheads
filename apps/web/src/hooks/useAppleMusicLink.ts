@@ -17,7 +17,7 @@ interface UseAppleMusicLinkReturn {
   linkApple: () => Promise<void>;
 }
 
-export default function useAppleMusicLink(userId: string | null): UseAppleMusicLinkReturn {
+export default function useAppleMusicLink(userId: string | null, isSessionLoading: boolean): UseAppleMusicLinkReturn {
   const [isAppleLinked, setIsAppleLinked] = useState(false);
   const [storedMusicUserToken, setStoredMusicUserToken] = useState<string | null | undefined>(undefined);
   const [isTokenChecked, setIsTokenChecked] = useState(false);
@@ -72,7 +72,11 @@ export default function useAppleMusicLink(userId: string | null): UseAppleMusicL
 
   // On page load: check link status and validate token
   useEffect(() => {
+    if (isSessionLoading) return;
     if (!userId) {
+      // Session resolved with no user — not linked, no token, done
+      setIsAppleLinked(false);
+      setStoredMusicUserToken(null);
       setIsTokenChecked(true);
       return;
     }
@@ -136,7 +140,7 @@ export default function useAppleMusicLink(userId: string | null): UseAppleMusicL
       }
       setIsTokenChecked(true);
     })();
-  }, [userId, linkApple]);
+  }, [userId, isSessionLoading, linkApple]);
 
   return {
     isAppleLinked,
