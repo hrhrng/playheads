@@ -332,7 +332,7 @@ export const ChatInterface = ({
         <div
           ref={swipeTargetRef}
           className="absolute inset-0 flex items-center justify-center pb-20"
-          style={{ touchAction: 'pan-x' }}
+          style={{ touchAction: 'none' }}
         >
           <div ref={swipeContentRef} className="relative z-10 w-full max-w-xl px-8">
             <RecordPlayer
