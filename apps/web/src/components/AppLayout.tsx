@@ -86,6 +86,7 @@ export const AppLayout = ({
   const [conversationToDelete, setConversationToDelete] = useState<Conversation | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [mobilePlaylistOpen, setMobilePlaylistOpen] = useState(false);
 
   // Resize state
   const [isResizing, setIsResizing] = useState(false);
@@ -249,13 +250,24 @@ export const AppLayout = ({
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
         </button>
         <span className="flex-1 text-center text-sm font-medium text-gemini-text">Playheads</span>
-        <button
-          onClick={onNewChat}
-          className="p-2.5 rounded-xl text-gemini-subtext hover:bg-gemini-hover transition-colors"
-          aria-label="New chat"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
-        </button>
+        <div className="flex items-center gap-1">
+          {rightPanel && (
+            <button
+              onClick={() => setMobilePlaylistOpen(true)}
+              className="p-2.5 rounded-xl text-gemini-subtext hover:bg-gemini-hover transition-colors"
+              aria-label="Open playlist"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19V6l12-3v13M9 10l12-3" /><circle cx="6" cy="19" r="3" /><circle cx="18" cy="16" r="3" /></svg>
+            </button>
+          )}
+          <button
+            onClick={onNewChat}
+            className="p-2.5 rounded-xl text-gemini-subtext hover:bg-gemini-hover transition-colors"
+            aria-label="New chat"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
+          </button>
+        </div>
       </div>
 
       {/* Main row: sidebars + content */}
@@ -316,6 +328,19 @@ export const AppLayout = ({
             </div>
             {navContent(true)}
           </nav>
+        </>
+      )}
+
+      {/* Mobile Playlist Drawer */}
+      {mobilePlaylistOpen && rightPanel && (
+        <>
+          <div
+            className="fixed inset-0 bg-black/40 z-40 md:hidden"
+            onClick={() => setMobilePlaylistOpen(false)}
+          />
+          <div className="fixed inset-y-0 right-0 z-50 md:hidden overflow-hidden" style={{ maxWidth: 'min(100vw, 380px)', width: '100%' }}>
+            {rightPanel}
+          </div>
         </>
       )}
 
