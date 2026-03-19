@@ -152,11 +152,15 @@ export class AppleMusicProvider implements MusicProvider {
   }
 
   /** Set MusicKit queue without starting playback (for restore). */
-  async setQueueWithoutPlaying(songIds: string[]): Promise<void> {
+  async setQueueWithoutPlaying(songIds: string[], startTime?: number): Promise<void> {
     if (!this.musicKit || songIds.length === 0) return;
-    console.log('[AppleMusicProvider] setQueueWithoutPlaying: songIds=', songIds.length, 'playerReadyRef=', this.playerReadyRef);
+    console.log('[AppleMusicProvider] setQueueWithoutPlaying: songIds=', songIds.length, 'startTime=', startTime, 'playerReadyRef=', this.playerReadyRef);
     try {
       await this.musicKit.setQueue({ songs: songIds, startPlaying: false } as any);
+      if (startTime && startTime > 0) {
+        await this.musicKit.changeToMediaAtIndex(0);
+        this.musicKit.seekToTime(startTime);
+      }
     } catch (e) {
       console.error('[AppleMusicProvider] setQueueWithoutPlaying error:', e);
     }
@@ -285,22 +289,15 @@ export class AppleMusicProvider implements MusicProvider {
   // ── Playback — MusicKit native queue ────────────────────────────
 
   /** Set MusicKit queue to all song IDs and start playback at startIndex. */
-  async playWithQueue(songIds: string[], startIndex: number, retried = false, startTime?: number): Promise<void> {
+  async playWithQueue(songIds: string[], startIndex: number, retried = false): Promise<void> {
     if (!this.musicKit || this.playbackLock || songIds.length === 0) return;
     this.playbackLock = true;
     this.startTransition();
     try {
       this.playerReadyRef = true;
-      if (startTime) {
-        // Let MusicKit handle playback start natively at the correct position
-        await this.musicKit.setQueue({
-          songs: songIds, startPlaying: true, startTime,
-        } as any);
-      } else {
-        await this.musicKit.setQueue({ songs: songIds, startPlaying: false } as any);
-        await this.musicKit.changeToMediaAtIndex(startIndex);
-        await this.musicKit.play();
-      }
+      await this.musicKit.setQueue({ songs: songIds, startPlaying: false } as any);
+      await this.musicKit.changeToMediaAtIndex(startIndex);
+      await this.musicKit.play();
       this.updateState({ isPlaying: true });
     } catch (e) {
       // Handle "could not be resolved" errors by filtering bad IDs and retrying

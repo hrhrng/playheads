@@ -148,9 +148,9 @@ export function useMusicProvider({
           } catch { /* ignore */ }
           provider.setDisplayTrack(tracks[0], savedPos);
 
-          // Prime MusicKit queue (no play, no changeToMediaAtIndex).
+          // Prime MusicKit queue and seek to saved position (no play).
           // React state is authoritative; queueItemsDidChange is not subscribed.
-          provider.setQueueWithoutPlaying(tracks.map((t: any) => t.id));
+          provider.setQueueWithoutPlaying(tracks.map((t: any) => t.id), savedPos);
         }
       }
     } catch { /* ignore corrupt localStorage */ }
