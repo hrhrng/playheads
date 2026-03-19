@@ -8,20 +8,6 @@ import { useState, useEffect, useRef, useSyncExternalStore, useCallback } from '
 import { AppleMusicProvider } from '../providers/AppleMusicProvider';
 import { usePlayQueue, type UsePlayQueueReturn } from './usePlayQueue';
 import type { PlaybackState } from '../providers/types';
-import { API_BASE } from '../config/api';
-
-const QUEUE_STORAGE_KEY = 'playheads_queue';
-
-function loadQueueFromStorage(): any[] {
-  try {
-    const raw = localStorage.getItem(QUEUE_STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
-    }
-  } catch { /* ignore */ }
-  return [];
-}
 
 interface UseMusicProviderParams {
   userId: string | null;
@@ -67,12 +53,17 @@ export function useMusicProvider({
   const [provider, setProvider] = useState<AppleMusicProvider | null>(null);
   const providerRef = useRef<AppleMusicProvider | null>(null);
 
-  // Create and initialize provider when token check is done
+  // Use ref for token so provider is created only once (when isTokenChecked
+  // flips true), not recreated every time the token value changes.
+  const tokenRef = useRef(storedMusicUserToken);
+  tokenRef.current = storedMusicUserToken;
+
+  // Create and initialize provider once when token check is done
   useEffect(() => {
     if (!isTokenChecked) return;
 
     const p = new AppleMusicProvider({
-      storedMusicUserToken,
+      storedMusicUserToken: tokenRef.current,
     });
     providerRef.current = p;
     setProvider(p);
@@ -94,7 +85,8 @@ export function useMusicProvider({
       p.destroy();
       providerRef.current = null;
     };
-  }, [isTokenChecked, storedMusicUserToken]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isTokenChecked]);
 
   // Bridge ALL provider state to React via useSyncExternalStore.
   const lastSnapshotRef = useRef<ProviderSnapshot>(DEFAULT_SNAPSHOT);
@@ -132,65 +124,55 @@ export function useMusicProvider({
   const queueHook = usePlayQueue({ provider, userId });
   const finishRestore = (queueHook as any).finishRestore as () => void;
 
-  // ── Queue restore & persist ────────────────────────────────────
-  // queueRestored gates the persist effect so it doesn't overwrite
-  // localStorage with an empty array before restore completes.
-  const queueRestored = useRef(false);
+  // ── Queue restore from localStorage (no autoplay) ──────────────
   const initialRestoreDone = useRef(false);
+  const QUEUE_STORAGE_KEY = 'playheads_queue';
+  const PLAYBACK_POS_KEY = 'playheads_playback_pos';
 
-  // Restore: try localStorage first (fast), then backend as fallback.
   useEffect(() => {
     if (!provider || isInitializing || initialRestoreDone.current) return;
-    if (!userId) return;
     initialRestoreDone.current = true;
 
-    (async () => {
-      try {
-        // Try localStorage first for instant restore
-        const localQueue = loadQueueFromStorage();
-        if (localQueue.length > 0) {
-          queueHook.setQueue(localQueue);
-          if (localQueue.length > 0) {
-            provider.restoreTrackDisplay(localQueue[0], localQueue, 0, 0);
-          }
-          queueRestored.current = true;
-          finishRestore();
-          return;
-        }
+    try {
+      const raw = localStorage.getItem(QUEUE_STORAGE_KEY);
+      if (raw) {
+        const tracks = JSON.parse(raw);
+        if (Array.isArray(tracks) && tracks.length > 0) {
+          console.log('[useMusicProvider] restore:', tracks.length, 'tracks from localStorage');
+          queueHook.setQueue(tracks);
 
-        // Fallback to backend
-        const queueRes = await fetch(`${API_BASE}/queue?user_id=${userId}`);
-        if (queueRes.ok) {
-          const data = await queueRes.json();
-          if (data.queue?.length > 0) {
-            const seen = new Set<string>();
-            const deduped = data.queue.filter((t: any) => {
-              if (seen.has(t.id)) return false;
-              seen.add(t.id);
-              return true;
-            });
-            queueHook.setQueue(deduped);
-            if (deduped.length > 0) {
-              provider.restoreTrackDisplay(deduped[0], deduped, 0, 0);
-            }
-          }
+          // Restore playback position for display (visual only — no seek)
+          let savedPos = 0;
+          try {
+            savedPos = parseFloat(localStorage.getItem(PLAYBACK_POS_KEY) || '0') || 0;
+          } catch { /* ignore */ }
+          provider.setDisplayTrack(tracks[0], savedPos);
+
+          // Prime MusicKit queue and seek to saved position (no play).
+          // React state is authoritative; queueItemsDidChange is not subscribed.
+          provider.setQueueWithoutPlaying(tracks.map((t: any) => t.id), savedPos);
         }
-      } catch (e) {
-        console.error('[useMusicProvider] restore error:', e);
-      } finally {
-        queueRestored.current = true;
-        finishRestore();
       }
-    })();
-  }, [provider, isInitializing, userId]);
+    } catch { /* ignore corrupt localStorage */ }
+    finishRestore();
+  }, [provider, isInitializing]);
 
-  // Persist queue to localStorage — gated until restore completes
+  // ── Persist queue to localStorage ─────────────────────────────
   useEffect(() => {
-    if (!queueRestored.current) return;
+    if (!initialRestoreDone.current) return;
     try {
       localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(queueHook.queue));
     } catch { /* ignore */ }
   }, [queueHook.queue]);
+
+  // ── Persist playback position to localStorage ─────────────────
+  useEffect(() => {
+    if (!initialRestoreDone.current) return;
+    const pos = playback.playbackTime.current;
+    if (pos > 0) {
+      try { localStorage.setItem(PLAYBACK_POS_KEY, String(pos)); } catch { /* ignore */ }
+    }
+  }, [playback.playbackTime.current]);
 
   const login = useCallback(async () => {
     if (provider) await provider.login();
