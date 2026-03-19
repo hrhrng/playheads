@@ -47,6 +47,9 @@ export class AppleMusicProvider implements MusicProvider {
   // Serialize playLater calls so queueItemsDidChange fires with monotonically growing queue
   private mutationChain: Promise<void> = Promise.resolve();
 
+  // Pending seek after first play (restore position)
+  private pendingSeekTime: number | null = null;
+
   // Playback control
   private playbackLock = false;
   private lastPlayingTrackId: string | null = null;
@@ -66,6 +69,9 @@ export class AppleMusicProvider implements MusicProvider {
   get storefrontId(): string { return this._storefrontId; }
   /** True after first user-initiated playback; false during restore. */
   get isPlayerReady(): boolean { return this.playerReadyRef; }
+
+  /** Queue a seek that will execute after the next playWithQueue/play call. */
+  setPendingSeek(seconds: number): void { this.pendingSeekTime = seconds; }
 
   // ── State emission ──────────────────────────────────────────────
   private emit() {
@@ -294,6 +300,11 @@ export class AppleMusicProvider implements MusicProvider {
       await this.musicKit.setQueue({ songs: songIds, startPlaying: false } as any);
       await this.musicKit.changeToMediaAtIndex(startIndex);
       await this.musicKit.play();
+      // Restore saved position if pending (e.g. first play after page restore)
+      if (this.pendingSeekTime != null && this.pendingSeekTime > 0) {
+        this.musicKit.seekToTime(this.pendingSeekTime);
+        this.pendingSeekTime = null;
+      }
       this.updateState({ isPlaying: true });
     } catch (e) {
       // Handle "could not be resolved" errors by filtering bad IDs and retrying

@@ -147,6 +147,8 @@ export function useMusicProvider({
             savedPos = parseFloat(localStorage.getItem(PLAYBACK_POS_KEY) || '0') || 0;
           } catch { /* ignore */ }
           provider.setDisplayTrack(tracks[0], savedPos);
+          // Queue seek so first playWithQueue resumes at saved position
+          if (savedPos > 0) provider.setPendingSeek(savedPos);
 
           // Prime MusicKit queue (no play, no changeToMediaAtIndex).
           // React state is authoritative; queueItemsDidChange is not subscribed.
