@@ -131,31 +131,22 @@ export class AppleMusicProvider implements MusicProvider {
 
       this.playerReadyRef = false;
 
-      console.log('[AppleMusicProvider] initialize: storedMusicUserToken=', this.config.storedMusicUserToken ? 'present' : 'null/undefined');
-
-      const configOptions: Record<string, unknown> = {
+      const mk = await window.MusicKit.configure({
         developerToken: this.developerToken!,
         app: { name: 'Playhead', build: '1.0.0' },
-      };
-      if (this.config.storedMusicUserToken) {
-        configOptions.musicUserToken = this.config.storedMusicUserToken;
-      }
-
-      const mk = await window.MusicKit.configure(configOptions as any) as MusicKitInstance;
+      } as any) as MusicKitInstance;
       this.musicKit = mk;
-
-      console.log('[AppleMusicProvider] after configure: mk.isAuthorized=', mk.isAuthorized);
       this._isAuthorized = mk.isAuthorized;
       this._storefrontId = mk.storefrontId || 'us';
+
+      // Register events BEFORE setting musicUserToken so authorizationStatusDidChange is caught.
       this.registerEvents(mk);
 
-      // Fallback: if configure option didn't restore auth, try direct property assignment.
-      // Events are registered first so authorizationStatusDidChange is caught if it fires.
+      // MusicKit v3 does not accept musicUserToken in configure() options.
+      // Direct property assignment is the correct restoration method.
       if (this.config.storedMusicUserToken && !this._isAuthorized) {
-        console.log('[AppleMusicProvider] configure did not restore auth, trying direct musicUserToken assignment');
         (mk as any).musicUserToken = this.config.storedMusicUserToken;
         this._isAuthorized = mk.isAuthorized;
-        console.log('[AppleMusicProvider] after musicUserToken assignment: mk.isAuthorized=', mk.isAuthorized);
       }
     } catch (err) {
       console.error('[AppleMusicProvider] Error initializing:', err);

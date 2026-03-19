@@ -61,7 +61,7 @@ function App() {
     storedMusicUserToken,
     isTokenChecked,
     linkApple,
-  } = useAppleMusicLink(effectiveSession?.user.id || null);
+  } = useAppleMusicLink(effectiveSession?.user.id || null, isSessionLoading);
 
   // Music provider (Apple Music) + global queue
   const {

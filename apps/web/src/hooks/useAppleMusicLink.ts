@@ -17,7 +17,7 @@ interface UseAppleMusicLinkReturn {
   linkApple: () => Promise<void>;
 }
 
-export default function useAppleMusicLink(userId: string | null): UseAppleMusicLinkReturn {
+export default function useAppleMusicLink(userId: string | null, isSessionLoading: boolean): UseAppleMusicLinkReturn {
   const [isAppleLinked, setIsAppleLinked] = useState(false);
   const [storedMusicUserToken, setStoredMusicUserToken] = useState<string | null | undefined>(undefined);
   const [isTokenChecked, setIsTokenChecked] = useState(false);
@@ -72,8 +72,12 @@ export default function useAppleMusicLink(userId: string | null): UseAppleMusicL
 
   // On page load: check link status and validate token
   useEffect(() => {
+    if (isSessionLoading) return;
     if (!userId) {
-      console.log('[useAppleMusicLink] userId=null, waiting for session to load');
+      // Session resolved with no user — not linked, no token, done
+      setIsAppleLinked(false);
+      setStoredMusicUserToken(null);
+      setIsTokenChecked(true);
       return;
     }
     if (checkedRef.current) return;
@@ -113,7 +117,6 @@ export default function useAppleMusicLink(userId: string | null): UseAppleMusicL
         // 2. Has token — validate it
         const { valid, reason } = await validateAppleMusicToken(userId);
 
-        console.log('[useAppleMusicLink] validate result: valid=', valid, 'reason=', reason, 'token=', token ? 'present' : 'null');
         if (valid) {
           setIsAppleLinked(true);
           setStoredMusicUserToken(token);
@@ -137,7 +140,7 @@ export default function useAppleMusicLink(userId: string | null): UseAppleMusicL
       }
       setIsTokenChecked(true);
     })();
-  }, [userId, linkApple]);
+  }, [userId, isSessionLoading, linkApple]);
 
   return {
     isAppleLinked,

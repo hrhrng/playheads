@@ -61,8 +61,8 @@ export function useMusicProvider({
   // Create and initialize provider once when token check is done
   useEffect(() => {
     if (!isTokenChecked) return;
+    if (!userId) return;
 
-    console.log('[useMusicProvider] creating provider, storedMusicUserToken=', tokenRef.current ? 'present' : 'null/undefined');
     const p = new AppleMusicProvider({
       storedMusicUserToken: tokenRef.current,
     });
