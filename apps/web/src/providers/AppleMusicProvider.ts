@@ -131,15 +131,16 @@ export class AppleMusicProvider implements MusicProvider {
 
       this.playerReadyRef = false;
 
-      const mk = await window.MusicKit.configure({
+      const configOptions: Record<string, unknown> = {
         developerToken: this.developerToken!,
-        app: { name: 'Playhead', build: '1.0.0' }
-      } as any) as MusicKitInstance;
-      this.musicKit = mk;
-
-      if (this.config.storedMusicUserToken && !mk.isAuthorized) {
-        (mk as any).musicUserToken = this.config.storedMusicUserToken;
+        app: { name: 'Playhead', build: '1.0.0' },
+      };
+      if (this.config.storedMusicUserToken) {
+        configOptions.musicUserToken = this.config.storedMusicUserToken;
       }
+
+      const mk = await window.MusicKit.configure(configOptions as any) as MusicKitInstance;
+      this.musicKit = mk;
 
       this._isAuthorized = mk.isAuthorized;
       this._storefrontId = mk.storefrontId || 'us';
