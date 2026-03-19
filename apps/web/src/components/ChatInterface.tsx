@@ -3,7 +3,7 @@
  * @module components/ChatInterface
  */
 
-import { useEffect, useCallback, useRef } from 'react';
+import { useEffect, useCallback, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { RecordPlayer } from './RecordPlayer';
@@ -84,6 +84,9 @@ export const ChatInterface = ({
 }: ChatInterfaceProps) => {
   const location = useLocation();
   const navigate = useNavigate();
+  const [seekDragging, setSeekDragging] = useState(false);
+  const [seekDragValue, setSeekDragValue] = useState(0);
+  const seekDisplayValue = seekDragging ? seekDragValue : (playbackTime?.current || 0);
 
   // Use chat hook for state and methods
   const {
@@ -164,6 +167,13 @@ export const ChatInterface = ({
     }
     triggerSkip(direction < 0 ? -1 : 1);
   }, [triggerSkip]);
+
+  const formatTime = (seconds: number): string => {
+    if (!seconds) return '0:00';
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
+  };
 
   const isInteractive = (target: HTMLElement) =>
     !!target.closest('button, input, [role="slider"], .rc-slider');
@@ -340,8 +350,6 @@ export const ChatInterface = ({
               isPaused={!isPlaying}
               isTransitioning={isTransitioning}
               togglePlay={togglePlay}
-              playbackTime={playbackTime}
-              onSeek={onSeek}
               isAppleMusicAuthorized={isAppleMusicAuthorized}
               onLinkApple={onLinkApple}
             />
@@ -402,6 +410,54 @@ export const ChatInterface = ({
             })()}
           </button>
         </div>
+
+        {/* Seek Bar - outside swipe container so touch drag works */}
+        {currentTrack && !showHistory && (
+          <div className="max-w-xl mx-auto mb-3 flex items-center gap-3">
+            <span className="text-xs font-mono text-gray-400 w-10 text-right tabular-nums">
+              {formatTime(seekDisplayValue)}
+            </span>
+
+            {/* Custom track + invisible native input overlay */}
+            <div className="relative flex-1 h-4 flex items-center">
+              {/* Track */}
+              <div className="w-full h-px bg-gray-200 rounded-full pointer-events-none">
+                <div
+                  className="h-full bg-gray-400 rounded-full"
+                  style={{ width: `${(seekDisplayValue / (playbackTime?.total || 1)) * 100}%` }}
+                />
+              </div>
+              {/* Handle */}
+              <div
+                className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-white rounded-full shadow border border-gray-300 pointer-events-none"
+                style={{ left: `calc(${(seekDisplayValue / (playbackTime?.total || 1)) * 100}% - 5px)` }}
+              />
+              {/* Invisible native input for interaction */}
+              <input
+                type="range"
+                min={0}
+                max={playbackTime?.total || 1}
+                step={0.1}
+                value={seekDisplayValue}
+                onChange={(e) => {
+                  const v = parseFloat(e.target.value);
+                  setSeekDragging(true);
+                  setSeekDragValue(v);
+                }}
+                onPointerUp={(e) => {
+                  const v = parseFloat((e.target as HTMLInputElement).value);
+                  onSeek?.(v);
+                  setSeekDragging(false);
+                }}
+                className="absolute inset-0 w-full opacity-0 cursor-pointer"
+              />
+            </div>
+
+            <span className="text-xs font-mono text-gray-400 w-10 text-left tabular-nums">
+              {formatTime(playbackTime?.total || 0)}
+            </span>
+          </div>
+        )}
 
         {/* Input Bar */}
         <ChatInput
