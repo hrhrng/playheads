@@ -3,9 +3,7 @@
  * @module components/RecordPlayer
  */
 
-import React, { useState } from 'react';
-import { useDrag } from '@use-gesture/react';
-import type { PlaybackTime } from '../types';
+import React from 'react';
 import type { UnifiedTrack } from '../providers/types';
 
 interface RecordPlayerProps {
@@ -17,10 +15,6 @@ interface RecordPlayerProps {
   isTransitioning?: boolean;
   /** Toggle play/pause */
   togglePlay: () => void;
-  /** Current playback position and duration */
-  playbackTime: PlaybackTime;
-  /** Seek to specific position */
-  onSeek?: (time: number) => void;
   /** Whether Apple Music is fully authorized (not just preview) */
   isAppleMusicAuthorized?: boolean;
   /** Callback to link Apple Music account */
@@ -35,42 +29,13 @@ export const RecordPlayer = ({
   isPaused,
   isTransitioning = false,
   togglePlay,
-  playbackTime,
-  onSeek,
   isAppleMusicAuthorized,
   onLinkApple,
 }: RecordPlayerProps): React.JSX.Element => {
-  const [isDragging, setIsDragging] = useState<boolean>(false);
-  const [dragValue, setDragValue] = useState<number>(0);
-  const sliderRef = React.useRef<HTMLDivElement>(null);
-
-  const current = playbackTime?.current || 0;
-  const total = playbackTime?.total || 1;
-  const displayValue = isDragging ? dragValue : current;
-
-  const bind = useDrag(({ first, last, xy: [x] }) => {
-    const el = sliderRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const value = Math.max(0, Math.min(total, ((x - rect.left) / rect.width) * total));
-    if (first) setIsDragging(true);
-    setDragValue(value);
-    if (last) {
-      if (onSeek) onSeek(value);
-      setIsDragging(false);
-    }
-  }, { filterTaps: true });
 
   const formatArtwork = (url: string | undefined, size = 600): string | null => {
     if (!url) return null;
     return url.replace('{w}', size.toString()).replace('{h}', size.toString());
-  };
-
-  const formatTime = (seconds: number): string => {
-    if (!seconds) return '0:00';
-    const m = Math.floor(seconds / 60);
-    const s = Math.floor(seconds % 60);
-    return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
   if (!currentTrack) {
@@ -124,7 +89,7 @@ export const RecordPlayer = ({
         </div>
       </div>
 
-      {/* Track Info & Progress */}
+      {/* Track Info */}
       <div className="text-center space-y-2 max-w-lg px-4 w-full flex flex-col items-center">
         <h2 className="text-3xl font-semibold text-gray-900 tracking-tight leading-tight line-clamp-1">
           {trackName}
@@ -145,38 +110,6 @@ export const RecordPlayer = ({
             Connect Apple Music for full playback
           </button>
         )}
-
-        {/* Progress Bar */}
-        <div className="w-full max-w-sm mt-4 flex items-center gap-3">
-          <span className="text-xs font-mono text-gray-400 w-10 text-right">
-            {formatTime(displayValue)}
-          </span>
-
-          <div
-            ref={sliderRef}
-            role="slider"
-            aria-valuenow={displayValue}
-            aria-valuemin={0}
-            aria-valuemax={total}
-            className="flex-1 relative h-5 flex items-center cursor-pointer select-none"
-            {...bind()}
-          >
-            <div className="w-full h-1 bg-gray-200 rounded-full relative">
-              <div
-                className="h-full bg-gray-900 rounded-full"
-                style={{ width: `${(displayValue / total) * 100}%` }}
-              />
-              <div
-                className="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 bg-white rounded-full shadow border border-gray-300"
-                style={{ left: `calc(${(displayValue / total) * 100}% - 7px)` }}
-              />
-            </div>
-          </div>
-
-          <span className="text-xs font-mono text-gray-400 w-10 text-left">
-            {formatTime(total)}
-          </span>
-        </div>
       </div>
     </div>
   );

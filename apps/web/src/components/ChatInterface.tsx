@@ -165,6 +165,13 @@ export const ChatInterface = ({
     triggerSkip(direction < 0 ? -1 : 1);
   }, [triggerSkip]);
 
+  const formatTime = (seconds: number): string => {
+    if (!seconds) return '0:00';
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
+  };
+
   const isInteractive = (target: HTMLElement) =>
     !!target.closest('button, input, [role="slider"], .rc-slider');
 
@@ -340,8 +347,6 @@ export const ChatInterface = ({
               isPaused={!isPlaying}
               isTransitioning={isTransitioning}
               togglePlay={togglePlay}
-              playbackTime={playbackTime}
-              onSeek={onSeek}
               isAppleMusicAuthorized={isAppleMusicAuthorized}
               onLinkApple={onLinkApple}
             />
@@ -402,6 +407,27 @@ export const ChatInterface = ({
             })()}
           </button>
         </div>
+
+        {/* Seek Bar - outside swipe container so touch drag works */}
+        {currentTrack && !showHistory && (
+          <div className="max-w-xl mx-auto mb-3 flex items-center gap-3">
+            <span className="text-xs font-mono text-gray-400 w-10 text-right">
+              {formatTime(playbackTime?.current || 0)}
+            </span>
+            <input
+              type="range"
+              min={0}
+              max={playbackTime?.total || 1}
+              step={0.1}
+              value={playbackTime?.current || 0}
+              onChange={(e) => onSeek?.(parseFloat(e.target.value))}
+              className="flex-1 cursor-pointer accent-gray-900"
+            />
+            <span className="text-xs font-mono text-gray-400 w-10 text-left">
+              {formatTime(playbackTime?.total || 0)}
+            </span>
+          </div>
+        )}
 
         {/* Input Bar */}
         <ChatInput
