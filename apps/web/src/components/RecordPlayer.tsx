@@ -42,6 +42,24 @@ export const RecordPlayer = ({
 }: RecordPlayerProps): React.JSX.Element => {
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const [dragValue, setDragValue] = useState<number>(0);
+  const sliderRef = React.useRef<HTMLDivElement>(null);
+
+  const current = playbackTime?.current || 0;
+  const total = playbackTime?.total || 1;
+  const displayValue = isDragging ? dragValue : current;
+
+  const bind = useDrag(({ first, last, xy: [x] }) => {
+    const el = sliderRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const value = Math.max(0, Math.min(total, ((x - rect.left) / rect.width) * total));
+    if (first) setIsDragging(true);
+    setDragValue(value);
+    if (last) {
+      if (onSeek) onSeek(value);
+      setIsDragging(false);
+    }
+  }, { filterTaps: true });
 
   const formatArtwork = (url: string | undefined, size = 600): string | null => {
     if (!url) return null;
@@ -69,24 +87,6 @@ export const RecordPlayer = ({
   const trackName = currentTrack.name || 'Unknown Track';
   const artistName = currentTrack.artist || 'Unknown Artist';
   const artworkUrl = formatArtwork(currentTrack.artworkUrl);
-
-  const current = playbackTime?.current || 0;
-  const total = playbackTime?.total || 1;
-  const displayValue = isDragging ? dragValue : current;
-
-  const sliderRef = React.useRef<HTMLDivElement>(null);
-  const bind = useDrag(({ first, last, xy: [x] }) => {
-    const el = sliderRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    const value = Math.max(0, Math.min(total, ((x - rect.left) / rect.width) * total));
-    if (first) setIsDragging(true);
-    setDragValue(value);
-    if (last) {
-      if (onSeek) onSeek(value);
-      setIsDragging(false);
-    }
-  }, { filterTaps: true });
 
   return (
     <div className="flex flex-col items-center gap-8 group w-full">
