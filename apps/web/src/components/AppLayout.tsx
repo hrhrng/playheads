@@ -56,6 +56,8 @@ interface AppLayoutProps {
   onConnectAppleMusic?: () => void;
   /** Disconnect Apple Music */
   onDisconnectAppleMusic?: () => void;
+  /** Called before opening the mobile playlist sheet (e.g. to force-expand the sidebar) */
+  onOpenPlaylist?: () => void;
 }
 
 /**
@@ -81,6 +83,7 @@ export const AppLayout = ({
   isAppleMusicAuthorized,
   onConnectAppleMusic,
   onDisconnectAppleMusic,
+  onOpenPlaylist,
 }: AppLayoutProps): React.JSX.Element => {
   // Use persisted state for nav sidebar to survive page navigation
   const { expanded, setExpanded, width, setWidth, COLLAPSED_WIDTH } = useNavSidebarState();
@@ -242,7 +245,7 @@ export const AppLayout = ({
   const hasPlaylist = !!rightPanel;
 
   return (
-    <PlaylistSheetContext.Provider value={{ openPlaylist: () => setMobilePlaylistOpen(true), hasPlaylist }}>
+    <PlaylistSheetContext.Provider value={{ openPlaylist: () => { onOpenPlaylist?.(); setMobilePlaylistOpen(true); }, hasPlaylist, isMobileSheet: false }}>
       <div className="flex flex-col h-screen bg-gemini-bg font-sans text-gemini-text overflow-hidden selection:bg-gemini-primary selection:text-white">
 
         {/* Mobile Top Bar */}
@@ -339,10 +342,12 @@ export const AppLayout = ({
               <div className="flex justify-center pt-3 pb-1">
                 <div className="w-10 h-1 bg-gray-300 rounded-full" />
               </div>
-              {/* Playlist content — fill remaining height */}
-              <div className="h-[calc(70vh-24px)] overflow-hidden">
-                {rightPanel}
-              </div>
+              {/* Playlist content — fill remaining height, isMobileSheet=true */}
+              <PlaylistSheetContext.Provider value={{ openPlaylist: () => {}, hasPlaylist: true, isMobileSheet: true }}>
+                <div className="h-[calc(70vh-24px)] overflow-hidden">
+                  {rightPanel}
+                </div>
+              </PlaylistSheetContext.Provider>
             </div>
           </>
         )}

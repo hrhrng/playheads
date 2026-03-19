@@ -7,6 +7,7 @@
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import type { UnifiedTrack } from '../providers/types';
+import { usePlaylistSheet } from '../contexts/PlaylistSheetContext';
 
 interface PlaylistSidebarProps {
   /** Currently playing track */
@@ -50,6 +51,7 @@ export const PlaylistSidebar = ({
   width,
   onWidthChange,
 }: PlaylistSidebarProps): React.JSX.Element => {
+  const { isMobileSheet } = usePlaylistSheet();
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const startX = useRef(0);
@@ -124,17 +126,18 @@ export const PlaylistSidebar = ({
     }
   };
 
-  // Use dynamic width instead of fixed Tailwind classes
-  const sidebarWidth = collapsed ? 96 : width; // 96px = w-24
+  // In mobile sheet: always expanded, full width
+  const effectiveCollapsed = isMobileSheet ? false : collapsed;
+  const sidebarWidth = effectiveCollapsed ? 96 : width; // 96px = w-24
 
   return (
     <div
       ref={sidebarRef}
       className={`h-full flex flex-col bg-gemini-bg pt-4 pr-4 pl-4 relative ${isResizing ? '' : 'transition-all duration-300 ease-in-out'}`}
-      style={{ width: `${sidebarWidth}px` }}
+      style={isMobileSheet ? { width: '100%' } : { width: `${sidebarWidth}px` }}
     >
-      {/* Resize Handle - Left edge */}
-      {!collapsed && (
+      {/* Resize Handle - Left edge (hidden in mobile sheet) */}
+      {!effectiveCollapsed && !isMobileSheet && (
         <div
           className={`absolute -left-0.5 top-10 bottom-0 w-1 cursor-ew-resize hover:bg-blue-400 active:bg-blue-500 transition-colors z-10 group ${
             isResizing ? 'bg-blue-500' : 'bg-transparent'
@@ -146,8 +149,8 @@ export const PlaylistSidebar = ({
         </div>
       )}
 
-      {/* Resize Handle for collapsed state */}
-      {collapsed && (
+      {/* Resize Handle for collapsed state (hidden in mobile sheet) */}
+      {effectiveCollapsed && !isMobileSheet && (
         <div
           className={`absolute -left-0.5 top-10 bottom-0 w-1 cursor-ew-resize hover:bg-blue-400 transition-colors z-10 group ${isResizing ? 'bg-blue-500' : 'bg-transparent'}`}
           onMouseDown={handleMouseDown}
@@ -159,28 +162,36 @@ export const PlaylistSidebar = ({
       {/* Playlist Container */}
       <div className="flex-1 min-h-0 bg-white rounded-t-3xl flex flex-col shadow-sm overflow-hidden relative border border-white transition-all">
 
-        {/* Toggle Button */}
-        <div className={`flex ${collapsed ? 'justify-center py-6' : 'justify-between p-6 pb-2'} items-center`}>
-          {!collapsed && <h2 className="text-sm font-medium text-gemini-text tracking-tight">Playlist</h2>}
-          <button
-            onClick={toggleCollapse}
-            className="p-2 rounded-xl hover:bg-gray-100 text-gemini-subtext hover:text-gemini-text transition-all duration-300 group focus:outline-none focus:ring-0"
-            title={collapsed ? "Expand Playlist" : "Collapse Playlist"}
-          >
-            {collapsed ? (
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
-              </svg>
-            ) : (
-              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
-              </svg>
-            )}
-          </button>
-        </div>
+        {/* Header */}
+        {isMobileSheet ? (
+          /* Mobile sheet: title only, no collapse toggle */
+          <div className="flex justify-between items-center p-6 pb-2">
+            <h2 className="text-sm font-medium text-gemini-text tracking-tight">Playlist</h2>
+          </div>
+        ) : (
+          /* Desktop: collapse toggle button */
+          <div className={`flex ${effectiveCollapsed ? 'justify-center py-6' : 'justify-between p-6 pb-2'} items-center`}>
+            {!effectiveCollapsed && <h2 className="text-sm font-medium text-gemini-text tracking-tight">Playlist</h2>}
+            <button
+              onClick={toggleCollapse}
+              className="p-2 rounded-xl hover:bg-gray-100 text-gemini-subtext hover:text-gemini-text transition-all duration-300 group focus:outline-none focus:ring-0"
+              title={effectiveCollapsed ? "Expand Playlist" : "Collapse Playlist"}
+            >
+              {effectiveCollapsed ? (
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
+                </svg>
+              ) : (
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                </svg>
+              )}
+            </button>
+          </div>
+        )}
 
         {/* Content */}
-        {collapsed ? (
+        {effectiveCollapsed ? (
           /* Mini View - Vertical Player Strip */
           <div className="flex-1 flex flex-col items-center pt-8 gap-6 opacity-100 transition-opacity duration-500 delay-100">
             {/* Mini Vinyl Spinner */}

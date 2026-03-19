@@ -419,7 +419,7 @@ export const ChatInterface = ({
         )}
 
         {/* Toggle Button + Mobile Playlist Button */}
-        <div className="max-w-xl mx-auto mb-2 flex justify-start items-center gap-2">
+        <div className="max-w-xl mx-auto mb-2 flex items-center">
           <button
             onClick={toggleHistory}
             className="relative w-8 h-8 rounded-full flex items-center justify-center"
@@ -459,11 +459,11 @@ export const ChatInterface = ({
             })()}
           </button>
 
-          {/* Playlist button — mobile only, shown when a playlist exists */}
+          {/* Playlist button — mobile only, right-aligned, shown when a playlist exists */}
           {hasPlaylist && (
             <button
               onClick={openPlaylist}
-              className="md:hidden w-8 h-8 rounded-full border border-gray-200 bg-white flex items-center justify-center text-gray-400 hover:text-gray-600 hover:border-gray-300 transition-colors"
+              className="md:hidden ml-auto w-8 h-8 rounded-full border border-gray-200 bg-white flex items-center justify-center text-gray-400 hover:text-gray-600 hover:border-gray-300 transition-colors"
               title="View Playlist"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
