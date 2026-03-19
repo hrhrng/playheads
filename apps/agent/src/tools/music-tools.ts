@@ -167,45 +167,56 @@ export function createMusicTools(ctx: ToolContext) {
 
     search_music: tool({
       description:
-        "Search for music tracks on Apple Music. Returns a list of tracks with IDs.",
+        "Search Apple Music. Pass multiple queries to search in parallel and get deduplicated results.",
       inputSchema: z.object({
-        query: z.string().describe("Search query string"),
+        queries: z.array(z.string()).describe("One or more search query strings."),
+        limit: z.number().min(1).max(25).optional().default(5).describe("Max results per query (default 5)."),
       }),
-      execute: async ({ query }) => {
-        console.log("[tool:search_music] query='%s' storefront=%s", query, ctx.storefront);
-        try {
-          const result = await appleMusicGet(
-            `v1/catalog/${ctx.storefront}/search`,
-            ctx.env,
-            { term: query, types: "songs", limit: 5 }
-          );
+      execute: async ({ queries, limit = 5 }) => {
+        console.log("[tool:search_music] queries=%j limit=%d storefront=%s", queries, limit, ctx.storefront);
+        const clampedLimit = Math.min(Math.max(1, limit), 25);
 
-          const songs =
-            ((
-              (result.results as Record<string, unknown>)
-                ?.songs as Record<string, unknown>
-            )?.data as Array<Record<string, unknown>>) || [];
-
-          console.log("[tool:search_music] results: %d songs", songs.length);
-
-          if (!songs.length) {
-            return `No results found for '${query}'`;
-          }
-
-          const lines = [`Search results for '${query}':`];
-          for (let i = 0; i < songs.length; i++) {
-            const song = songs[i];
-            const attrs = (song.attributes || {}) as Record<string, unknown>;
-            lines.push(
-              `${i + 1}. ${attrs.name || "Unknown"} - ${attrs.artistName || "Unknown Artist"} (id: ${song.id})`
+        const searchOne = async (q: string): Promise<Array<Record<string, unknown>>> => {
+          try {
+            const result = await appleMusicGet(
+              `v1/catalog/${ctx.storefront}/search`,
+              ctx.env,
+              { term: q, types: "songs", limit: clampedLimit }
             );
+            return (
+              ((result.results as Record<string, unknown>)?.songs as Record<string, unknown>)
+                ?.data as Array<Record<string, unknown>>
+            ) || [];
+          } catch {
+            return [];
           }
-          console.log("[tool:search_music] returning %d results", songs.length);
-          return lines.join("\n");
-        } catch (e) {
-          console.error("[tool:search_music] error:", e);
-          return `Error searching music: ${String(e)}`;
+        };
+
+        const resultsPerQuery = await Promise.all(queries.map(searchOne));
+
+        const seenIds = new Set<string>();
+        const allResults: string[] = [];
+        for (const songs of resultsPerQuery) {
+          for (const song of songs) {
+            const songId = song.id as string;
+            if (!songId || seenIds.has(songId)) continue;
+            seenIds.add(songId);
+            const attrs = (song.attributes || {}) as Record<string, unknown>;
+            const name = (attrs.name as string) || "Unknown";
+            const artist = (attrs.artistName as string) || "Unknown Artist";
+            allResults.push(`${name} - ${artist} (id: ${songId})`);
+          }
         }
+
+        console.log("[tool:search_music] %d unique results", allResults.length);
+
+        if (!allResults.length) {
+          return `No results found for: ${queries.join(", ")}`;
+        }
+
+        const lines = [`Search results (${allResults.length} unique tracks):`];
+        allResults.forEach((entry, i) => lines.push(`${i + 1}. ${entry}`));
+        return lines.join("\n");
       },
     }),
 

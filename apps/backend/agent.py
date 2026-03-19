@@ -95,41 +95,52 @@ def _emit_action(action_type: str, data: dict) -> None:
 # =============================================================================
 
 @tool
-async def search_music(query: str) -> str:
-    """Search for music tracks on Apple Music. Returns a list of tracks with IDs.
+async def search_music(queries: list[str], limit: int = 5) -> str:
+    """Search Apple Music. Pass multiple queries to search in parallel and get deduplicated results.
 
     Args:
-        query: Search query string
+        queries: One or more search query strings.
+        limit: Max results per query (1-25, default 5).
     """
-    try:
-        from apps.backend.apple_music import _apple_music_get
+    import asyncio
+    from apps.backend.apple_music import _apple_music_get
 
-        # Directly call Apple Music API to search
-        t0 = time.perf_counter()
-        result = await _apple_music_get(
-            "v1/catalog/us/search",
-            params={"term": query, "types": "songs", "limit": 5}
-        )
-        log.info("⏱ search_music API call: %.0fms", (time.perf_counter() - t0) * 1000)
+    limit = max(1, min(limit, 25))
 
-        songs = result.get("results", {}).get("songs", {}).get("data", [])
+    async def _search_one(q: str):
+        try:
+            t0 = time.perf_counter()
+            result = await _apple_music_get(
+                "v1/catalog/us/search",
+                params={"term": q, "types": "songs", "limit": limit}
+            )
+            log.info("⏱ search_music '%s': %.0fms", q, (time.perf_counter() - t0) * 1000)
+            return result.get("results", {}).get("songs", {}).get("data", [])
+        except Exception as e:
+            log.warning("search_music error for '%s': %s", q, e)
+            return []
 
-        if not songs:
-            return f"No results found for '{query}'"
+    results_per_query = await asyncio.gather(*[_search_one(q) for q in queries])
 
-        # Format results with IDs for agent to use
-        lines = [f"Search results for '{query}':"]
-        for i, song in enumerate(songs, 1):
-            attrs = song.get("attributes", {})
+    seen_ids: set[str] = set()
+    all_lines: list[str] = []
+    for songs in results_per_query:
+        for song in songs:
             song_id = song.get("id")
+            if not song_id or song_id in seen_ids:
+                continue
+            seen_ids.add(song_id)
+            attrs = song.get("attributes", {})
             name = attrs.get("name", "Unknown")
             artist = attrs.get("artistName", "Unknown Artist")
-            lines.append(f"{i}. {name} - {artist} (id: {song_id})")
+            all_lines.append(f"{name} - {artist} (id: {song_id})")
 
-        return "\n".join(lines)
+    if not all_lines:
+        return f"No results found for: {', '.join(queries)}"
 
-    except Exception as e:
-        return f"Error searching music: {str(e)}"
+    header = f"Search results ({len(all_lines)} unique tracks):"
+    numbered = [f"{i}. {line}" for i, line in enumerate(all_lines, 1)]
+    return "\n".join([header] + numbered)
 
 
 @tool
