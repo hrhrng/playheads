@@ -3,7 +3,7 @@
  * @module components/ChatInterface
  */
 
-import { useEffect, useCallback, useRef } from 'react';
+import { useEffect, useCallback, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { RecordPlayer } from './RecordPlayer';
@@ -84,6 +84,9 @@ export const ChatInterface = ({
 }: ChatInterfaceProps) => {
   const location = useLocation();
   const navigate = useNavigate();
+  const [seekDragging, setSeekDragging] = useState(false);
+  const [seekDragValue, setSeekDragValue] = useState(0);
+  const seekDisplayValue = seekDragging ? seekDragValue : (playbackTime?.current || 0);
 
   // Use chat hook for state and methods
   const {
@@ -412,15 +415,26 @@ export const ChatInterface = ({
         {currentTrack && !showHistory && (
           <div className="max-w-xl mx-auto mb-3 flex items-center gap-3">
             <span className="text-xs font-mono text-gray-400 w-10 text-right">
-              {formatTime(playbackTime?.current || 0)}
+              {formatTime(seekDisplayValue)}
             </span>
             <input
               type="range"
               min={0}
               max={playbackTime?.total || 1}
               step={0.1}
-              value={playbackTime?.current || 0}
-              onChange={(e) => onSeek?.(parseFloat(e.target.value))}
+              value={seekDisplayValue}
+              onChange={(e) => {
+                const v = parseFloat(e.target.value);
+                console.debug('[SeekBar onChange]', v.toFixed(2));
+                setSeekDragging(true);
+                setSeekDragValue(v);
+              }}
+              onPointerUp={(e) => {
+                const v = parseFloat((e.target as HTMLInputElement).value);
+                console.debug('[SeekBar onPointerUp]', v.toFixed(2));
+                onSeek?.(v);
+                setSeekDragging(false);
+              }}
               className="flex-1 cursor-pointer accent-gray-900"
             />
             <span className="text-xs font-mono text-gray-400 w-10 text-left">

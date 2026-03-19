@@ -246,9 +246,9 @@ export class AppleMusicProvider implements MusicProvider {
     // seekTarget suppresses stale time≈0 events that arrive before seekToTime() lands.
     this.on(mk, 'playbackTimeDidChange', (e: any) => {
       if (this.phase === 'init' || this.phase === 'idle') return;
+      console.debug('[playbackTimeDidChange]', e.currentPlaybackTime.toFixed(2), '/', e.currentPlaybackDuration.toFixed(2), 'seekTarget=', this.seekTarget);
       if (this.seekTarget !== null) {
-        // seekToTime() is async — events at time≈0 fire before the seek lands.
-        // Suppress until MusicKit reports a time within 1 second of the target.
+        // seekToTime() can fire events at time≈0 before the seek lands — suppress them.
         if (Math.abs(e.currentPlaybackTime - this.seekTarget) > 1) return;
         this.seekTarget = null; // Seek has landed; resume normal updates.
       }
@@ -514,10 +514,10 @@ export class AppleMusicProvider implements MusicProvider {
 
   seekTo(seconds: number): void {
     if (!this.musicKit) return;
-    // User is taking control — clear any pending restore seek so it doesn't interfere.
-    this.seekTarget = null;
+    console.debug('[seekTo] called with', seconds.toFixed(2), 'seekTarget was=', this.seekTarget);
+    // Keep seekTarget set so playbackTimeDidChange events fired during seekToTime() are suppressed.
+    this.seekTarget = seconds;
     // Update UI immediately (optimistic) so the slider position sticks.
-    // Works regardless of phase — the display always reflects the user's intent.
     this.updateState({
       playbackTime: { current: seconds, total: this._playbackState.playbackTime?.total ?? 0 },
     });
