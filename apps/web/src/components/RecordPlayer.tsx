@@ -4,6 +4,8 @@
  */
 
 import React, { useState } from 'react';
+import Slider from 'rc-slider';
+import 'rc-slider/assets/index.css';
 import type { PlaybackTime } from '../types';
 import type { UnifiedTrack } from '../providers/types';
 
@@ -73,6 +75,19 @@ export const RecordPlayer = ({
   const total = playbackTime?.total || 1;
   const displayValue = isDragging ? dragValue : current;
 
+  const sliderStyles = {
+    track: { backgroundColor: '#1a1a1a', height: 4 },
+    rail: { backgroundColor: '#e5e5e5', height: 4 },
+    handle: {
+      backgroundColor: '#fff',
+      border: 'none' as const,
+      width: 16,
+      height: 16,
+      marginTop: -6,
+      boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+      opacity: 1,
+    },
+  };
 
   return (
     <div className="flex flex-col items-center gap-8 group w-full">
@@ -138,28 +153,25 @@ export const RecordPlayer = ({
             {formatTime(displayValue)}
           </span>
 
-          <input
-            type="range"
-            min={0}
-            max={total}
-            step={0.1}
-            value={displayValue}
-            className="progress-bar flex-1 h-1 rounded-full appearance-none cursor-pointer"
-            style={{
-              background: `linear-gradient(to right, #1a1a1a ${(displayValue / total) * 100}%, #e5e5e5 ${(displayValue / total) * 100}%)`,
-              touchAction: 'none',
-            }}
-            onChange={(e) => {
-              const value = parseFloat(e.target.value);
-              setIsDragging(true);
-              setDragValue(value);
-            }}
-            onPointerUp={(e) => {
-              const value = parseFloat((e.target as HTMLInputElement).value);
-              if (onSeek) onSeek(value);
-              setIsDragging(false);
-            }}
-          />
+          <div className="flex-1">
+            <Slider
+              min={0}
+              max={total}
+              step={0.1}
+              value={displayValue}
+              onChange={(val: number | number[]) => {
+                const value = Array.isArray(val) ? val[0] : val;
+                setIsDragging(true);
+                setDragValue(value);
+              }}
+              onChangeComplete={(val: number | number[]) => {
+                const value = Array.isArray(val) ? val[0] : val;
+                if (onSeek) onSeek(value);
+                setIsDragging(false);
+              }}
+              styles={sliderStyles}
+            />
+          </div>
 
           <span className="text-xs font-mono text-gray-400 w-10 text-left">
             {formatTime(total)}
