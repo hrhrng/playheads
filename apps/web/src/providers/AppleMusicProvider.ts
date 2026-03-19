@@ -41,15 +41,20 @@ export class AppleMusicProvider implements MusicProvider {
   private config: AppleMusicProviderConfig;
   private destroyed = false;
 
-  // MusicKit decoupling gate
-  private playerReadyRef = false;
+  // Phase state machine — replaces playerReadyRef + playbackLock + isTransitioning flag.
+  // init   : MusicKit not yet ready; all playback events ignored.
+  // idle   : Ready but no active playback (includes post-restore state).
+  // buffering: play() called, waiting for playbackStateDidChange confirmation.
+  // playing : Active playback confirmed by MusicKit event.
+  // paused  : Paused (optimistic on pause call, confirmed by event).
+  private phase: 'init' | 'idle' | 'buffering' | 'playing' | 'paused' = 'init';
 
   // Serialize playLater calls so queueItemsDidChange fires with monotonically growing queue
   private mutationChain: Promise<void> = Promise.resolve();
 
-  // Playback control
-  private pendingSeekTime: number | null = null;
-  private playbackLock = false;
+  // Seek target stored during restore: seekToTime() requires nowPlayingItem (i.e. after play()).
+  // Set by setQueueWithoutPlaying, applied in togglePlay/play, cleared by playbackTimeDidChange.
+  private seekTarget: number | null = null;
   private lastPlayingTrackId: string | null = null;
   private transitionTimeout: ReturnType<typeof setTimeout> | null = null;
   private developerToken: string | null = null;
@@ -65,8 +70,8 @@ export class AppleMusicProvider implements MusicProvider {
   get isInitializing(): boolean { return this._isInitializing; }
   get playbackState(): PlaybackState { return this._playbackState; }
   get storefrontId(): string { return this._storefrontId; }
-  /** True after first user-initiated playback; false during restore. */
-  get isPlayerReady(): boolean { return this.playerReadyRef; }
+  /** True when active playback has started (not in init/idle/restore). */
+  get isPlayerReady(): boolean { return this.phase !== 'init' && this.phase !== 'idle'; }
 
   // ── State emission ──────────────────────────────────────────────
   private emit() {
@@ -77,6 +82,16 @@ export class AppleMusicProvider implements MusicProvider {
   private updateState(partial: Partial<PlaybackState>) {
     this._playbackState = { ...this._playbackState, ...partial };
     this.emit();
+  }
+
+  /** Transition to a new phase and derive isPlaying/isTransitioning from it. */
+  private setPhase(p: 'init' | 'idle' | 'buffering' | 'playing' | 'paused', extra?: Partial<PlaybackState>) {
+    this.phase = p;
+    this.updateState({
+      isPlaying: p === 'playing',
+      isTransitioning: p === 'buffering',
+      ...extra,
+    });
   }
 
   onStateChange(cb: StateChangeCallback): () => void {
@@ -129,8 +144,6 @@ export class AppleMusicProvider implements MusicProvider {
         return;
       }
 
-      this.playerReadyRef = false;
-
       const mk = await window.MusicKit.configure({
         developerToken: this.developerToken!,
         app: { name: 'Playhead', build: '1.0.0' },
@@ -151,6 +164,9 @@ export class AppleMusicProvider implements MusicProvider {
     } catch (err) {
       console.error('[AppleMusicProvider] Error initializing:', err);
     } finally {
+      // Transition from 'init' to 'idle' — events will now be eligible to fire
+      // once playback begins. Direct assignment avoids a redundant emit here.
+      this.phase = 'idle';
       this._isInitializing = false;
       this.emit();
     }
@@ -159,11 +175,12 @@ export class AppleMusicProvider implements MusicProvider {
   /** Set MusicKit queue without starting playback (for restore). */
   async setQueueWithoutPlaying(songIds: string[], startTime?: number): Promise<void> {
     if (!this.musicKit || songIds.length === 0) return;
-    console.log('[AppleMusicProvider] setQueueWithoutPlaying: songIds=', songIds.length, 'startTime=', startTime, 'playerReadyRef=', this.playerReadyRef);
     try {
       await this.musicKit.setQueue({ songs: songIds, startPlaying: false } as any);
+      // seekToTime() requires a nowPlayingItem (only available after play() starts).
+      // Store the target so togglePlay/play can apply it once playback begins.
       if (startTime && startTime > 0) {
-        this.pendingSeekTime = startTime;
+        this.seekTarget = startTime;
       }
     } catch (e) {
       console.error('[AppleMusicProvider] setQueueWithoutPlaying error:', e);
@@ -176,6 +193,7 @@ export class AppleMusicProvider implements MusicProvider {
   }
 
   private registerEvents(mk: MusicKitInstance) {
+    // Auth changes are always processed regardless of phase.
     this.on(mk, 'authorizationStatusDidChange', () => {
       const nowAuthorized = mk.isAuthorized;
       if (this._isAuthorized && !nowAuthorized) this.handleAuthLost();
@@ -183,9 +201,12 @@ export class AppleMusicProvider implements MusicProvider {
       this.emit();
     });
 
+    // nowPlayingItemDidChange: only process during active playback phases.
+    // Gating on idle/init prevents stale events from the restore setQueue() call
+    // from clobbering the React queue state (which is the authoritative source).
     this.on(mk, 'nowPlayingItemDidChange', () => {
+      if (this.phase === 'init' || this.phase === 'idle') return;
       const item = mk.nowPlayingItem;
-      if (!this.playerReadyRef) return;
       if (item) {
         this.lastPlayingTrackId = item.id;
         this.updateState({ currentTrack: this.formatMusicKitTrack(item) });
@@ -193,35 +214,45 @@ export class AppleMusicProvider implements MusicProvider {
       }
     });
 
+    // playbackStateDidChange: drives phase transitions after buffering.
+    // Ignored during init. During idle/paused/playing, confirms the new state.
     this.on(mk, 'playbackStateDidChange', (e: any) => {
-      if (!this.playerReadyRef) return;
+      if (this.phase === 'init') return;
       const state = e.state;
       const playing = state === 'playing' || state === 2;
       const paused = state === 'paused' || state === 3;
 
-      if (playing || paused) {
-        this.clearTransition();
+      if (playing) {
+        this.clearTransitionTimeout();
         const currentTrack = mk.nowPlayingItem
           ? this.formatMusicKitTrack(mk.nowPlayingItem)
           : this._playbackState.currentTrack;
-        this.updateState({ isPlaying: playing, isTransitioning: false, currentTrack });
-        if (playing && mk.nowPlayingItem) this.lastPlayingTrackId = mk.nowPlayingItem.id;
+        if (mk.nowPlayingItem) this.lastPlayingTrackId = mk.nowPlayingItem.id;
+        this.setPhase('playing', { currentTrack });
+      } else if (paused) {
+        this.clearTransitionTimeout();
+        this.setPhase('paused');
       }
     });
 
+    // queueItemsDidChange: not subscribed to by usePlayQueue (React state is authoritative).
+    // Only notify listeners when not in init/idle to avoid stale MusicKit queue data
+    // overwriting React state after restore.
     this.on(mk, 'queueItemsDidChange', () => {
-      console.log('[AppleMusicProvider] queueItemsDidChange: playerReadyRef=', this.playerReadyRef, this.playerReadyRef ? 'FIRING' : 'GATED');
-      if (!this.playerReadyRef) return;
+      if (this.phase === 'init' || this.phase === 'idle') return;
       for (const cb of this.queueChangeListeners) cb();
     });
 
+    // playbackTimeDidChange: update progress bar during active playback.
+    // Gated on active phases (not init/idle) so no events fire before first play.
+    // seekTarget suppresses stale time≈0 events that arrive before seekToTime() lands.
     this.on(mk, 'playbackTimeDidChange', (e: any) => {
-      if (!this.playerReadyRef) return;
-      if (this.pendingSeekTime !== null) {
-        // Suppress events until playback reaches the seek target.
-        // seekToTime() is async internally — events at time≈0 fire before the seek lands.
-        if (Math.abs(e.currentPlaybackTime - this.pendingSeekTime) > 1) return;
-        this.pendingSeekTime = null;
+      if (this.phase === 'init' || this.phase === 'idle') return;
+      if (this.seekTarget !== null) {
+        // seekToTime() is async — events at time≈0 fire before the seek lands.
+        // Suppress until MusicKit reports a time within 1 second of the target.
+        if (Math.abs(e.currentPlaybackTime - this.seekTarget) > 1) return;
+        this.seekTarget = null; // Seek has landed; resume normal updates.
       }
       this.updateState({
         playbackTime: { current: e.currentPlaybackTime, total: e.currentPlaybackDuration },
@@ -252,13 +283,21 @@ export class AppleMusicProvider implements MusicProvider {
     });
   }
 
-  private startTransition() {
-    this.updateState({ isTransitioning: true });
-    if (this.transitionTimeout) clearTimeout(this.transitionTimeout);
-    this.transitionTimeout = setTimeout(() => { this.updateState({ isTransitioning: false }); }, 5000);
+  /**
+   * Start a safety-net timer: if playbackStateDidChange never confirms playback
+   * within `ms` milliseconds, force-exit the buffering phase to avoid a stuck UI.
+   */
+  private startTransitionTimeout(ms = 3000) {
+    this.clearTransitionTimeout();
+    this.transitionTimeout = setTimeout(() => {
+      if (this.phase === 'buffering') {
+        console.warn('[AppleMusicProvider] Buffering timeout — forcing playing phase');
+        this.setPhase('playing');
+      }
+    }, ms);
   }
 
-  private clearTransition() {
+  private clearTransitionTimeout() {
     if (this.transitionTimeout) { clearTimeout(this.transitionTimeout); this.transitionTimeout = null; }
   }
 
@@ -300,14 +339,14 @@ export class AppleMusicProvider implements MusicProvider {
 
   /** Set MusicKit queue to all song IDs and start playback at startIndex. */
   async playWithQueue(songIds: string[], startIndex: number, retried = false): Promise<void> {
-    if (!this.musicKit || this.playbackLock || songIds.length === 0) return;
-    this.playbackLock = true;
-    this.startTransition();
+    if (!this.musicKit || this.phase === 'buffering' || songIds.length === 0) return;
+    this.setPhase('buffering');
+    this.startTransitionTimeout();
     try {
-      this.playerReadyRef = true;
       await this.musicKit.setQueue({ songs: songIds, startPlaying: false } as any);
       await this.musicKit.changeToMediaAtIndex(startIndex);
       await this.musicKit.play();
+      // isPlaying will be set by playbackStateDidChange; optimistically clear transitioning.
       this.updateState({ isPlaying: true });
     } catch (e) {
       // Handle "could not be resolved" errors by filtering bad IDs and retrying
@@ -318,17 +357,16 @@ export class AppleMusicProvider implements MusicProvider {
         const filtered = songIds.filter(id => !badIds.has(id));
         // Notify React queue to remove bad tracks
         for (const cb of this.unresolvableListeners) cb(badIds);
-        this.playbackLock = false;
+        this.setPhase('idle');
         if (filtered.length > 0) {
           await this.playWithQueue(filtered, 0, true);
         }
         return;
       }
+      this.setPhase('idle');
       const classified = classifyError(e);
       if (classified.category === ErrorCategory.AUTH_EXPIRED) this.handleAuthLost();
       else showErrorToast(e, 'playback');
-    } finally {
-      this.playbackLock = false;
     }
   }
 
@@ -377,106 +415,108 @@ export class AppleMusicProvider implements MusicProvider {
 
   /** Skip to next track in MusicKit native queue. */
   async skipToNext(): Promise<void> {
-    if (!this.musicKit || this.playbackLock) return;
-    this.playbackLock = true;
-    this.startTransition();
+    if (!this.musicKit || this.phase === 'buffering') return;
+    const prevPhase = this.phase;
+    this.setPhase('buffering');
+    this.startTransitionTimeout();
     try {
       await this.musicKit.skipToNextItem();
     } catch (e) {
+      this.setPhase(prevPhase);
       const classified = classifyError(e);
       if (classified.category === ErrorCategory.AUTH_EXPIRED) this.handleAuthLost();
       else showErrorToast(e, 'playback');
-    } finally {
-      this.playbackLock = false;
     }
   }
 
   /** Skip to previous track in MusicKit native queue. */
   async skipToPrev(): Promise<void> {
-    if (!this.musicKit || this.playbackLock) return;
-    this.playbackLock = true;
-    this.startTransition();
+    if (!this.musicKit || this.phase === 'buffering') return;
+    const prevPhase = this.phase;
+    this.setPhase('buffering');
+    this.startTransitionTimeout();
     try {
       await this.musicKit.skipToPreviousItem();
     } catch (e) {
+      this.setPhase(prevPhase);
       const classified = classifyError(e);
       if (classified.category === ErrorCategory.AUTH_EXPIRED) this.handleAuthLost();
       else showErrorToast(e, 'playback');
-    } finally {
-      this.playbackLock = false;
     }
   }
 
   /** Resume or start playback. */
   async play(trackId?: string, startTime?: number): Promise<void> {
-    if (!this.musicKit || this.playbackLock) return;
-    this.playbackLock = true;
-    this.startTransition();
+    if (!this.musicKit || this.phase === 'buffering') return;
+    const prevPhase = this.phase;
+    this.setPhase('buffering');
+    this.startTransitionTimeout();
     try {
-      this.playerReadyRef = true;
       if (trackId) {
+        // startTime is passed directly to setQueue — MusicKit handles seek atomically.
         await this.musicKit.setQueue({ song: trackId, startPlaying: true, startTime } as any);
       } else {
         await this.musicKit.play();
+        if (this.seekTarget !== null) {
+          // Apply restore seek: now that play has started, nowPlayingItem exists.
+          this.musicKit.seekToTime(this.seekTarget);
+          // seekTarget cleared by playbackTimeDidChange when seek lands.
+        }
       }
       this.updateState({ isPlaying: true });
     } catch (e) {
+      this.setPhase(prevPhase);
       const classified = classifyError(e);
       if (classified.category === ErrorCategory.AUTH_EXPIRED) this.handleAuthLost();
       else showErrorToast(e, 'playback');
-    } finally {
-      this.playbackLock = false;
     }
   }
 
   async pause(): Promise<void> {
-    if (!this.musicKit || this.playbackLock) return;
-    this.playbackLock = true;
-    this.startTransition();
+    if (!this.musicKit || this.phase !== 'playing') return;
+    this.setPhase('paused'); // Optimistic — confirmed by playbackStateDidChange.
     try {
       await this.musicKit.pause();
-      this.updateState({ isPlaying: false });
     } catch (e) {
+      this.setPhase('playing'); // Revert on failure.
       const classified = classifyError(e);
       if (classified.category === ErrorCategory.AUTH_EXPIRED) this.handleAuthLost();
       else showErrorToast(e, 'playback');
-    } finally {
-      this.playbackLock = false;
     }
   }
 
   async togglePlay(): Promise<void> {
-    if (!this.musicKit || this.playbackLock) return;
-    this.playbackLock = true;
-    this.startTransition();
+    if (!this.musicKit || this.phase === 'buffering') return;
+    const prevPhase = this.phase;
     try {
-      const currentlyPlaying = this.musicKit.playbackState === 'playing' || (this.musicKit.playbackState as any) === 2;
-      if (currentlyPlaying) {
+      if (this.phase === 'playing') {
+        this.setPhase('paused'); // Optimistic pause.
         await this.musicKit.pause();
-        this.updateState({ isPlaying: false });
       } else {
-        this.playerReadyRef = true;
+        this.setPhase('buffering');
+        this.startTransitionTimeout();
         await this.musicKit.play();
-        if (this.pendingSeekTime !== null) {
-          this.musicKit.seekToTime(this.pendingSeekTime);
-          // Don't clear pendingSeekTime here — playbackTimeDidChange clears it once seek lands.
+        if (this.seekTarget !== null) {
+          // Apply restore seek now that nowPlayingItem exists.
+          // seekTarget is cleared by playbackTimeDidChange when time converges.
+          this.musicKit.seekToTime(this.seekTarget);
         }
         this.updateState({ isPlaying: true });
       }
     } catch (e) {
+      this.setPhase(prevPhase); // Revert on failure.
       const classified = classifyError(e);
       if (classified.category === ErrorCategory.AUTH_EXPIRED) this.handleAuthLost();
       else showErrorToast(e, 'playback');
-    } finally {
-      this.playbackLock = false;
     }
   }
 
   seekTo(seconds: number): void {
     if (!this.musicKit) return;
-    this.pendingSeekTime = null; // user is taking control; stop suppressing playbackTimeDidChange
-    // Update displayed position immediately so the slider sticks even if
-    // playbackTimeDidChange is gated by playerReadyRef (pre-play restore state).
+    // User is taking control — clear any pending restore seek so it doesn't interfere.
+    this.seekTarget = null;
+    // Update UI immediately (optimistic) so the slider position sticks.
+    // Works regardless of phase — the display always reflects the user's intent.
     this.updateState({
       playbackTime: { current: seconds, total: this._playbackState.playbackTime?.total ?? 0 },
     });
@@ -510,8 +550,8 @@ export class AppleMusicProvider implements MusicProvider {
 
   destroy(): void {
     this.destroyed = true;
-    this.playerReadyRef = false;
-    this.clearTransition();
+    this.phase = 'init';
+    this.clearTransitionTimeout();
     if (this.musicKit) {
       try { this.musicKit.stop(); } catch (_) { /* ignore */ }
       for (const [event, handler] of this.eventListeners) {

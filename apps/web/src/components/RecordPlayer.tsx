@@ -167,7 +167,9 @@ export const RecordPlayer = ({
               onChangeComplete={(val: number | number[]) => {
                 const value = Array.isArray(val) ? val[0] : val;
                 if (onSeek) onSeek(value);
-                setTimeout(() => setIsDragging(false), 1000);
+                // seekTo() updates playbackTime.current immediately (optimistic), so
+                // isDragging can be cleared right away — the slider won't snap back.
+                setIsDragging(false);
               }}
               styles={sliderStyles}
             />
