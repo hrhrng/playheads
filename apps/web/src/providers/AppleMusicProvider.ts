@@ -343,8 +343,11 @@ export class AppleMusicProvider implements MusicProvider {
     try {
       await this.musicKit.setQueue({ songs: songIds, startPlaying: false } as any);
       await this.musicKit.changeToMediaAtIndex(startIndex);
-      console.debug('[playWithQueue] after changeToMediaAtIndex, playbackState=', (this.musicKit as any).playbackState, 'phase=', this.phase);
-      await this.musicKit.play();
+      // changeToMediaAtIndex auto-starts playback on some MusicKit versions (playbackState === 2);
+      // only call play() if not already playing to avoid the "called without stop/pause" error.
+      if ((this.musicKit as any).playbackState !== 2) {
+        await this.musicKit.play();
+      }
       // Phase transitions to 'playing' via playbackStateDidChange event.
     } catch (e) {
       // Handle "could not be resolved" errors by filtering bad IDs and retrying
@@ -445,8 +448,7 @@ export class AppleMusicProvider implements MusicProvider {
 
   /** Resume or start playback. */
   async play(trackId?: string, startTime?: number): Promise<void> {
-    console.debug('[play] called, phase=', this.phase, 'trackId=', trackId);
-    if (!this.musicKit || this.phase === 'buffering') return;
+    if (!this.musicKit || this.phase === 'buffering' || this.phase === 'playing') return;
     const prevPhase = this.phase;
     this.setPhase('buffering');
     this.startTransitionTimeout();
@@ -511,7 +513,6 @@ export class AppleMusicProvider implements MusicProvider {
   }
 
   seekTo(seconds: number): void {
-    console.debug('[seekTo] seconds=', seconds, 'phase=', this.phase);
     if (!this.musicKit) return;
     // User is taking control — clear any pending restore seek so it doesn't interfere.
     this.seekTarget = null;

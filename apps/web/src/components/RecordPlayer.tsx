@@ -153,7 +153,7 @@ export const RecordPlayer = ({
             {formatTime(displayValue)}
           </span>
 
-          <div className="flex-1">
+          <div className="flex-1" style={{ touchAction: 'none' }}>
             <Slider
               min={0}
               max={total}
@@ -161,7 +161,6 @@ export const RecordPlayer = ({
               value={displayValue}
               onChange={(val: number | number[]) => {
                 const value = Array.isArray(val) ? val[0] : val;
-                console.debug('[Slider onChange] value=', value, 'isDragging=', isDragging);
                 setIsDragging(true);
                 setDragValue(value);
               }}
