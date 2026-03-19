@@ -47,9 +47,6 @@ export class AppleMusicProvider implements MusicProvider {
   // Serialize playLater calls so queueItemsDidChange fires with monotonically growing queue
   private mutationChain: Promise<void> = Promise.resolve();
 
-  // Pending seek after first play (restore position)
-  private pendingSeekTime: number | null = null;
-
   // Playback control
   private playbackLock = false;
   private lastPlayingTrackId: string | null = null;
@@ -69,9 +66,6 @@ export class AppleMusicProvider implements MusicProvider {
   get storefrontId(): string { return this._storefrontId; }
   /** True after first user-initiated playback; false during restore. */
   get isPlayerReady(): boolean { return this.playerReadyRef; }
-
-  /** Queue a seek that will execute after the next playWithQueue/play call. */
-  setPendingSeek(seconds: number): void { this.pendingSeekTime = seconds; }
 
   // ── State emission ──────────────────────────────────────────────
   private emit() {
@@ -215,8 +209,6 @@ export class AppleMusicProvider implements MusicProvider {
 
     this.on(mk, 'playbackTimeDidChange', (e: any) => {
       if (!this.playerReadyRef) return;
-      // Suppress time updates while seeking to saved position (avoids 0→saved flash)
-      if (this.pendingSeekTime != null) return;
       this.updateState({
         playbackTime: { current: e.currentPlaybackTime, total: e.currentPlaybackDuration },
       });
@@ -293,19 +285,21 @@ export class AppleMusicProvider implements MusicProvider {
   // ── Playback — MusicKit native queue ────────────────────────────
 
   /** Set MusicKit queue to all song IDs and start playback at startIndex. */
-  async playWithQueue(songIds: string[], startIndex: number, retried = false): Promise<void> {
+  async playWithQueue(songIds: string[], startIndex: number, retried = false, startTime?: number): Promise<void> {
     if (!this.musicKit || this.playbackLock || songIds.length === 0) return;
     this.playbackLock = true;
     this.startTransition();
     try {
       this.playerReadyRef = true;
-      await this.musicKit.setQueue({ songs: songIds, startPlaying: false } as any);
-      await this.musicKit.changeToMediaAtIndex(startIndex);
-      await this.musicKit.play();
-      // Restore saved position if pending (e.g. first play after page restore)
-      if (this.pendingSeekTime != null && this.pendingSeekTime > 0) {
-        this.musicKit.seekToTime(this.pendingSeekTime);
-        this.pendingSeekTime = null;
+      if (startTime) {
+        // Let MusicKit handle playback start natively at the correct position
+        await this.musicKit.setQueue({
+          songs: songIds, startPlaying: true, startTime,
+        } as any);
+      } else {
+        await this.musicKit.setQueue({ songs: songIds, startPlaying: false } as any);
+        await this.musicKit.changeToMediaAtIndex(startIndex);
+        await this.musicKit.play();
       }
       this.updateState({ isPlaying: true });
     } catch (e) {

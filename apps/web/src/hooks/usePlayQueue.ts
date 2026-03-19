@@ -20,7 +20,7 @@ export interface UsePlayQueueReturn {
   queue: UnifiedTrack[];
   addTrack(track: UnifiedTrack): void;
   removeTrack(index: number): void;
-  playAtIndex(index: number): Promise<void>;
+  playAtIndex(index: number, startTime?: number): Promise<void>;
   skipNext(): Promise<void>;
   skipPrev(): Promise<void>;
   setQueue(tracks: UnifiedTrack[]): void;
@@ -132,7 +132,7 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
     });
   }, [provider]);
 
-  const playAtIndex = useCallback(async (index: number) => {
+  const playAtIndex = useCallback(async (index: number, startTime?: number) => {
     const q = queueRef.current;
     if (index < 0 || index >= q.length || !provider) return;
 
@@ -140,7 +140,7 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
     const newQueue = q.slice(index);
     setQueue(newQueue);
     const songIds = newQueue.map(t => t.id);
-    await provider.playWithQueue(songIds, 0);
+    await provider.playWithQueue(songIds, 0, false, startTime);
   }, [provider]);
 
   const skipNext = useCallback(async () => {

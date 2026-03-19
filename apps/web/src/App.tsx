@@ -158,7 +158,8 @@ function App() {
               // played yet, use playAtIndex(0) which calls playWithQueue with
               // the full React queue. Otherwise just toggle pause/resume.
               if (!provider?.isPlayerReady && queue.queue.length > 0) {
-                queue.playAtIndex(0);
+                const savedPos = parseFloat(localStorage.getItem('playheads_playback_pos') || '0') || 0;
+                queue.playAtIndex(0, savedPos > 0 ? savedPos : undefined);
               } else {
                 provider?.togglePlay();
               }
@@ -196,7 +197,8 @@ function App() {
               // played yet, use playAtIndex(0) which calls playWithQueue with
               // the full React queue. Otherwise just toggle pause/resume.
               if (!provider?.isPlayerReady && queue.queue.length > 0) {
-                queue.playAtIndex(0);
+                const savedPos = parseFloat(localStorage.getItem('playheads_playback_pos') || '0') || 0;
+                queue.playAtIndex(0, savedPos > 0 ? savedPos : undefined);
               } else {
                 provider?.togglePlay();
               }
