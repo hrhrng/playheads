@@ -48,6 +48,7 @@ export class AppleMusicProvider implements MusicProvider {
   private mutationChain: Promise<void> = Promise.resolve();
 
   // Playback control
+  private pendingSeekTime: number | null = null;
   private playbackLock = false;
   private lastPlayingTrackId: string | null = null;
   private transitionTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -158,8 +159,7 @@ export class AppleMusicProvider implements MusicProvider {
     try {
       await this.musicKit.setQueue({ songs: songIds, startPlaying: false } as any);
       if (startTime && startTime > 0) {
-        await this.musicKit.changeToMediaAtIndex(0);
-        this.musicKit.seekToTime(startTime);
+        this.pendingSeekTime = startTime;
       }
     } catch (e) {
       console.error('[AppleMusicProvider] setQueueWithoutPlaying error:', e);
@@ -213,6 +213,10 @@ export class AppleMusicProvider implements MusicProvider {
 
     this.on(mk, 'playbackTimeDidChange', (e: any) => {
       if (!this.playerReadyRef) return;
+      if (this.pendingSeekTime !== null) {
+        console.log('[AppleMusicProvider] playbackTimeDidChange SUPPRESSED: time=', e.currentPlaybackTime, 'pendingSeek=', this.pendingSeekTime);
+        return;
+      }
       this.updateState({
         playbackTime: { current: e.currentPlaybackTime, total: e.currentPlaybackDuration },
       });
@@ -447,6 +451,11 @@ export class AppleMusicProvider implements MusicProvider {
       } else {
         this.playerReadyRef = true;
         await this.musicKit.play();
+        if (this.pendingSeekTime !== null) {
+          console.log('[AppleMusicProvider] togglePlay: applying pendingSeekTime=', this.pendingSeekTime);
+          this.musicKit.seekToTime(this.pendingSeekTime);
+          this.pendingSeekTime = null;
+        }
         this.updateState({ isPlaying: true });
       }
     } catch (e) {
