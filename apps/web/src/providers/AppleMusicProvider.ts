@@ -474,6 +474,7 @@ export class AppleMusicProvider implements MusicProvider {
 
   seekTo(seconds: number): void {
     if (!this.musicKit) return;
+    this.pendingSeekTime = null; // user is taking control; stop suppressing playbackTimeDidChange
     try { this.musicKit.seekToTime(seconds); }
     catch (e) {
       const classified = classifyError(e);
