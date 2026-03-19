@@ -15,6 +15,7 @@ type StateChangeCallback = (state: PlaybackState) => void;
 type NowPlayingChangeCallback = (trackId: string | null) => void;
 type QueueChangeCallback = () => void;
 type UnresolvableIdsCallback = (badIds: Set<string>) => void;
+type Phase = 'init' | 'idle' | 'buffering' | 'playing' | 'paused';
 
 interface AppleMusicProviderConfig {
   storedMusicUserToken?: string | null;
@@ -42,12 +43,12 @@ export class AppleMusicProvider implements MusicProvider {
   private destroyed = false;
 
   // Phase state machine — replaces playerReadyRef + playbackLock + isTransitioning flag.
-  // init   : MusicKit not yet ready; all playback events ignored.
-  // idle   : Ready but no active playback (includes post-restore state).
+  // init     : MusicKit not yet ready; all playback events ignored.
+  // idle     : Ready but no active playback (includes post-restore state).
   // buffering: play() called, waiting for playbackStateDidChange confirmation.
-  // playing : Active playback confirmed by MusicKit event.
-  // paused  : Paused (optimistic on pause call, confirmed by event).
-  private phase: 'init' | 'idle' | 'buffering' | 'playing' | 'paused' = 'init';
+  // playing  : Active playback confirmed by MusicKit event.
+  // paused   : Paused (optimistic on pause call, confirmed by event).
+  private phase: Phase = 'init';
 
   // Serialize playLater calls so queueItemsDidChange fires with monotonically growing queue
   private mutationChain: Promise<void> = Promise.resolve();
@@ -55,7 +56,6 @@ export class AppleMusicProvider implements MusicProvider {
   // Seek target stored during restore: seekToTime() requires nowPlayingItem (i.e. after play()).
   // Set by setQueueWithoutPlaying, applied in togglePlay/play, cleared by playbackTimeDidChange.
   private seekTarget: number | null = null;
-  private lastPlayingTrackId: string | null = null;
   private transitionTimeout: ReturnType<typeof setTimeout> | null = null;
   private developerToken: string | null = null;
 
@@ -85,7 +85,7 @@ export class AppleMusicProvider implements MusicProvider {
   }
 
   /** Transition to a new phase and derive isPlaying/isTransitioning from it. */
-  private setPhase(p: 'init' | 'idle' | 'buffering' | 'playing' | 'paused', extra?: Partial<PlaybackState>) {
+  private setPhase(p: Phase, extra?: Partial<PlaybackState>) {
     this.phase = p;
     this.updateState({
       isPlaying: p === 'playing',
@@ -208,7 +208,6 @@ export class AppleMusicProvider implements MusicProvider {
       if (this.phase === 'init' || this.phase === 'idle') return;
       const item = mk.nowPlayingItem;
       if (item) {
-        this.lastPlayingTrackId = item.id;
         this.updateState({ currentTrack: this.formatMusicKitTrack(item) });
         for (const cb of this.nowPlayingListeners) cb(item.id);
       }
@@ -227,7 +226,6 @@ export class AppleMusicProvider implements MusicProvider {
         const currentTrack = mk.nowPlayingItem
           ? this.formatMusicKitTrack(mk.nowPlayingItem)
           : this._playbackState.currentTrack;
-        if (mk.nowPlayingItem) this.lastPlayingTrackId = mk.nowPlayingItem.id;
         this.setPhase('playing', { currentTrack });
       } else if (paused) {
         this.clearTransitionTimeout();
@@ -346,8 +344,7 @@ export class AppleMusicProvider implements MusicProvider {
       await this.musicKit.setQueue({ songs: songIds, startPlaying: false } as any);
       await this.musicKit.changeToMediaAtIndex(startIndex);
       await this.musicKit.play();
-      // isPlaying will be set by playbackStateDidChange; optimistically clear transitioning.
-      this.updateState({ isPlaying: true });
+      // Phase transitions to 'playing' via playbackStateDidChange event.
     } catch (e) {
       // Handle "could not be resolved" errors by filtering bad IDs and retrying
       const msg = String((e as any)?.message || e);
@@ -463,7 +460,7 @@ export class AppleMusicProvider implements MusicProvider {
           // seekTarget cleared by playbackTimeDidChange when seek lands.
         }
       }
-      this.updateState({ isPlaying: true });
+      // Phase transitions to 'playing' via playbackStateDidChange event.
     } catch (e) {
       this.setPhase(prevPhase);
       const classified = classifyError(e);
@@ -501,7 +498,7 @@ export class AppleMusicProvider implements MusicProvider {
           // seekTarget is cleared by playbackTimeDidChange when time converges.
           this.musicKit.seekToTime(this.seekTarget);
         }
-        this.updateState({ isPlaying: true });
+        // Phase transitions to 'playing' via playbackStateDidChange event.
       }
     } catch (e) {
       this.setPhase(prevPhase); // Revert on failure.
