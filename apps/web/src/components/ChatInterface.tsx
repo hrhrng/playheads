@@ -389,9 +389,9 @@ export const ChatInterface = ({
               {formatTime(seekDisplayValue)}
             </span>
             <div className="relative flex-1 h-5 flex items-center">
-              <div className="w-full h-1.5 bg-gray-200 rounded-full pointer-events-none">
+              <div className="w-full h-1.5 bg-gray-100 rounded-full pointer-events-none">
                 <div
-                  className="h-full bg-gray-400 rounded-full"
+                  className="h-full bg-gray-900 rounded-full"
                   style={{ width: `${(seekDisplayValue / (playbackTime?.total || 1)) * 100}%` }}
                 />
               </div>
