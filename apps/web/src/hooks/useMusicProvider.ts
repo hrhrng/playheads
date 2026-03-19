@@ -62,6 +62,7 @@ export function useMusicProvider({
   useEffect(() => {
     if (!isTokenChecked) return;
 
+    console.log('[useMusicProvider] creating provider, storedMusicUserToken=', tokenRef.current ? 'present' : 'null/undefined');
     const p = new AppleMusicProvider({
       storedMusicUserToken: tokenRef.current,
     });

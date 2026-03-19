@@ -73,7 +73,7 @@ export default function useAppleMusicLink(userId: string | null): UseAppleMusicL
   // On page load: check link status and validate token
   useEffect(() => {
     if (!userId) {
-      setIsTokenChecked(true);
+      console.log('[useAppleMusicLink] userId=null, waiting for session to load');
       return;
     }
     if (checkedRef.current) return;
@@ -113,6 +113,7 @@ export default function useAppleMusicLink(userId: string | null): UseAppleMusicL
         // 2. Has token — validate it
         const { valid, reason } = await validateAppleMusicToken(userId);
 
+        console.log('[useAppleMusicLink] validate result: valid=', valid, 'reason=', reason, 'token=', token ? 'present' : 'null');
         if (valid) {
           setIsAppleLinked(true);
           setStoredMusicUserToken(token);

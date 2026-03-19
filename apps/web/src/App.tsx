@@ -27,6 +27,7 @@ function App() {
     session,
     effectiveSession,
     isLoggedIn,
+    isSessionLoading,
     isDev,
     email,
     setEmail,
@@ -113,7 +114,7 @@ function App() {
   // Render
   // ============================================================================
 
-  if (!isDev && isInitializing) {
+  if (!isDev && (isSessionLoading || (isLoggedIn && isInitializing))) {
     return <LoadingScreen />;
   }
 
