@@ -367,7 +367,41 @@ export const ChatInterface = ({
 
       {/* Command Console - Fixed at Bottom */}
       <div className="absolute bottom-0 left-0 right-0 px-6 pb-5 pt-10 z-30 bg-gradient-to-t from-white via-white/95 to-transparent">
-        {/* Toggle Button — album art (vinyl spin when playing), fallback to icon */}
+        {/* Seek Bar - above toggle button, outside swipe container */}
+        {currentTrack && !showHistory && (
+          <div className="max-w-sm mx-auto mb-3 flex items-center gap-2">
+            <span className="text-xs font-mono text-gray-400 tabular-nums shrink-0">
+              {formatTime(seekDisplayValue)}
+            </span>
+            <div className="relative flex-1 h-5 flex items-center">
+              <div className="w-full h-1.5 bg-gray-200 rounded-full pointer-events-none">
+                <div
+                  className="h-full bg-gray-400 rounded-full"
+                  style={{ width: `${(seekDisplayValue / (playbackTime?.total || 1)) * 100}%` }}
+                />
+              </div>
+              <div
+                className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow border border-gray-300 pointer-events-none"
+                style={{ left: `calc(${(seekDisplayValue / (playbackTime?.total || 1)) * 100}% - 6px)` }}
+              />
+              <input
+                type="range"
+                min={0}
+                max={playbackTime?.total || 1}
+                step={0.1}
+                value={seekDisplayValue}
+                onChange={(e) => { setSeekDragging(true); setSeekDragValue(parseFloat(e.target.value)); }}
+                onPointerUp={(e) => { onSeek?.(parseFloat((e.target as HTMLInputElement).value)); setSeekDragging(false); }}
+                className="absolute inset-0 w-full opacity-0 cursor-pointer"
+              />
+            </div>
+            <span className="text-xs font-mono text-gray-400 tabular-nums shrink-0">
+              {formatTime(playbackTime?.total || 0)}
+            </span>
+          </div>
+        )}
+
+        {/* Toggle Button */}
         <div className="max-w-xl mx-auto mb-2 flex justify-start">
           <button
             onClick={toggleHistory}
@@ -381,7 +415,6 @@ export const ChatInterface = ({
               const hasArt = !!currentTrack && !!artUrl;
 
               if (hasArt && showHistory) {
-                // showHistory: album art visible — spinning when playing, static when paused
                 return (
                   <div className="w-8 h-8 rounded-full overflow-hidden ring-2 ring-gray-200">
                     <img src={artUrl} alt="" className="w-full h-full object-cover" />
@@ -389,7 +422,6 @@ export const ChatInterface = ({
                 );
               }
 
-              // No track or not showHistory — icon button
               return (
                 <div className={`w-8 h-8 rounded-full border flex items-center justify-center transition-colors duration-200 ${
                   showHistory
@@ -410,54 +442,6 @@ export const ChatInterface = ({
             })()}
           </button>
         </div>
-
-        {/* Seek Bar - outside swipe container so touch drag works */}
-        {currentTrack && !showHistory && (
-          <div className="max-w-xl mx-auto mb-3 flex items-center gap-3">
-            <span className="text-xs font-mono text-gray-400 w-10 text-right tabular-nums">
-              {formatTime(seekDisplayValue)}
-            </span>
-
-            {/* Custom track + invisible native input overlay */}
-            <div className="relative flex-1 h-4 flex items-center">
-              {/* Track */}
-              <div className="w-full h-px bg-gray-200 rounded-full pointer-events-none">
-                <div
-                  className="h-full bg-gray-400 rounded-full"
-                  style={{ width: `${(seekDisplayValue / (playbackTime?.total || 1)) * 100}%` }}
-                />
-              </div>
-              {/* Handle */}
-              <div
-                className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-white rounded-full shadow border border-gray-300 pointer-events-none"
-                style={{ left: `calc(${(seekDisplayValue / (playbackTime?.total || 1)) * 100}% - 5px)` }}
-              />
-              {/* Invisible native input for interaction */}
-              <input
-                type="range"
-                min={0}
-                max={playbackTime?.total || 1}
-                step={0.1}
-                value={seekDisplayValue}
-                onChange={(e) => {
-                  const v = parseFloat(e.target.value);
-                  setSeekDragging(true);
-                  setSeekDragValue(v);
-                }}
-                onPointerUp={(e) => {
-                  const v = parseFloat((e.target as HTMLInputElement).value);
-                  onSeek?.(v);
-                  setSeekDragging(false);
-                }}
-                className="absolute inset-0 w-full opacity-0 cursor-pointer"
-              />
-            </div>
-
-            <span className="text-xs font-mono text-gray-400 w-10 text-left tabular-nums">
-              {formatTime(playbackTime?.total || 0)}
-            </span>
-          </div>
-        )}
 
         {/* Input Bar */}
         <ChatInput
