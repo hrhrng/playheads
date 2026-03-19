@@ -341,7 +341,7 @@ export const ChatInterface = ({
         {/* Record Player - Always Visible, swipe up/down for next/prev */}
         <div
           ref={swipeTargetRef}
-          className="absolute inset-0 flex items-center justify-center pb-20"
+          className="absolute inset-0 flex items-center justify-center pb-36"
           style={{ touchAction: 'none' }}
         >
           <div ref={swipeContentRef} className="relative z-10 w-full max-w-xl px-8">
