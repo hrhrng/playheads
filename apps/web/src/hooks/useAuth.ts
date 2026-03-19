@@ -21,6 +21,7 @@ interface AuthMessage {
 
 export function useAuth() {
   const [session, setSession] = useState<AuthSession | null>(null);
+  const [isSessionLoading, setIsSessionLoading] = useState(true);
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [authMessage, setAuthMessage] = useState<AuthMessage | null>(null);
@@ -67,7 +68,10 @@ export function useAuth() {
           }
         }).catch(() => {});
       }
-    }).catch(() => {});
+      setIsSessionLoading(false);
+    }).catch(() => {
+      setIsSessionLoading(false);
+    });
   }, []);
 
   const handleLogin = useCallback(async (e: React.FormEvent<HTMLFormElement>) => {
@@ -116,6 +120,7 @@ export function useAuth() {
     session,
     effectiveSession,
     isLoggedIn,
+    isSessionLoading,
     isDev,
     email,
     setEmail,

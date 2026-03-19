@@ -3,10 +3,7 @@
  * @module components/RecordPlayer
  */
 
-import React, { useState } from 'react';
-import Slider from 'rc-slider';
-import 'rc-slider/assets/index.css';
-import type { PlaybackTime } from '../types';
+import React from 'react';
 import type { UnifiedTrack } from '../providers/types';
 
 interface RecordPlayerProps {
@@ -18,10 +15,6 @@ interface RecordPlayerProps {
   isTransitioning?: boolean;
   /** Toggle play/pause */
   togglePlay: () => void;
-  /** Current playback position and duration */
-  playbackTime: PlaybackTime;
-  /** Seek to specific position */
-  onSeek?: (time: number) => void;
   /** Whether Apple Music is fully authorized (not just preview) */
   isAppleMusicAuthorized?: boolean;
   /** Callback to link Apple Music account */
@@ -36,24 +29,13 @@ export const RecordPlayer = ({
   isPaused,
   isTransitioning = false,
   togglePlay,
-  playbackTime,
-  onSeek,
   isAppleMusicAuthorized,
   onLinkApple,
 }: RecordPlayerProps): React.JSX.Element => {
-  const [isDragging, setIsDragging] = useState<boolean>(false);
-  const [dragValue, setDragValue] = useState<number>(0);
 
   const formatArtwork = (url: string | undefined, size = 600): string | null => {
     if (!url) return null;
     return url.replace('{w}', size.toString()).replace('{h}', size.toString());
-  };
-
-  const formatTime = (seconds: number): string => {
-    if (!seconds) return '0:00';
-    const m = Math.floor(seconds / 60);
-    const s = Math.floor(seconds % 60);
-    return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
   if (!currentTrack) {
@@ -70,24 +52,6 @@ export const RecordPlayer = ({
   const trackName = currentTrack.name || 'Unknown Track';
   const artistName = currentTrack.artist || 'Unknown Artist';
   const artworkUrl = formatArtwork(currentTrack.artworkUrl);
-
-  const current = playbackTime?.current || 0;
-  const total = playbackTime?.total || 1;
-  const displayValue = isDragging ? dragValue : current;
-
-  const sliderStyles = {
-    track: { backgroundColor: '#1a1a1a', height: 4 },
-    rail: { backgroundColor: '#e5e5e5', height: 4 },
-    handle: {
-      backgroundColor: '#fff',
-      border: 'none' as const,
-      width: 16,
-      height: 16,
-      marginTop: -6,
-      boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
-      opacity: 1,
-    },
-  };
 
   return (
     <div className="flex flex-col items-center gap-8 group w-full">
@@ -125,58 +89,13 @@ export const RecordPlayer = ({
         </div>
       </div>
 
-      {/* Track Info & Progress */}
+      {/* Track Info */}
       <div className="text-center space-y-2 max-w-lg px-4 w-full flex flex-col items-center">
         <h2 className="text-3xl font-semibold text-gray-900 tracking-tight leading-tight line-clamp-1">
           {trackName}
         </h2>
         <p className="text-lg text-gray-500 font-medium">{artistName}</p>
 
-        {/* Connect Apple Music link (preview mode) */}
-        {!isAppleMusicAuthorized && onLinkApple && (
-          <button
-            onClick={onLinkApple}
-            className="text-sm text-pink-500 hover:text-pink-600 transition-colors font-medium flex items-center gap-1.5 mt-1"
-          >
-            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 18V5l12-2v13" />
-              <circle cx="6" cy="18" r="3" />
-              <circle cx="18" cy="16" r="3" />
-            </svg>
-            Connect Apple Music for full playback
-          </button>
-        )}
-
-        {/* Progress Bar */}
-        <div className="w-full max-w-sm mt-4 flex items-center gap-3">
-          <span className="text-xs font-mono text-gray-400 w-10 text-right">
-            {formatTime(displayValue)}
-          </span>
-
-          <div className="flex-1">
-            <Slider
-              min={0}
-              max={total}
-              step={0.1}
-              value={displayValue}
-              onChange={(val: number | number[]) => {
-                const value = Array.isArray(val) ? val[0] : val;
-                setIsDragging(true);
-                setDragValue(value);
-              }}
-              onAfterChange={(val: number | number[]) => {
-                const value = Array.isArray(val) ? val[0] : val;
-                if (onSeek) onSeek(value);
-                setTimeout(() => setIsDragging(false), 1000);
-              }}
-              styles={sliderStyles}
-            />
-          </div>
-
-          <span className="text-xs font-mono text-gray-400 w-10 text-left">
-            {formatTime(total)}
-          </span>
-        </div>
       </div>
     </div>
   );
