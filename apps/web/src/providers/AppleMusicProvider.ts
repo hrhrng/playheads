@@ -475,6 +475,11 @@ export class AppleMusicProvider implements MusicProvider {
   seekTo(seconds: number): void {
     if (!this.musicKit) return;
     this.pendingSeekTime = null; // user is taking control; stop suppressing playbackTimeDidChange
+    // Update displayed position immediately so the slider sticks even if
+    // playbackTimeDidChange is gated by playerReadyRef (pre-play restore state).
+    this.updateState({
+      playbackTime: { current: seconds, total: this._playbackState.playbackTime?.total ?? 0 },
+    });
     try { this.musicKit.seekToTime(seconds); }
     catch (e) {
       const classified = classifyError(e);
