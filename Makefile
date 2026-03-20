@@ -194,6 +194,22 @@ deploy-secrets-production:
 	cd apps/backend-worker && npx wrangler secret put APPLE_MUSIC_PRIVATE_KEY
 	cd apps/backend-worker && npx wrangler secret put MINIMAX_API_KEY
 
+# LLM config secrets (shared between admin + agent workers)
+# ADMIN_ENCRYPTION_KEY: generate with `openssl rand -hex 32`, must be same value in both workers
+# TAVILY_API_KEY: get from https://tavily.com (free 1000/mo)
+secret-llm-config:
+	@echo "=== LLM Config Secrets Setup ==="
+	@echo ""
+	@printf "ADMIN_ENCRYPTION_KEY (tip: openssl rand -hex 32): "; \
+	read KEY; \
+	echo "$$KEY" | (cd apps/admin && npx wrangler secret put ADMIN_ENCRYPTION_KEY); \
+	echo "$$KEY" | (cd apps/agent && npx wrangler secret put ADMIN_ENCRYPTION_KEY)
+	@echo ""
+	@echo "TAVILY_API_KEY (from https://tavily.com, free 1000/mo):"
+	@(cd apps/agent && npx wrangler secret put TAVILY_API_KEY)
+	@echo ""
+	@echo "Done. Both workers share the same encryption key."
+
 # =============================================================================
 # Help
 # =============================================================================
@@ -235,6 +251,7 @@ help:
 	@echo "    make build-web           - Build frontend"
 	@echo "    make deploy-secrets-preview    - Set secrets for preview"
 	@echo "    make deploy-secrets-production - Set secrets for production"
+	@echo "    make secret-llm-config         - Set ADMIN_ENCRYPTION_KEY + TAVILY_API_KEY"
 	@echo ""
 	@echo "  Other:"
 	@echo "    make clean          - Clean caches"
