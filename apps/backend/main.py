@@ -65,8 +65,10 @@ async def timing_middleware(request: Request, call_next):
 
 
 from apps.backend.apple_music import router as apple_music_router
+from apps.backend.youtube_music import router as youtube_music_router
 
 app.include_router(apple_music_router)
+app.include_router(youtube_music_router)
 
 
 # =============================================================================

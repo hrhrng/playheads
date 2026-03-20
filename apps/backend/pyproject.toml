@@ -23,6 +23,7 @@ dependencies = [
     "aiosqlite>=0.22.1",
     "psycopg[binary]>=3.1.0",
     "supabase>=2.28.2",
+    "ytmusicapi>=1.7.0",
 ]
 
 [project.optional-dependencies]

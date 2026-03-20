@@ -10,6 +10,7 @@ const PLATFORM_PATTERNS: Array<{
 }> = [
   { regex: /music\.apple\.com/i, platform: "apple_music", displayName: "Apple Music" },
   { regex: /open\.spotify\.com\/playlist/i, platform: "spotify", displayName: "Spotify" },
+  { regex: /music\.youtube\.com/i, platform: "youtube_music", displayName: "YouTube Music" },
   { regex: /music\.163\.com/i, platform: "netease", displayName: "网易云音乐" },
   { regex: /y\.qq\.com/i, platform: "qqmusic", displayName: "QQ音乐" },
   { regex: /qishui\.douyin\.com/i, platform: "resso", displayName: "汽水音乐" },
@@ -47,6 +48,7 @@ export function detectPlaylistUrl(text: string): DetectedPlaylistUrl | null {
 export const PLATFORM_COLORS: Record<string, string> = {
   apple_music: "bg-gradient-to-br from-pink-500 to-red-500",
   spotify: "bg-[#1DB954]",
+  youtube_music: "bg-[#FF0000]",
   netease: "bg-red-500",
   qqmusic: "bg-[#31c27c]",
   resso: "bg-purple-500",
