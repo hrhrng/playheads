@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 import { RecordPlayer } from './RecordPlayer';
 import { NewChatView } from './NewChatView';
 import { SkeletonLoader } from './SkeletonLoader';
-import { ChatInput } from './chat/ChatInput';
+import { ChatInput, type PlaylistInfo } from './chat/ChatInput';
 import { TranscriptOverlay } from './chat/TranscriptOverlay';
 import { useChat } from '../hooks/useChat';
 import { useInitialMessage } from '../hooks/useChatHelpers';
@@ -88,6 +88,7 @@ export const ChatInterface = ({
   const { openPlaylist, hasPlaylist } = usePlaylistSheet();
   const [seekDragging, setSeekDragging] = useState(false);
   const [seekDragValue, setSeekDragValue] = useState(0);
+  const resolvedPlaylistRef = useRef<PlaylistInfo | null>(null);
   const seekDisplayValue = seekDragging ? seekDragValue : (playbackTime?.current || 0);
 
   // Use chat hook for state and methods
@@ -305,7 +306,8 @@ export const ChatInterface = ({
   // Wrap sendMessage — allow chatting without Apple Music auth;
   // playback errors are caught at the MusicKit layer with reconnect prompts.
   const handleSendMessage = useCallback(async (text?: string, skipAddingUserMessage?: boolean) => {
-    await sendMessage(text, skipAddingUserMessage);
+    await sendMessage(text, skipAddingUserMessage, resolvedPlaylistRef.current);
+    resolvedPlaylistRef.current = null;
   }, [sendMessage]);
 
   // Auto-send initial message from navigation state
@@ -483,6 +485,7 @@ export const ChatInterface = ({
           isPlaying={isPlaying}
           onInputChange={setInput}
           onSend={() => handleSendMessage()}
+          onPlaylistResolved={(info) => { resolvedPlaylistRef.current = info; }}
         />
 
         <div className="text-center mt-2.5 text-[9px] text-gray-300 tracking-[0.2em] uppercase">

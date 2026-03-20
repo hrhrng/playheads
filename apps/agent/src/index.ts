@@ -18,6 +18,27 @@ export default {
     const url = new URL(request.url);
 
     // -----------------------------------------------------------------------
+    // Playlist extraction (stateless — parses URL, fetches from platform API)
+    // -----------------------------------------------------------------------
+    if (url.pathname === "/playlist/extract" && request.method === "POST") {
+      try {
+        const body = (await request.json()) as { url?: string };
+        if (!body.url) {
+          return Response.json({ error: "url is required" }, { status: 400 });
+        }
+        const { extractPlaylistFromUrl } = await import("./playlist-extractor");
+        const playlist = await extractPlaylistFromUrl(body.url, env);
+        return Response.json(playlist);
+      } catch (e) {
+        console.error("[playlist/extract] error:", e);
+        return Response.json(
+          { error: e instanceof Error ? e.message : String(e) },
+          { status: 422 }
+        );
+      }
+    }
+
+    // -----------------------------------------------------------------------
     // Apple Music API endpoints (stateless, no DO needed)
     // -----------------------------------------------------------------------
     if (url.pathname.startsWith("/apple-music/")) {

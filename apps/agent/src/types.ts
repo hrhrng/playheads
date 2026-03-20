@@ -26,6 +26,10 @@ export interface Env {
   APPLE_MUSIC_KEY_ID: string;
   APPLE_MUSIC_PRIVATE_KEY: string;
   APPLE_MUSIC_TOKEN_TTL_SECONDS: string;
+
+  // Spotify (Client Credentials — for public playlist extraction)
+  SPOTIFY_CLIENT_ID: string;
+  SPOTIFY_CLIENT_SECRET: string;
 }
 
 // ---------------------------------------------------------------------------

@@ -4,9 +4,35 @@
  * @module components/chat/ChatInput
  */
 
-import { useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
 import { useAutoResizeTextarea } from '../../hooks/useChatHelpers';
 import type { ProviderType } from '../../providers/types';
+import { detectPlaylistUrl, PLATFORM_COLORS, type DetectedPlaylistUrl } from '../../utils/playlistUrl';
+import { API_BASE } from '../../config/api';
+
+/** Playlist info returned by backend /playlist/extract endpoint. */
+export interface PlaylistInfo {
+  name: string;
+  platform: string;
+  description?: string;
+  artwork_url?: string;
+  track_count: number;
+  tracks: Array<{ name: string; artist: string; album?: string }>;
+}
+
+type PlaylistChipState =
+  | { status: "idle" }
+  | { status: "loading"; detected: DetectedPlaylistUrl }
+  | { status: "loaded"; detected: DetectedPlaylistUrl; info: PlaylistInfo }
+  | { status: "error"; detected: DetectedPlaylistUrl; message: string };
+
+/** Small colored dot representing a music platform. */
+const PlatformDot = ({ platform, size = 14 }: { platform: string; size?: number }) => (
+  <span
+    className={`inline-block rounded-full shrink-0 ${PLATFORM_COLORS[platform] || "bg-gray-400"}`}
+    style={{ width: size, height: size }}
+  />
+);
 
 interface ChatInputProps {
   /** Current input value */
@@ -35,6 +61,8 @@ interface ChatInputProps {
   attachments?: File[];
   /** Remove an attachment by index */
   onRemoveAttachment?: (index: number) => void;
+  /** Called when a playlist URL is resolved (or null when cleared) */
+  onPlaylistResolved?: (info: PlaylistInfo | null) => void;
 }
 
 /**
@@ -54,11 +82,74 @@ export const ChatInput = ({
   onAttach,
   attachments = [],
   onRemoveAttachment,
+  onPlaylistResolved,
 }: ChatInputProps): React.JSX.Element => {
   const textareaRef = useAutoResizeTextarea(input);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isLongPress, setIsLongPress] = useState(false);
+
+  // ── Playlist URL detection chip ──
+  const [playlistChip, setPlaylistChip] = useState<PlaylistChipState>({ status: "idle" });
+  const fetchController = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    const detected = detectPlaylistUrl(input);
+
+    if (!detected) {
+      if (playlistChip.status !== "idle") {
+        setPlaylistChip({ status: "idle" });
+        onPlaylistResolved?.(null);
+      }
+      return;
+    }
+
+    // Same URL already being processed or loaded — skip
+    if (playlistChip.status !== "idle" && "detected" in playlistChip && playlistChip.detected.url === detected.url) {
+      return;
+    }
+
+    // Cancel previous in-flight request
+    fetchController.current?.abort();
+    const controller = new AbortController();
+    fetchController.current = controller;
+
+    setPlaylistChip({ status: "loading", detected });
+    onPlaylistResolved?.(null);
+
+    fetch(`${API_BASE}/playlist/extract`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: detected.url }),
+      signal: controller.signal,
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          const errBody = await res.json().catch(() => ({ error: "Unknown error" })) as { error?: string };
+          throw new Error(errBody.error || `HTTP ${res.status}`);
+        }
+        return res.json() as Promise<PlaylistInfo>;
+      })
+      .then((info) => {
+        if (controller.signal.aborted) return;
+        setPlaylistChip({ status: "loaded", detected, info });
+        onPlaylistResolved?.(info);
+      })
+      .catch((e) => {
+        if (controller.signal.aborted) return;
+        setPlaylistChip({ status: "error", detected, message: String(e) });
+        onPlaylistResolved?.(null);
+      });
+
+    return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [input]);
+
+  const dismissChip = useCallback(() => {
+    fetchController.current?.abort();
+    setPlaylistChip({ status: "idle" });
+    onPlaylistResolved?.(null);
+  }, [onPlaylistResolved]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -134,6 +225,35 @@ export const ChatInput = ({
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Playlist URL Chip */}
+      {playlistChip.status !== "idle" && (
+        <div className="flex gap-2 mb-2 px-2">
+          <div className="inline-flex items-center gap-2 bg-gray-100 rounded-full px-3 py-1.5 text-xs max-w-xs">
+            <PlatformDot platform={playlistChip.detected.platform} />
+            {playlistChip.status === "loading" && (
+              <span className="text-gray-400 animate-pulse">
+                {playlistChip.detected.displayName} loading...
+              </span>
+            )}
+            {playlistChip.status === "loaded" && (
+              <span className="text-gray-700 font-medium truncate">
+                {playlistChip.detected.displayName} · {playlistChip.info.name}
+                <span className="text-gray-400 ml-1">({playlistChip.info.track_count})</span>
+              </span>
+            )}
+            {playlistChip.status === "error" && (
+              <span className="text-red-400 truncate">{playlistChip.message}</span>
+            )}
+            <button
+              onClick={dismissChip}
+              className="text-gray-400 hover:text-gray-600 ml-0.5 shrink-0 leading-none"
+            >
+              ×
+            </button>
+          </div>
         </div>
       )}
 

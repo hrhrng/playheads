@@ -13,6 +13,7 @@ import { useAgentChatAdapter, type MusicActions, type QueueOperations } from './
 import { useChatStore } from '../store/chatStore';
 import { API_BASE } from '../config/api';
 import type { Message } from '../types/chat';
+import type { PlaylistInfo } from '../components/chat/ChatInput';
 
 interface UseChatParams {
   sessionId: string | null;
@@ -35,7 +36,7 @@ interface UseChatReturn {
   setInput: (input: string) => void;
   setShowHistory: (show: boolean) => void;
   toggleHistory: () => void;
-  sendMessage: (text?: string, skipAddingUserMessage?: boolean) => Promise<void>;
+  sendMessage: (text?: string, skipAddingUserMessage?: boolean, resolvedPlaylist?: PlaylistInfo | null) => Promise<void>;
 }
 
 /**
@@ -84,10 +85,22 @@ export function useChat({
 
   const handleSendMessage = useCallback(async (
     text?: string,
-    _skipAddingUserMessage = false
+    _skipAddingUserMessage = false,
+    resolvedPlaylist?: PlaylistInfo | null,
   ): Promise<void> => {
     const messageText = text || input;
     if (!messageText.trim() || isLoading) return;
+
+    // Enrich message with playlist context if available
+    let finalMessage = messageText;
+    if (resolvedPlaylist && resolvedPlaylist.tracks.length > 0) {
+      const trackLines = resolvedPlaylist.tracks.slice(0, 50)
+        .map((t, i) => `${i + 1}. ${t.name} — ${t.artist}`);
+      const extra = resolvedPlaylist.tracks.length > 50
+        ? `\n... and ${resolvedPlaylist.tracks.length - 50} more tracks`
+        : '';
+      finalMessage = `${messageText}\n\n[Playlist / 歌单]\nPlatform: ${resolvedPlaylist.platform}\nTitle: ${resolvedPlaylist.name}\nTotal: ${resolvedPlaylist.track_count} tracks\n${trackLines.join('\n')}${extra}`;
+    }
 
     // For new chats without session, create session first and navigate
     if (!sessionId) {
@@ -109,7 +122,7 @@ export function useChat({
 
         // Navigate to the new session - useAgentChat will connect automatically
         if (onSessionCreated) {
-          onSessionCreated(newSessionId, messageText);
+          onSessionCreated(newSessionId, finalMessage);
         }
       } catch (error) {
         console.error('Failed to create session:', error);
@@ -122,7 +135,7 @@ export function useChat({
     } else {
       // Clear input and send via WebSocket
       useChatStore.setState({ input: '' });
-      adapter.sendMessage(messageText);
+      adapter.sendMessage(finalMessage);
     }
   }, [input, isLoading, sessionId, userId, onSessionCreated, adapter]);
 
