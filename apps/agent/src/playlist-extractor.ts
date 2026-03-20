@@ -34,13 +34,13 @@ export interface PlaylistInfo {
 // URL Parsing
 // ---------------------------------------------------------------------------
 
-interface ParsedUrl {
+export interface ParsedUrl {
   platform: PlaylistInfo["platform"];
   id: string;
   storefront?: string;
 }
 
-function parsePlaylistUrl(url: string): ParsedUrl {
+export function parsePlaylistUrl(url: string): ParsedUrl {
   const trimmed = url.trim();
 
   // Apple Music: music.apple.com/{storefront}/playlist/{name}/{pl.xxx}
@@ -148,6 +148,11 @@ async function extractAppleMusic(
 
 /** Cache Spotify client-credentials token in module scope. */
 let spotifyTokenCache: { token: string; expiresAt: number } | null = null;
+
+/** Reset token cache (for tests). */
+export function _resetSpotifyTokenCache() {
+  spotifyTokenCache = null;
+}
 
 async function getSpotifyToken(env: Env): Promise<string> {
   const now = Date.now();
