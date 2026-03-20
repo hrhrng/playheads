@@ -165,7 +165,7 @@ export function ChatRoute({
   const navigate = useNavigate();
 
   // Sidebar state with persistence
-  const { collapsed, width, toggleCollapse, setWidth } = useSidebarState();
+  const { collapsed, width, toggleCollapse, setWidth, setCollapsed } = useSidebarState();
 
   const sessionId = id === 'pending' ? null : (id ?? null);
 
@@ -201,6 +201,7 @@ export function ChatRoute({
       isAppleMusicAuthorized={isAppleMusicAuthorized}
       onConnectAppleMusic={onLinkApple}
       onDisconnectAppleMusic={onDisconnectApple}
+      onOpenPlaylist={() => setCollapsed(false)}
       rightPanel={
         <PlaylistSidebar
           currentTrack={currentTrack}

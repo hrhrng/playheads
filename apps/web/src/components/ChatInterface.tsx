@@ -13,6 +13,7 @@ import { ChatInput } from './chat/ChatInput';
 import { TranscriptOverlay } from './chat/TranscriptOverlay';
 import { useChat } from '../hooks/useChat';
 import { useInitialMessage } from '../hooks/useChatHelpers';
+import { usePlaylistSheet } from '../contexts/PlaylistSheetContext';
 import type { PlaybackTime, Message } from '../types';
 import type { UnifiedTrack } from '../providers/types';
 import type { MusicActions, QueueOperations } from '../hooks/useAgentChatAdapter';
@@ -84,6 +85,7 @@ export const ChatInterface = ({
 }: ChatInterfaceProps) => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { openPlaylist, hasPlaylist } = usePlaylistSheet();
   const [seekDragging, setSeekDragging] = useState(false);
   const [seekDragValue, setSeekDragValue] = useState(0);
   const seekDisplayValue = seekDragging ? seekDragValue : (playbackTime?.current || 0);
@@ -416,8 +418,8 @@ export const ChatInterface = ({
           </div>
         )}
 
-        {/* Toggle Button */}
-        <div className="max-w-xl mx-auto mb-2 flex justify-start">
+        {/* Toggle Button + Mobile Playlist Button */}
+        <div className="max-w-xl mx-auto mb-2 flex items-center">
           <button
             onClick={toggleHistory}
             className="relative w-8 h-8 rounded-full flex items-center justify-center"
@@ -456,6 +458,21 @@ export const ChatInterface = ({
               );
             })()}
           </button>
+
+          {/* Playlist button — mobile only, right-aligned, shown when a playlist exists */}
+          {hasPlaylist && (
+            <button
+              onClick={openPlaylist}
+              className="md:hidden ml-auto w-8 h-8 rounded-full border border-gray-200 bg-white flex items-center justify-center text-gray-400 hover:text-gray-600 hover:border-gray-300 transition-colors"
+              title="View Playlist"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19V6l12-3v13" />
+                <circle cx="6" cy="19" r="3" fill="currentColor" stroke="none" />
+                <circle cx="18" cy="16" r="3" fill="currentColor" stroke="none" />
+              </svg>
+            </button>
+          )}
         </div>
 
         {/* Input Bar */}
