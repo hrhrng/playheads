@@ -291,7 +291,7 @@ async def remove_from_playlist(index: str) -> str:
 
 
 # =============================================================================
-# Claude Native Web Search (server-side tool)
+# Web Search (multi-provider: anthropic | brave | tavily | none)
 # =============================================================================
 
 WEB_SEARCH_TOOL = {
@@ -299,6 +299,64 @@ WEB_SEARCH_TOOL = {
     "name": "web_search",
     "max_uses": 5,
 }
+
+
+@tool
+async def web_search(query: str) -> str:
+    """Search the web for music recommendations, playlist ideas, artist info, trending songs, or genre exploration.
+
+    Args:
+        query: Search query string
+    """
+    import httpx
+
+    search_provider = os.getenv("SEARCH_PROVIDER", "").lower()
+
+    if search_provider == "brave":
+        api_key = os.getenv("BRAVE_SEARCH_API_KEY")
+        if not api_key:
+            return "Web search unavailable: BRAVE_SEARCH_API_KEY not set."
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.get(
+                    "https://api.search.brave.com/res/v1/web/search",
+                    headers={"X-Subscription-Token": api_key, "Accept": "application/json"},
+                    params={"q": query, "count": 5},
+                )
+                resp.raise_for_status()
+                data = resp.json()
+            results = data.get("web", {}).get("results", [])
+            if not results:
+                return f"No results found for: {query}"
+            lines = [f"{i}. {r.get('title', '')} — {r.get('url', '')}\n   {r.get('description', '')}"
+                     for i, r in enumerate(results, 1)]
+            return f"Web search results for '{query}':\n" + "\n".join(lines)
+        except Exception as e:
+            return f"Web search error: {e}"
+
+    elif search_provider == "tavily":
+        api_key = os.getenv("TAVILY_API_KEY")
+        if not api_key:
+            return "Web search unavailable: TAVILY_API_KEY not set."
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                resp = await client.post(
+                    "https://api.tavily.com/search",
+                    headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                    json={"query": query, "max_results": 5, "search_depth": "basic"},
+                )
+                resp.raise_for_status()
+                data = resp.json()
+            results = data.get("results", [])
+            if not results:
+                return f"No results found for: {query}"
+            lines = [f"{i}. {r.get('title', '')} — {r.get('url', '')}\n   {r.get('content', '')[:200]}"
+                     for i, r in enumerate(results, 1)]
+            return f"Web search results for '{query}':\n" + "\n".join(lines)
+        except Exception as e:
+            return f"Web search error: {e}"
+
+    return "Web search is not configured (set SEARCH_PROVIDER=brave or SEARCH_PROVIDER=tavily)."
 
 
 def _summarize_search_results(raw_content) -> str:
@@ -405,10 +463,21 @@ def create_music_agent(state_context: str, checkpointer=None, model=None):
                 streaming=True,
             )
 
-    # Add Claude's native web search when using Anthropic provider
+    # Add web search based on SEARCH_PROVIDER env var.
+    # Defaults: anthropic provider → anthropic native search; others → no search.
     tools = list(TOOLS)
-    if isinstance(model, ChatAnthropic):
-        tools.append(WEB_SEARCH_TOOL)
+    search_provider = os.getenv("SEARCH_PROVIDER", "anthropic" if isinstance(model, ChatAnthropic) else "none").lower()
+    log.debug("Search config: provider=%s", search_provider)
+
+    if search_provider == "anthropic":
+        if isinstance(model, ChatAnthropic):
+            tools.append(WEB_SEARCH_TOOL)
+        else:
+            log.warning("SEARCH_PROVIDER=anthropic requires ChatAnthropic model; skipping web search")
+    elif search_provider in ("brave", "tavily"):
+        tools.append(web_search)
+    elif search_provider != "none":
+        log.warning("Unknown SEARCH_PROVIDER=%s; skipping web search", search_provider)
 
     # create_agent returns a graph object with checkpointer
     agent_graph = create_agent(
