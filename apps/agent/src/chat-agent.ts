@@ -57,17 +57,17 @@ IMPORTANT:
 Be conversational and fun! Keep responses concise.`;
 
 /**
- * Build a web_search tool based on SEARCH_PROVIDER env var.
- * Returns undefined when no search provider is configured.
+ * Build a web_search tool.
+ * Priority: DB config (from search_provider_config table) > env vars.
  *
- * SEARCH_PROVIDER values: "brave" | "tavily" | "none" (anything else = no search)
+ * SEARCH_PROVIDER env values: "brave" | "tavily" | "none" (anything else = no search)
  * Defaults for Anthropic provider are handled in the caller (native webSearch_20250305).
  */
-function buildWebSearchTool(env: Env) {
-  const provider = (env.SEARCH_PROVIDER || "").toLowerCase();
+function buildWebSearchTool(env: Env, dbOverride?: { providerType: string; apiKey: string }) {
+  const provider = (dbOverride?.providerType || env.SEARCH_PROVIDER || "").toLowerCase();
 
   if (provider === "brave") {
-    const apiKey = env.BRAVE_SEARCH_API_KEY;
+    const apiKey = dbOverride?.apiKey || env.BRAVE_SEARCH_API_KEY;
     if (!apiKey) return undefined;
     return tool({
       description: "Search the web for music recommendations, artist info, trending songs, or genre exploration.",
@@ -90,7 +90,7 @@ function buildWebSearchTool(env: Env) {
   }
 
   if (provider === "tavily") {
-    const apiKey = env.TAVILY_API_KEY;
+    const apiKey = dbOverride?.apiKey || env.TAVILY_API_KEY;
     if (!apiKey) return undefined;
     return tool({
       description: "Search the web for music recommendations, artist info, trending songs, or genre exploration.",
@@ -213,13 +213,18 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
     // Resolve active LLM config: DB first, env vars as fallback.
     // DB config is set via the admin panel (/api/llm-config).
     // ---------------------------------------------------------------------------
-    const dbConfig = await this.env.DB.prepare(
-      "SELECT * FROM llm_provider_config WHERE isActive = 1 LIMIT 1"
-    ).first<{
-      providerType: string; model: string; gateway: string;
-      gatewayAccountId: string | null; gatewayId: string | null;
-      gatewayToken: string | null; apiKey: string; baseUrl: string | null;
-    }>().catch(() => null);
+    const [dbConfig, dbSearchConfig] = await Promise.all([
+      this.env.DB.prepare(
+        "SELECT * FROM llm_provider_config WHERE isActive = 1 LIMIT 1"
+      ).first<{
+        providerType: string; model: string; gateway: string;
+        gatewayAccountId: string | null; gatewayId: string | null;
+        gatewayToken: string | null; apiKey: string; baseUrl: string | null;
+      }>().catch(() => null),
+      this.env.DB.prepare(
+        "SELECT providerType, apiKey FROM search_provider_config WHERE isActive = 1 LIMIT 1"
+      ).first<{ providerType: string; apiKey: string }>().catch(() => null),
+    ]);
 
     // Decrypt helper — mirrors apps/admin/src/index.ts decrypt()
     const decryptKey = async (encoded: string): Promise<string> => {
@@ -237,6 +242,11 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
     const resolvedProvider = dbConfig?.providerType || this.env.LLM_PROVIDER || "anthropic";
     const resolvedApiKey = dbConfig ? await decryptKey(dbConfig.apiKey) : "";
     const resolvedGwToken = dbConfig?.gatewayToken ? await decryptKey(dbConfig.gatewayToken) : this.env.CF_AIG_TOKEN;
+
+    // Resolve search provider: DB config takes priority over env vars
+    const searchDbOverride = dbSearchConfig
+      ? { providerType: dbSearchConfig.providerType, apiKey: dbSearchConfig.apiKey ? await decryptKey(dbSearchConfig.apiKey) : "" }
+      : undefined;
 
     let model: Parameters<typeof streamText>[0]["model"];
     let tools: Parameters<typeof streamText>[0]["tools"];
@@ -259,10 +269,10 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
       const anthropic = createAnthropic({ apiKey: anthropicApiKey, baseURL: anthropicBaseURL });
 
       model = anthropic(dbConfig?.model || this.env.ANTHROPIC_MODEL || "claude-sonnet-4-6") as unknown as Parameters<typeof streamText>[0]["model"];
-      const searchProvider = (this.env.SEARCH_PROVIDER || "anthropic").toLowerCase();
-      const nativeSearch = searchProvider === "anthropic"
+      const effectiveSearchProvider = (searchDbOverride?.providerType || this.env.SEARCH_PROVIDER || "anthropic").toLowerCase();
+      const nativeSearch = effectiveSearchProvider === "anthropic"
         ? { web_search: anthropic.tools.webSearch_20250305({ maxUses: 5 }) }
-        : (buildWebSearchTool(this.env) ? { web_search: buildWebSearchTool(this.env)! } : {});
+        : (() => { const t = buildWebSearchTool(this.env, searchDbOverride); return t ? { web_search: t } : {}; })();
       tools = {
         ...createMusicTools({ env: this.env, state: globalState, storefront }),
         ...nativeSearch,
@@ -299,7 +309,7 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
 
       model = provider(dbConfig?.model || this.env.DOUBAO_MODEL || "doubao-1.5-pro-32k") as unknown as Parameters<typeof streamText>[0]["model"];
 
-      const webSearchTool = buildWebSearchTool(this.env);
+      const webSearchTool = buildWebSearchTool(this.env, searchDbOverride);
       tools = {
         ...createMusicTools({ env: this.env, state: globalState, storefront }),
         ...(webSearchTool ? { web_search: webSearchTool } : {}),
@@ -308,8 +318,9 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
       providerOptions = undefined;
     }
 
-    console.log("[MusicChatAgent] provider=%s model=%s source=%s", resolvedProvider,
-      dbConfig?.model || "env", dbConfig ? "db" : "env");
+    console.log("[MusicChatAgent] provider=%s model=%s source=%s search=%s", resolvedProvider,
+      dbConfig?.model || "env", dbConfig ? "db" : "env",
+      searchDbOverride?.providerType || this.env.SEARCH_PROVIDER || "anthropic");
 
     const result = streamText({
       model,

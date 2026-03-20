@@ -27,12 +27,26 @@ interface LlmProviderRow {
   updatedAt: number;
 }
 
+// ---------------------------------------------------------------------------
+// Search Provider Config types
+// ---------------------------------------------------------------------------
+interface SearchProviderRow {
+  id: string;
+  name: string;
+  providerType: string; // 'brave' | 'tavily' | 'none'
+  apiKey: string; // encrypted
+  isActive: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
 
-    // Auto-migrate: create llm_provider_config table if missing
+    // Auto-migrate: create config tables if missing
     await ensureLlmTable(env);
+    await ensureSearchTable(env);
 
     if (url.pathname === "/") return serveHTML();
     if (url.pathname === "/api/waitlist" && request.method === "GET") return handleList(request, env);
@@ -50,6 +64,18 @@ export default {
     }
     const llmActivateMatch = url.pathname.match(/^\/api\/llm-config\/([^/]+)\/activate$/);
     if (llmActivateMatch && request.method === "POST") return handleLlmActivate(llmActivateMatch[1], env);
+
+    // Search config endpoints
+    if (url.pathname === "/api/search-config" && request.method === "GET") return handleSearchList(env);
+    if (url.pathname === "/api/search-config" && request.method === "POST") return handleSearchCreate(request, env);
+    const searchEditMatch = url.pathname.match(/^\/api\/search-config\/([^/]+)$/);
+    if (searchEditMatch) {
+      const id = searchEditMatch[1];
+      if (request.method === "PATCH") return handleSearchUpdate(id, request, env);
+      if (request.method === "DELETE") return handleSearchDelete(id, env);
+    }
+    const searchActivateMatch = url.pathname.match(/^\/api\/search-config\/([^/]+)\/activate$/);
+    if (searchActivateMatch && request.method === "POST") return handleSearchActivate(searchActivateMatch[1], env);
 
     return new Response("Not found", { status: 404 });
   },
@@ -354,6 +380,83 @@ async function handleLlmActivate(id: string, env: Env): Promise<Response> {
   return Response.json({ success: true });
 }
 
+// ---------------------------------------------------------------------------
+// Search Config — DB migration
+// ---------------------------------------------------------------------------
+
+async function ensureSearchTable(env: Env): Promise<void> {
+  await env.DB.exec(`CREATE TABLE IF NOT EXISTS search_provider_config (
+    id           TEXT PRIMARY KEY,
+    name         TEXT NOT NULL,
+    providerType TEXT NOT NULL,
+    apiKey       TEXT NOT NULL DEFAULT '',
+    isActive     INTEGER NOT NULL DEFAULT 0,
+    createdAt    INTEGER NOT NULL,
+    updatedAt    INTEGER NOT NULL
+  )`);
+}
+
+// ---------------------------------------------------------------------------
+// Search Config — API handlers
+// ---------------------------------------------------------------------------
+
+async function handleSearchList(env: Env): Promise<Response> {
+  const rows = await env.DB.prepare(
+    "SELECT * FROM search_provider_config ORDER BY isActive DESC, createdAt ASC"
+  ).all<SearchProviderRow>();
+
+  const data = await Promise.all((rows.results || []).map(async (r) => ({
+    ...r,
+    apiKey: r.apiKey ? maskKey(await decrypt(r.apiKey, env)) : "",
+  })));
+
+  return Response.json({ data });
+}
+
+async function handleSearchCreate(request: Request, env: Env): Promise<Response> {
+  const body = await request.json() as Partial<SearchProviderRow>;
+  if (!body.providerType) {
+    return Response.json({ error: "providerType required" }, { status: 400 });
+  }
+  const now = Date.now();
+  const id = crypto.randomUUID();
+  const encKey = body.apiKey ? await encrypt(body.apiKey, env) : "";
+  await env.DB.prepare(
+    `INSERT INTO search_provider_config (id,name,providerType,apiKey,isActive,createdAt,updatedAt) VALUES (?,?,?,?,0,?,?)`
+  ).bind(id, body.name || body.providerType, body.providerType, encKey, now, now).run();
+  return Response.json({ success: true, id });
+}
+
+async function handleSearchUpdate(id: string, request: Request, env: Env): Promise<Response> {
+  const body = await request.json() as Partial<SearchProviderRow>;
+  const now = Date.now();
+  const updates: string[] = ["updatedAt = ?"];
+  const vals: unknown[] = [now];
+
+  if (body.name !== undefined) { updates.push("name = ?"); vals.push(body.name); }
+  if (body.providerType !== undefined) { updates.push("providerType = ?"); vals.push(body.providerType); }
+  if (body.apiKey !== undefined && body.apiKey && !body.apiKey.startsWith("••••")) {
+    updates.push("apiKey = ?"); vals.push(await encrypt(body.apiKey, env));
+  }
+
+  vals.push(id);
+  await env.DB.prepare(`UPDATE search_provider_config SET ${updates.join(", ")} WHERE id = ?`).bind(...vals).run();
+  return Response.json({ success: true });
+}
+
+async function handleSearchDelete(id: string, env: Env): Promise<Response> {
+  await env.DB.prepare("DELETE FROM search_provider_config WHERE id = ?").bind(id).run();
+  return Response.json({ success: true });
+}
+
+async function handleSearchActivate(id: string, env: Env): Promise<Response> {
+  await env.DB.batch([
+    env.DB.prepare("UPDATE search_provider_config SET isActive = 0, updatedAt = ?").bind(Date.now()),
+    env.DB.prepare("UPDATE search_provider_config SET isActive = 1, updatedAt = ? WHERE id = ?").bind(Date.now(), id),
+  ]);
+  return Response.json({ success: true });
+}
+
 // --- HTML ---
 
 function serveHTML(): Response {
@@ -472,6 +575,20 @@ let llmMsg = '';
 let llmMsgType = '';
 let llmKeyVisible = false;
 
+// Search Config state
+let searchProviders = [];
+let searchLoading = false;
+let searchModal = null; // null | { mode: 'add'|'edit', data: {} }
+let searchMsg = '';
+let searchMsgType = '';
+let searchKeyVisible = false;
+
+const SEARCH_PROVIDER_PRESETS = {
+  brave:  { label: 'Brave Search', keyLabel: 'API Key', keyPlaceholder: 'BSAxxxxxxxx' },
+  tavily: { label: 'Tavily', keyLabel: 'API Key', keyPlaceholder: 'tvly-...' },
+  none:   { label: 'None (disabled)', keyLabel: 'API Key (not needed)', keyPlaceholder: '' },
+};
+
 const PROVIDER_PRESETS = {
   anthropic: { baseUrl: '', model: 'claude-sonnet-4-6', label: 'Anthropic' },
   doubao:    { baseUrl: 'https://ark.cn-beijing.volces.com/api/v3', model: 'doubao-1.5-pro-32k', label: 'Doubao' },
@@ -485,6 +602,7 @@ const icons = {
   settings: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>',
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
   key: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="M21 2l-9.6 9.6M15.5 7.5l3 3"/></svg>',
+  search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>',
 };
 
 // Render
@@ -497,6 +615,7 @@ function renderApp() {
   const navItems = [
     { id: 'waitlist', label: 'Waitlist', icon: icons.waitlist },
     { id: 'llm-config', label: 'LLM Config', icon: icons.key },
+    { id: 'search-config', label: 'Search Config', icon: icons.search },
   ];
 
   return \`<div class="app">
@@ -518,12 +637,14 @@ function renderApp() {
     </div>
     \${showInviteModal ? renderInviteModal() : ''}
     \${llmModal ? renderLlmModal() : ''}
+    \${searchModal ? renderSearchModal() : ''}
   </div>\`;
 }
 
 function renderPageContent() {
   if (currentPage === 'waitlist') return renderWaitlistPage();
   if (currentPage === 'llm-config') return renderLlmConfigPage();
+  if (currentPage === 'search-config') return renderSearchConfigPage();
   return '<div class="main-body"><p class="empty">Coming soon</p></div>';
 }
 
@@ -648,6 +769,100 @@ function renderLlmModal() {
         </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-ghost" onclick="llmCloseModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">\${isEdit ? 'Save Changes' : 'Add Provider'}</button>
+        </div>
+      </form>
+    </div>
+  </div>\`;
+}
+
+function renderSearchConfigPage() {
+  const active = searchProviders.find(p => p.isActive);
+  const activeCard = active ? \`
+    <div style="background:#fff;border:2px solid #111;border-radius:12px;padding:20px 24px;margin-bottom:24px;display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <div style="font-size:11px;color:#9ca3af;font-weight:500;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Active Search Provider</div>
+        <div style="font-weight:600;font-size:15px">\${active.name}</div>
+        <div style="font-size:12px;color:#6b7280;margin-top:2px">\${SEARCH_PROVIDER_PRESETS[active.providerType]?.label || active.providerType}</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="width:8px;height:8px;background:#22c55e;border-radius:50%;display:inline-block"></span>
+        <span style="font-size:12px;color:#15803d;font-weight:500">Active</span>
+      </div>
+    </div>\` : \`
+    <div style="background:#fefce8;border:1px solid #fef08a;border-radius:12px;padding:16px 20px;margin-bottom:24px;font-size:13px;color:#a16207">
+      No active search provider. Falls back to env vars (SEARCH_PROVIDER / BRAVE_SEARCH_API_KEY / TAVILY_API_KEY).
+    </div>\`;
+
+  const rows = searchProviders.map(p => \`
+    <tr>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px">
+          \${p.isActive ? '<span style="font-size:14px">★</span>' : '<span style="font-size:14px;opacity:.2">★</span>'}
+          <div>
+            <div style="font-weight:500">\${p.name}</div>
+            <div style="font-size:11px;color:#9ca3af">\${SEARCH_PROVIDER_PRESETS[p.providerType]?.label || p.providerType}</div>
+          </div>
+        </div>
+      </td>
+      <td style="font-family:monospace;font-size:12px;color:#9ca3af">\${p.apiKey || '—'}</td>
+      <td class="actions">
+        \${!p.isActive ? \`<button class="btn btn-green" onclick="searchActivate('\${p.id}')">Activate</button>\` : ''}
+        <button class="btn btn-ghost" onclick="searchEdit('\${p.id}')">Edit</button>
+        <button class="btn btn-red" onclick="searchDelete('\${p.id}')">Delete</button>
+      </td>
+    </tr>\`).join('');
+
+  return \`
+    <div class="main-header">
+      <h2>Search Configuration</h2>
+      <button class="btn btn-primary" onclick="searchOpenAdd()">\${icons.plus} Add Provider</button>
+    </div>
+    <div class="main-body">
+      \${activeCard}
+      \${searchLoading ? '<p class="empty">Loading...</p>' :
+        searchProviders.length === 0 ? '<p class="empty">No search providers configured</p>' : \`
+        <table>
+          <thead><tr>
+            <th>Provider</th><th>API Key</th><th style="text-align:right">Actions</th>
+          </tr></thead>
+          <tbody>\${rows}</tbody>
+        </table>\`}
+    </div>\`;
+}
+
+function renderSearchModal() {
+  const d = searchModal.data || {};
+  const isEdit = searchModal.mode === 'edit';
+  const preset = SEARCH_PROVIDER_PRESETS[d.providerType || 'brave'];
+
+  return \`<div class="modal-overlay" id="searchModalOverlay">
+    <div class="modal" style="max-width:440px">
+      <h3>\${isEdit ? 'Edit Search Provider' : 'Add Search Provider'}</h3>
+      <p>Configure a web search provider for the AI assistant. API keys are encrypted at rest.</p>
+      \${searchMsg ? \`<div class="msg \${searchMsgType === 'error' ? 'msg-err' : 'msg-ok'}">\${searchMsg}</div>\` : ''}
+      <form id="searchForm">
+        <div class="form-group">
+          <label>Display Name</label>
+          <input id="sm_name" value="\${d.name || ''}" placeholder="My Brave Search" />
+        </div>
+        <div class="form-group">
+          <label>Provider Type</label>
+          <select id="sm_providerType" onchange="searchOnProviderChange()" style="width:100%;height:42px;padding:0 14px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;outline:none;background:#fff">
+            \${Object.entries(SEARCH_PROVIDER_PRESETS).map(([k,v]) =>
+              \`<option value="\${k}" \${(d.providerType||'brave')===k?'selected':''}>\${v.label}</option>\`
+            ).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label id="sm_keyLabel">\${preset?.keyLabel || 'API Key'} \${isEdit ? '(leave masked to keep existing)' : ''}</label>
+          <div style="position:relative">
+            <input id="sm_apiKey" type="\${searchKeyVisible ? 'text' : 'password'}" value="\${d.apiKey || ''}" placeholder="\${preset?.keyPlaceholder || ''}" style="padding-right:44px" />
+            <button type="button" onclick="searchToggleKey()" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#9ca3af;font-size:16px">\${searchKeyVisible ? '🙈' : '👁'}</button>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" onclick="searchCloseModal()">Cancel</button>
           <button type="submit" class="btn btn-primary">\${isEdit ? 'Save Changes' : 'Add Provider'}</button>
         </div>
       </form>
@@ -788,6 +1003,30 @@ function bind() {
     if (e.target === llmOverlay) llmCloseModal();
   };
 
+  const searchOverlay = document.getElementById('searchModalOverlay');
+  if (searchOverlay) searchOverlay.onclick = (e) => {
+    if (e.target === searchOverlay) searchCloseModal();
+  };
+
+  const searchForm = document.getElementById('searchForm');
+  if (searchForm) searchForm.onsubmit = async (e) => {
+    e.preventDefault();
+    const body = {
+      name: document.getElementById('sm_name').value.trim(),
+      providerType: document.getElementById('sm_providerType').value,
+      apiKey: document.getElementById('sm_apiKey').value,
+    };
+    if (!body.name) body.name = SEARCH_PROVIDER_PRESETS[body.providerType]?.label || body.providerType;
+    try {
+      const isEdit = searchModal.mode === 'edit';
+      const url = isEdit ? \`/api/search-config/\${searchModal.data.id}\` : '/api/search-config';
+      const res = await fetch(url, { method: isEdit ? 'PATCH' : 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+      const data = await res.json();
+      if (res.ok) { searchMsg = isEdit ? 'Saved!' : 'Provider added!'; searchMsgType = 'ok'; render(); setTimeout(() => { searchCloseModal(); fetchSearchData(); }, 900); }
+      else { searchMsg = data.error || 'Failed'; searchMsgType = 'error'; render(); }
+    } catch { searchMsg = 'Network error'; searchMsgType = 'error'; render(); }
+  };
+
   const llmForm = document.getElementById('llmForm');
   if (llmForm) llmForm.onsubmit = async (e) => {
     e.preventDefault();
@@ -887,10 +1126,48 @@ window.llmDelete = async (id) => {
   fetchLlmData();
 };
 
-// Navigate hook: load LLM data when switching to that page
+// Search Config actions
+async function fetchSearchData() {
+  searchLoading = true; render();
+  const res = await fetch('/api/search-config');
+  const json = await res.json();
+  searchProviders = json.data || [];
+  searchLoading = false;
+  render();
+}
+
+window.searchOpenAdd = () => { searchModal = { mode: 'add', data: {} }; searchMsg = ''; searchKeyVisible = false; render(); };
+window.searchEdit = (id) => {
+  const p = searchProviders.find(x => x.id === id);
+  if (p) { searchModal = { mode: 'edit', data: { ...p } }; searchMsg = ''; searchKeyVisible = false; render(); }
+};
+window.searchCloseModal = () => { searchModal = null; searchMsg = ''; render(); };
+window.searchToggleKey = () => { searchKeyVisible = !searchKeyVisible; render(); };
+window.searchOnProviderChange = () => {
+  const type = document.getElementById('sm_providerType').value;
+  const preset = SEARCH_PROVIDER_PRESETS[type];
+  if (preset) {
+    const labelEl = document.getElementById('sm_keyLabel');
+    if (labelEl) labelEl.textContent = preset.keyLabel;
+    const keyEl = document.getElementById('sm_apiKey');
+    if (keyEl) keyEl.placeholder = preset.keyPlaceholder;
+  }
+};
+window.searchActivate = async (id) => {
+  await fetch(\`/api/search-config/\${id}/activate\`, { method: 'POST' });
+  fetchSearchData();
+};
+window.searchDelete = async (id) => {
+  if (!confirm('Delete this search provider?')) return;
+  await fetch(\`/api/search-config/\${id}\`, { method: 'DELETE' });
+  fetchSearchData();
+};
+
+// Navigate hook: load data when switching pages
 window.navigateTo = (p) => {
   currentPage = p;
   if (p === 'llm-config' && llmProviders.length === 0) fetchLlmData();
+  if (p === 'search-config' && searchProviders.length === 0) fetchSearchData();
   render();
 };
 
