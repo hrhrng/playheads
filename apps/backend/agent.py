@@ -94,42 +94,67 @@ def _emit_action(action_type: str, data: dict) -> None:
 # Tool Functions (using @tool decorator for LangChain 1.0)
 # =============================================================================
 
+_RRF_K = 60  # RRF constant — higher values reduce the impact of rank differences
+
+
 @tool
-async def search_music(query: str) -> str:
-    """Search for music tracks on Apple Music. Returns a list of tracks with IDs.
+async def search_music(queries: list[str], limit: int = 5) -> str:
+    """Search Apple Music. Pass multiple queries (run in parallel) to broaden coverage.
+
+    Vary the queries to surface more results — e.g. use the song title in different
+    languages, try alternate phrasings, add version keywords, or combine artist +
+    title differently. Results across all queries are merged and ranked with
+    Reciprocal Rank Fusion (RRF), so tracks that rank highly in multiple queries
+    float to the top.
 
     Args:
-        query: Search query string
+        queries: One or more search query strings. Different phrasings expand coverage.
+        limit: Max results per query (1-25, default 5).
     """
-    try:
-        from apps.backend.apple_music import _apple_music_get
+    import asyncio
+    from apps.backend.apple_music import _apple_music_get
 
-        # Directly call Apple Music API to search
-        t0 = time.perf_counter()
-        result = await _apple_music_get(
-            "v1/catalog/us/search",
-            params={"term": query, "types": "songs", "limit": 5}
-        )
-        log.info("⏱ search_music API call: %.0fms", (time.perf_counter() - t0) * 1000)
+    limit = max(1, min(limit, 25))
 
-        songs = result.get("results", {}).get("songs", {}).get("data", [])
+    async def _search_one(q: str):
+        try:
+            t0 = time.perf_counter()
+            result = await _apple_music_get(
+                "v1/catalog/us/search",
+                params={"term": q, "types": "songs", "limit": limit}
+            )
+            log.info("⏱ search_music '%s': %.0fms", q, (time.perf_counter() - t0) * 1000)
+            return result.get("results", {}).get("songs", {}).get("data", [])
+        except Exception as e:
+            log.warning("search_music error for '%s': %s", q, e)
+            return []
 
-        if not songs:
-            return f"No results found for '{query}'"
+    results_per_query = await asyncio.gather(*[_search_one(q) for q in queries])
 
-        # Format results with IDs for agent to use
-        lines = [f"Search results for '{query}':"]
-        for i, song in enumerate(songs, 1):
-            attrs = song.get("attributes", {})
+    # RRF: accumulate score = Σ 1/(k + rank) across all query result lists
+    rrf_scores: dict[str, float] = {}
+    track_meta: dict[str, tuple[str, str]] = {}  # id -> (name, artist)
+    for songs in results_per_query:
+        for rank, song in enumerate(songs):
             song_id = song.get("id")
-            name = attrs.get("name", "Unknown")
-            artist = attrs.get("artistName", "Unknown Artist")
-            lines.append(f"{i}. {name} - {artist} (id: {song_id})")
+            if not song_id:
+                continue
+            rrf_scores[song_id] = rrf_scores.get(song_id, 0.0) + 1.0 / (_RRF_K + rank + 1)
+            if song_id not in track_meta:
+                attrs = song.get("attributes", {})
+                track_meta[song_id] = (
+                    attrs.get("name", "Unknown"),
+                    attrs.get("artistName", "Unknown Artist"),
+                )
 
-        return "\n".join(lines)
+    if not rrf_scores:
+        return f"No results found for: {', '.join(queries)}"
 
-    except Exception as e:
-        return f"Error searching music: {str(e)}"
+    sorted_ids = sorted(rrf_scores, key=lambda sid: rrf_scores[sid], reverse=True)
+    header = f"Search results ({len(sorted_ids)} unique tracks):"
+    lines = [f"{i}. {track_meta[sid][0]} - {track_meta[sid][1]} (id: {sid})"
+             for i, sid in enumerate(sorted_ids, 1)]
+    return "\n".join([header] + lines)
 
 
 @tool

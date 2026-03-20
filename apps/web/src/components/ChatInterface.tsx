@@ -3,7 +3,7 @@
  * @module components/ChatInterface
  */
 
-import { useEffect, useCallback, useRef } from 'react';
+import { useEffect, useCallback, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { RecordPlayer } from './RecordPlayer';
@@ -13,6 +13,7 @@ import { ChatInput } from './chat/ChatInput';
 import { TranscriptOverlay } from './chat/TranscriptOverlay';
 import { useChat } from '../hooks/useChat';
 import { useInitialMessage } from '../hooks/useChatHelpers';
+import { usePlaylistSheet } from '../contexts/PlaylistSheetContext';
 import type { PlaybackTime, Message } from '../types';
 import type { UnifiedTrack } from '../providers/types';
 import type { MusicActions, QueueOperations } from '../hooks/useAgentChatAdapter';
@@ -84,6 +85,10 @@ export const ChatInterface = ({
 }: ChatInterfaceProps) => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { openPlaylist, hasPlaylist } = usePlaylistSheet();
+  const [seekDragging, setSeekDragging] = useState(false);
+  const [seekDragValue, setSeekDragValue] = useState(0);
+  const seekDisplayValue = seekDragging ? seekDragValue : (playbackTime?.current || 0);
 
   // Use chat hook for state and methods
   const {
@@ -164,6 +169,13 @@ export const ChatInterface = ({
     }
     triggerSkip(direction < 0 ? -1 : 1);
   }, [triggerSkip]);
+
+  const formatTime = (seconds: number): string => {
+    if (!seconds) return '0:00';
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
+  };
 
   const isInteractive = (target: HTMLElement) =>
     !!target.closest('button, input, [role="slider"], .rc-slider');
@@ -331,8 +343,8 @@ export const ChatInterface = ({
         {/* Record Player - Always Visible, swipe up/down for next/prev */}
         <div
           ref={swipeTargetRef}
-          className="absolute inset-0 flex items-center justify-center pb-20"
-          style={{ touchAction: 'pan-x' }}
+          className="absolute inset-0 flex items-center justify-center pb-36"
+          style={{ touchAction: 'none' }}
         >
           <div ref={swipeContentRef} className="relative z-10 w-full max-w-xl px-8">
             <RecordPlayer
@@ -340,8 +352,6 @@ export const ChatInterface = ({
               isPaused={!isPlaying}
               isTransitioning={isTransitioning}
               togglePlay={togglePlay}
-              playbackTime={playbackTime}
-              onSeek={onSeek}
               isAppleMusicAuthorized={isAppleMusicAuthorized}
               onLinkApple={onLinkApple}
             />
@@ -359,8 +369,57 @@ export const ChatInterface = ({
 
       {/* Command Console - Fixed at Bottom */}
       <div className="absolute bottom-0 left-0 right-0 px-6 pb-5 pt-10 z-30 bg-gradient-to-t from-white via-white/95 to-transparent">
-        {/* Toggle Button — album art (vinyl spin when playing), fallback to icon */}
-        <div className="max-w-xl mx-auto mb-2 flex justify-start">
+        {/* Seek Bar or Apple Music link - above toggle button, outside swipe container */}
+        {currentTrack && !showHistory && !isAppleMusicAuthorized && onLinkApple && (
+          <div className="max-w-sm mx-auto mb-3 flex justify-center">
+            <button
+              onClick={onLinkApple}
+              className="text-sm text-pink-500 hover:text-pink-600 transition-colors font-medium flex items-center gap-1.5"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 18V5l12-2v13" />
+                <circle cx="6" cy="18" r="3" />
+                <circle cx="18" cy="16" r="3" />
+              </svg>
+              Connect Apple Music for full playback
+            </button>
+          </div>
+        )}
+        {currentTrack && !showHistory && isAppleMusicAuthorized && (
+          <div className="max-w-sm mx-auto mb-3 flex items-center gap-2">
+            <span className="text-xs font-mono text-gray-400 tabular-nums shrink-0">
+              {formatTime(seekDisplayValue)}
+            </span>
+            <div className="relative flex-1 h-5 flex items-center">
+              <div className="w-full h-1.5 bg-gray-100 rounded-full pointer-events-none">
+                <div
+                  className="h-full bg-gray-900 rounded-full"
+                  style={{ width: `${(seekDisplayValue / (playbackTime?.total || 1)) * 100}%` }}
+                />
+              </div>
+              <div
+                className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow border border-gray-300 pointer-events-none"
+                style={{ left: `calc(${(seekDisplayValue / (playbackTime?.total || 1)) * 100}% - 6px)` }}
+              />
+              <input
+                type="range"
+                min={0}
+                max={playbackTime?.total || 1}
+                step={0.1}
+                value={seekDisplayValue}
+                onChange={(e) => { setSeekDragging(true); setSeekDragValue(parseFloat(e.target.value)); }}
+                onPointerUp={(e) => { onSeek?.(parseFloat((e.target as HTMLInputElement).value)); setSeekDragging(false); }}
+                className="absolute inset-0 w-full opacity-0 cursor-pointer"
+              />
+            </div>
+            <span className="text-xs font-mono text-gray-400 tabular-nums shrink-0">
+              {formatTime(playbackTime?.total || 0)}
+            </span>
+          </div>
+        )}
+
+        {/* Toggle Button + Mobile Playlist Button */}
+        <div className="max-w-xl mx-auto mb-2 flex items-center">
           <button
             onClick={toggleHistory}
             className="relative w-8 h-8 rounded-full flex items-center justify-center"
@@ -373,7 +432,6 @@ export const ChatInterface = ({
               const hasArt = !!currentTrack && !!artUrl;
 
               if (hasArt && showHistory) {
-                // showHistory: album art visible — spinning when playing, static when paused
                 return (
                   <div className="w-8 h-8 rounded-full overflow-hidden ring-2 ring-gray-200">
                     <img src={artUrl} alt="" className="w-full h-full object-cover" />
@@ -381,7 +439,6 @@ export const ChatInterface = ({
                 );
               }
 
-              // No track or not showHistory — icon button
               return (
                 <div className={`w-8 h-8 rounded-full border flex items-center justify-center transition-colors duration-200 ${
                   showHistory
@@ -401,6 +458,21 @@ export const ChatInterface = ({
               );
             })()}
           </button>
+
+          {/* Playlist button — mobile only, right-aligned, shown when a playlist exists */}
+          {hasPlaylist && (
+            <button
+              onClick={openPlaylist}
+              className="md:hidden ml-auto w-8 h-8 rounded-full border border-gray-200 bg-white flex items-center justify-center text-gray-400 hover:text-gray-600 hover:border-gray-300 transition-colors"
+              title="View Playlist"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19V6l12-3v13" />
+                <circle cx="6" cy="19" r="3" fill="currentColor" stroke="none" />
+                <circle cx="18" cy="16" r="3" fill="currentColor" stroke="none" />
+              </svg>
+            </button>
+          )}
         </div>
 
         {/* Input Bar */}

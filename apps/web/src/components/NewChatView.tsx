@@ -130,7 +130,7 @@ export const NewChatView = ({
 
       {/* Mini Record Player - Shows when playing in background */}
       {isPlaying && (
-        <div className="absolute bottom-6 right-6 z-30">
+        <div className="absolute bottom-20 right-6 md:bottom-6 z-30">
           <div className="relative group cursor-pointer">
             {/* Glow effect */}
             <div className="absolute inset-0 bg-gradient-to-r from-rose-400 to-orange-400 rounded-full blur-md opacity-40 group-hover:opacity-60 transition-opacity animate-pulse" />
@@ -155,7 +155,7 @@ export const NewChatView = ({
       )}
 
       {/* Disclaimer / Footer */}
-      <div className="absolute bottom-6 text-center text-[9px] text-gray-300 tracking-[0.2em] uppercase">
+      <div className="absolute bottom-20 md:bottom-6 text-center text-[9px] text-gray-300 tracking-[0.2em] uppercase">
         Playhead AI v2.1
       </div>
     </div>

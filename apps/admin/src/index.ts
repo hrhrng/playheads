@@ -4,6 +4,7 @@ import { eq, inArray, count, asc } from "drizzle-orm";
 
 interface Env {
   DB: D1Database;
+  RESEND_API_KEY?: string;
 }
 
 export default {
@@ -18,6 +19,31 @@ export default {
     return new Response("Not found", { status: 404 });
   },
 };
+
+// --- Email ---
+
+async function sendApprovalEmail(apiKey: string, to: string): Promise<void> {
+  await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: "The Playheads <auth@playheads.ai>",
+      to,
+      subject: "You're in! Welcome to The Playheads",
+      html: [
+        '<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:480px;margin:0 auto;padding:32px 0">',
+        '<h1 style="font-size:24px;font-weight:600;margin-bottom:16px">You\'re in! 🎵</h1>',
+        '<p style="font-size:16px;line-height:1.6;color:#374151;margin-bottom:24px">Great news — your spot on The Playheads is ready. You can now sign in and start listening.</p>',
+        '<a href="https://playheads.ai" style="display:inline-block;background:#111827;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:500;font-size:14px">Open The Playheads</a>',
+        '<p style="font-size:14px;color:#9ca3af;margin-top:32px">See you inside,<br>The Playheads Team</p>',
+        "</div>",
+      ].join(""),
+    }),
+  });
+}
 
 // --- API ---
 
@@ -84,7 +110,7 @@ async function handleAction(request: Request, env: Env): Promise<Response> {
 
   await db.update(schema.waitlist).set(updates).where(inArray(schema.waitlist.id, ids));
 
-  // Sync waitlist approval to user table
+  // Sync waitlist approval to user table + send notification emails
   if (action === "approve") {
     const entries = await db.select({ email: schema.waitlist.email })
       .from(schema.waitlist)
@@ -92,6 +118,9 @@ async function handleAction(request: Request, env: Env): Promise<Response> {
 
     for (const entry of entries) {
       await syncWaitlistApproval(db, entry.email);
+      if (env.RESEND_API_KEY) {
+        await sendApprovalEmail(env.RESEND_API_KEY, entry.email);
+      }
     }
   }
 
@@ -131,6 +160,12 @@ async function handleInvite(request: Request, env: Env): Promise<Response> {
   }
 
   await syncWaitlistApproval(db, normalized);
+
+  // Send approval notification email
+  if (env.RESEND_API_KEY) {
+    await sendApprovalEmail(env.RESEND_API_KEY, normalized);
+  }
+
   return Response.json({ success: true, message: `${normalized} has been granted access` });
 }
 

@@ -2,6 +2,26 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Safe-area inset support for iPhone notch / home indicator */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .mb-safe {
+    margin-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* Bottom sheet slide-up animation */
+@keyframes slide-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+.animate-slide-up {
+  animation: slide-up 0.3s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+}
+
 /* Animations */
 @keyframes music-bar {
 
@@ -61,6 +81,41 @@
 
 body {
   @apply bg-gemini-bg text-gemini-text font-sans selection:bg-gemini-primary selection:text-white antialiased;
+}
+
+/* Progress bar range input — custom thumb, cross-browser */
+input[type="range"].progress-bar::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  cursor: pointer;
+  margin-top: -6px;
+}
+input[type="range"].progress-bar::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: none;
+  background: #fff;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  cursor: pointer;
+}
+input[type="range"].progress-bar::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+}
+input[type="range"].progress-bar::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: #e5e5e5;
+}
+input[type="range"].progress-bar::-moz-range-progress {
+  height: 4px;
+  border-radius: 2px;
+  background: #1a1a1a;
 }
 
 /* Gemini Scrollbar (Subtle) */

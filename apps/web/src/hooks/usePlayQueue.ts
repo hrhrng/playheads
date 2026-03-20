@@ -38,6 +38,9 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
   const queueRef = useRef(queue);
   queueRef.current = queue;
 
+  // Cache metadata for tracks whose MusicKit items may lack full info
+  const metadataCache = useRef<Map<string, UnifiedTrack>>(new Map());
+
   // ── Backend sync: driven by React state changes ─────────────────
   // Skip the very first render (initial empty state) and restore-driven
   // setQueue calls (we don't want to sync back what we just fetched).
@@ -79,11 +82,20 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
       if (!trackId) return;
       const q = queueRef.current;
       const idx = q.findIndex(t => t.id === trackId);
+      console.log('[usePlayQueue] nowPlayingChange: trackId=', trackId, 'idx=', idx, 'queueLen=', q.length);
       if (idx <= 0) return; // already at head or not found
       setQueue(q.slice(idx));
     });
     return unsub;
   }, [provider]);
+
+  // ── queueItemsDidChange: intentionally NOT subscribed ───────────
+  // React state is the single source of truth for the queue.
+  // All mutations (addTrack, removeTrack, playAtIndex) update React
+  // state directly. Auto-advance is handled by nowPlayingItemDidChange.
+  // Subscribing to onQueueChange caused queue flicker: MusicKit's
+  // internal queue is often incomplete/stale (e.g. 1 track after restore
+  // when React has 12) and would overwrite React state.
 
   // ── Listen for unresolvable IDs from the provider ───────────────
   useEffect(() => {
@@ -97,13 +109,15 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
   // ── Queue operations ────────────────────────────────────────────
 
   const addTrack = useCallback((track: UnifiedTrack) => {
-    setQueue(prev => {
-      const next = [...prev, track];
-      if (provider) {
-        provider.addToNativeQueue(track.id).catch(console.error);
+    metadataCache.current.set(track.id, track);
+    // Directly update React queue — don't rely on MusicKit round-trip
+    setQueue(prev => [...prev, track]);
+    if (provider) {
+      if (!provider.playbackState.currentTrack) {
+        provider.setDisplayTrack(track);
       }
-      return next;
-    });
+      provider.addToNativeQueue(track.id).catch(console.error);
+    }
   }, [provider]);
 
   const removeTrack = useCallback((index: number) => {
@@ -142,11 +156,13 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
 
   /** Called by useMusicProvider during restore — sets queue without triggering sync */
   const setQueueFn = useCallback((tracks: UnifiedTrack[]) => {
+    for (const t of tracks) metadataCache.current.set(t.id, t);
     setQueue(tracks);
   }, []);
 
   /** Mark restore as complete — subsequent state changes will sync to backend */
   const finishRestore = useCallback(() => {
+    console.log('[usePlayQueue] finishRestore: restore complete, MusicKit sync re-enabled');
     isRestoringRef.current = false;
   }, []);
 
