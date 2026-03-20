@@ -29,6 +29,12 @@ export interface Env {
   // Model ID, e.g. "doubao-1.5-pro-32k"
   DOUBAO_MODEL: string;
 
+  // Tavily web search (universal fallback for non-Anthropic providers)
+  TAVILY_API_KEY: string;
+
+  // Encryption key shared with admin worker (AES-256-GCM, 64-char hex)
+  ADMIN_ENCRYPTION_KEY: string;
+
   // Apple Music
   APPLE_MUSIC_TEAM_ID: string;
   APPLE_MUSIC_KEY_ID: string;
