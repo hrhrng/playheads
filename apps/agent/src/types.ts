@@ -29,7 +29,14 @@ export interface Env {
   // Model ID, e.g. "doubao-1.5-pro-32k"
   DOUBAO_MODEL: string;
 
-  // Tavily web search (universal fallback for non-Anthropic providers)
+  // Search provider: "anthropic" (native, Anthropic only) | "brave" | "tavily" | "none"
+  // Defaults: anthropic when LLM_PROVIDER=anthropic, tavily otherwise (if TAVILY_API_KEY set)
+  SEARCH_PROVIDER: string;
+
+  // Brave Search API key (used when SEARCH_PROVIDER=brave)
+  BRAVE_SEARCH_API_KEY: string;
+
+  // Tavily web search (used when SEARCH_PROVIDER=tavily)
   TAVILY_API_KEY: string;
 
   // Encryption key shared with admin worker (AES-256-GCM, 64-char hex)

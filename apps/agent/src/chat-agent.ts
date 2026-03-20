@@ -56,6 +56,64 @@ IMPORTANT:
 
 Be conversational and fun! Keep responses concise.`;
 
+/**
+ * Build a web_search tool based on SEARCH_PROVIDER env var.
+ * Returns undefined when no search provider is configured.
+ *
+ * SEARCH_PROVIDER values: "brave" | "tavily" | "none" (anything else = no search)
+ * Defaults for Anthropic provider are handled in the caller (native webSearch_20250305).
+ */
+function buildWebSearchTool(env: Env) {
+  const provider = (env.SEARCH_PROVIDER || "").toLowerCase();
+
+  if (provider === "brave") {
+    const apiKey = env.BRAVE_SEARCH_API_KEY;
+    if (!apiKey) return undefined;
+    return tool({
+      description: "Search the web for music recommendations, artist info, trending songs, or genre exploration.",
+      inputSchema: z.object({ query: z.string().describe("Search query") }),
+      execute: async ({ query }: { query: string }) => {
+        try {
+          const res = await fetch(
+            `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5`,
+            { headers: { "X-Subscription-Token": apiKey, Accept: "application/json" } }
+          );
+          const data = await res.json() as { web?: { results?: Array<{ title: string; url: string; description: string }> } };
+          const results = data.web?.results || [];
+          if (!results.length) return `No results found for: ${query}`;
+          return results.map((r, i) => `${i + 1}. ${r.title}\n${r.url}\n${r.description}`).join("\n\n");
+        } catch (e) {
+          return `Web search failed: ${e}`;
+        }
+      },
+    });
+  }
+
+  if (provider === "tavily") {
+    const apiKey = env.TAVILY_API_KEY;
+    if (!apiKey) return undefined;
+    return tool({
+      description: "Search the web for music recommendations, artist info, trending songs, or genre exploration.",
+      inputSchema: z.object({ query: z.string().describe("Search query") }),
+      execute: async ({ query }: { query: string }) => {
+        try {
+          const res = await fetch("https://api.tavily.com/search", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+            body: JSON.stringify({ query, max_results: 5, search_depth: "basic" }),
+          });
+          const data = await res.json() as { results?: Array<{ title: string; url: string; content: string }> };
+          return (data.results || []).map((r, i) => `${i + 1}. ${r.title}\n${r.url}\n${r.content}`).join("\n\n");
+        } catch (e) {
+          return `Web search failed: ${e}`;
+        }
+      },
+    });
+  }
+
+  return undefined;
+}
+
 function buildSystemPrompt(state: PlaybackState): string {
   const lines: string[] = [];
 
@@ -201,9 +259,13 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
       const anthropic = createAnthropic({ apiKey: anthropicApiKey, baseURL: anthropicBaseURL });
 
       model = anthropic(dbConfig?.model || this.env.ANTHROPIC_MODEL || "claude-sonnet-4-6") as unknown as Parameters<typeof streamText>[0]["model"];
+      const searchProvider = (this.env.SEARCH_PROVIDER || "anthropic").toLowerCase();
+      const nativeSearch = searchProvider === "anthropic"
+        ? { web_search: anthropic.tools.webSearch_20250305({ maxUses: 5 }) }
+        : (buildWebSearchTool(this.env) ? { web_search: buildWebSearchTool(this.env)! } : {});
       tools = {
         ...createMusicTools({ env: this.env, state: globalState, storefront }),
-        web_search: anthropic.tools.webSearch_20250305({ maxUses: 5 }),
+        ...nativeSearch,
       };
       const thinkingBudget = parseInt(this.env.ANTHROPIC_THINKING_BUDGET || "0");
       maxOutputTokens = thinkingBudget > 0 ? 16384 : 4096;
@@ -237,26 +299,7 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
 
       model = provider(dbConfig?.model || this.env.DOUBAO_MODEL || "doubao-1.5-pro-32k") as unknown as Parameters<typeof streamText>[0]["model"];
 
-      // Tavily web search: universal, has execute(), works with any LLM
-      const tavilyKey = this.env.TAVILY_API_KEY;
-      const webSearchTool = tavilyKey ? tool({
-        description: "Search the web for music recommendations, artist info, trending songs, or genre exploration.",
-        inputSchema: z.object({ query: z.string().describe("Search query") }),
-        execute: async ({ query }: { query: string }) => {
-          try {
-            const res = await fetch("https://api.tavily.com/search", {
-              method: "POST",
-              headers: { "Content-Type": "application/json", Authorization: `Bearer ${tavilyKey}` },
-              body: JSON.stringify({ query, max_results: 5, search_depth: "basic" }),
-            });
-            const data = await res.json() as { results?: Array<{ title: string; url: string; content: string }> };
-            return (data.results || []).map((r) => `${r.title}\n${r.url}\n${r.content}`).join("\n\n");
-          } catch (e) {
-            return `Web search failed: ${e}`;
-          }
-        },
-      }) : undefined;
-
+      const webSearchTool = buildWebSearchTool(this.env);
       tools = {
         ...createMusicTools({ env: this.env, state: globalState, storefront }),
         ...(webSearchTool ? { web_search: webSearchTool } : {}),
