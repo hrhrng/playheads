@@ -55,14 +55,17 @@ export const MessageList = ({ messages, isLoading }: MessageListProps): React.JS
                 {msg.parts.map((part, pIdx) => {
                   // Render each part in order
                   if (part.type === 'text') {
-                    return (
+                    return msg.role === 'user' ? (
                       <div
                         key={`text-${pIdx}`}
-                        className={
-                          msg.role === 'user'
-                            ? 'text-gray-500 text-right italic text-[15px] leading-relaxed'
-                            : 'text-gray-800 text-[15px] leading-relaxed'
-                        }
+                        className="inline-block ml-auto bg-gray-100 rounded-2xl rounded-br-md px-4 py-2.5 text-[15px] leading-relaxed text-gray-800"
+                      >
+                        <MarkdownMessage content={part.content} />
+                      </div>
+                    ) : (
+                      <div
+                        key={`text-${pIdx}`}
+                        className="text-gray-800 text-[15px] leading-relaxed"
                       >
                         <MarkdownMessage content={part.content} />
                       </div>
@@ -94,7 +97,7 @@ export const MessageList = ({ messages, isLoading }: MessageListProps): React.JS
               <div
                 className={`text-[15px] leading-relaxed ${
                   msg.role === 'user'
-                    ? 'text-gray-500 text-right italic'
+                    ? 'inline-block ml-auto bg-gray-100 rounded-2xl rounded-br-md px-4 py-2.5 text-gray-800'
                     : 'text-gray-800'
                 }`}
               >
