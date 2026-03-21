@@ -5,7 +5,6 @@
 
 import { useEffect, useCallback, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { toast } from 'sonner';
 import { RecordPlayer } from './RecordPlayer';
 import { NewChatView } from './NewChatView';
 import { SkeletonLoader } from './SkeletonLoader';
@@ -14,7 +13,7 @@ import { TranscriptOverlay } from './chat/TranscriptOverlay';
 import { useChat } from '../hooks/useChat';
 import { useInitialMessage } from '../hooks/useChatHelpers';
 import { usePlaylistSheet } from '../contexts/PlaylistSheetContext';
-import type { PlaybackTime, Message } from '../types';
+import type { PlaybackTime } from '../types';
 import type { UnifiedTrack } from '../providers/types';
 import type { MusicActions, QueueOperations } from '../hooks/useAgentChatAdapter';
 
@@ -53,6 +52,8 @@ interface ChatInterfaceProps {
   onSkipNext?: () => Promise<void>;
   /** Skip to previous track */
   onSkipPrev?: () => Promise<void>;
+  /** Full queue — queue[0] is now playing, queue[1..] is up next */
+  queue?: UnifiedTrack[];
 }
 
 /**
@@ -82,6 +83,7 @@ export const ChatInterface = ({
   onLinkApple,
   onSkipNext,
   onSkipPrev,
+  queue: queueTracks = [],
 }: ChatInterfaceProps) => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -111,64 +113,46 @@ export const ChatInterface = ({
 
   // Note: Removed initial warning toast as connection handling is now done via overlay and actionable toasts
 
-  // --- Skip gesture handling (touch, mouse drag, wheel, keyboard) ---
-  // Uses callback ref so listeners attach when the DOM element mounts,
-  // even if the initial render shows SkeletonLoader / NewChatView.
-  const swipeContentRef = useRef<HTMLDivElement>(null);
-  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
-  const touchMovedRef = useRef(false);
-  const wheelCooldownRef = useRef(false);
+  // --- TikTok-style vertical swipe ---
+  const swipeContentRef = useRef<HTMLDivElement>(null);   // slider that holds both cards
+  const swipeContainerRef = useRef<HTMLDivElement>(null);  // outer overflow-hidden container
   const swipeCleanupRef = useRef<(() => void) | null>(null);
+  const wheelCooldownRef = useRef(false);
+  const swipeLockedRef = useRef(false);
 
-  // Store latest callbacks in refs so native listeners always see current values
+  // Latest values via refs for native listeners
   const showHistoryRef = useRef(showHistory);
   showHistoryRef.current = showHistory;
   const onSkipNextRef = useRef(onSkipNext);
   onSkipNextRef.current = onSkipNext;
   const onSkipPrevRef = useRef(onSkipPrev);
   onSkipPrevRef.current = onSkipPrev;
+  const queueTracksRef = useRef(queueTracks);
+  queueTracksRef.current = queueTracks;
 
-  // Shared: spring-back animation
-  const springBack = useCallback(() => {
-    const content = swipeContentRef.current;
-    if (content) {
-      content.style.transition = 'transform 0.35s cubic-bezier(0.25, 1.5, 0.5, 1)';
-      content.style.transform = 'translateY(0)';
-    }
-  }, []);
+  // After swipe animation completes, wait for track change to reset slider
+  const pendingResetRef = useRef(false);
+  const currentTrackIdRef = useRef(currentTrack?.id);
 
-  // Shared: apply dampened translateY during drag/swipe
-  const applyDrag = useCallback((dy: number) => {
-    const dampened = Math.sign(dy) * Math.min(Math.abs(dy) * 0.4, 80);
-    const content = swipeContentRef.current;
-    if (content) {
-      content.style.transition = 'none';
-      content.style.transform = `translateY(${dampened}px)`;
+  useEffect(() => {
+    if (currentTrackIdRef.current !== currentTrack?.id) {
+      currentTrackIdRef.current = currentTrack?.id;
+      if (pendingResetRef.current) {
+        const slider = swipeContentRef.current;
+        if (slider) {
+          slider.style.transition = 'none';
+          slider.style.transform = 'translateY(0)';
+        }
+        pendingResetRef.current = false;
+        swipeLockedRef.current = false;
+      }
     }
-  }, []);
+  }, [currentTrack?.id]);
 
-  // Shared: trigger skip based on direction
-  const triggerSkip = useCallback((dy: number) => {
-    if (dy < 0 && onSkipNextRef.current) {
-      onSkipNextRef.current();
-    } else if (dy > 0 && onSkipPrevRef.current) {
-      onSkipPrevRef.current();
-    }
-  }, []);
+  const nextTrack = queueTracks[1] || null;
 
-  // Shared: bounce animation for instant triggers (wheel, keyboard)
-  const bounceAndSkip = useCallback((direction: number) => {
-    const content = swipeContentRef.current;
-    if (content) {
-      content.style.transition = 'none';
-      content.style.transform = `translateY(${direction * 30}px)`;
-      // Force reflow then spring back
-      content.getBoundingClientRect();
-      content.style.transition = 'transform 0.35s cubic-bezier(0.25, 1.5, 0.5, 1)';
-      content.style.transform = 'translateY(0)';
-    }
-    triggerSkip(direction < 0 ? -1 : 1);
-  }, [triggerSkip]);
+  // Ref-based helper for completeSwipe (callable from keyboard useEffect)
+  const completeSwipeRef = useRef<(direction: 'up' | 'down') => void>(() => {});
 
   const formatTime = (seconds: number): string => {
     if (!seconds) return '0:00';
@@ -180,90 +164,171 @@ export const ChatInterface = ({
   const isInteractive = (target: HTMLElement) =>
     !!target.closest('button, input, [role="slider"], .rc-slider');
 
-  // Callback ref: attaches touch + mouse + wheel listeners when the element mounts
+  // Callback ref: sets up all gesture listeners
   const swipeTargetRef = useCallback((el: HTMLDivElement | null) => {
-    // Clean up old listeners
     if (swipeCleanupRef.current) {
       swipeCleanupRef.current();
       swipeCleanupRef.current = null;
     }
     if (!el) return;
+    swipeContainerRef.current = el;
+
+    const getH = () => el.offsetHeight || window.innerHeight;
+
+    const setTransform = (y: number, transition?: string) => {
+      const slider = swipeContentRef.current;
+      if (!slider) return;
+      slider.style.transition = transition || 'none';
+      slider.style.transform = `translateY(${y}px)`;
+    };
+
+    const springBack = () => setTransform(0, 'transform 0.4s cubic-bezier(0.25, 1, 0.5, 1)');
+
+    const completeSwipe = (direction: 'up' | 'down') => {
+      if (swipeLockedRef.current) return;
+      swipeLockedRef.current = true;
+      const h = getH();
+
+      if (direction === 'down') {
+        // Previous: quick bounce + skip (no prev card to show)
+        setTransform(h * 0.12, 'transform 0.15s ease-out');
+        setTimeout(() => {
+          springBack();
+          swipeLockedRef.current = false;
+        }, 160);
+        onSkipPrevRef.current?.();
+        return;
+      }
+
+      // Next: full page slide-up transition
+      const hasNext = !!queueTracksRef.current[1];
+      setTransform(-h, 'transform 0.35s cubic-bezier(0.16, 1, 0.3, 1)');
+
+      if (hasNext) {
+        pendingResetRef.current = true;
+        onSkipNextRef.current?.();
+        // Fallback reset if track doesn't change within 1.5s
+        setTimeout(() => {
+          if (pendingResetRef.current) {
+            setTransform(0);
+            pendingResetRef.current = false;
+            swipeLockedRef.current = false;
+          }
+        }, 1500);
+      } else {
+        // No next track — spring back after brief pause
+        setTimeout(() => {
+          springBack();
+          swipeLockedRef.current = false;
+        }, 200);
+        onSkipNextRef.current?.();
+      }
+    };
+
+    // Expose for keyboard handler
+    completeSwipeRef.current = completeSwipe;
+
+    // --- Gesture state ---
+    let startX = 0, startY = 0, startTime = 0;
+    let currentDy = 0;
+    let isDragging = false;
+    let isVertical: boolean | null = null;
+    let lastY = 0, lastTime = 0;
+
+    const onGestureStart = (x: number, y: number) => {
+      if (showHistoryRef.current || swipeLockedRef.current) return;
+      startX = x; startY = y; startTime = Date.now();
+      currentDy = 0; isDragging = true; isVertical = null;
+      lastY = y; lastTime = startTime;
+    };
+
+    const onGestureMove = (x: number, y: number): boolean => {
+      if (!isDragging || swipeLockedRef.current) return false;
+      const dx = x - startX;
+      const dy = y - startY;
+
+      // Direction lock after 10px
+      if (isVertical === null && (Math.abs(dx) > 10 || Math.abs(dy) > 10)) {
+        isVertical = Math.abs(dy) > Math.abs(dx);
+        if (!isVertical) { isDragging = false; return false; }
+      }
+      if (!isVertical) return false;
+
+      currentDy = dy;
+      lastY = y; lastTime = Date.now();
+
+      const hasNext = !!queueTracksRef.current[1];
+      let appliedDy = dy;
+
+      if (dy > 0) {
+        // Dragging down (prev) — rubber-band, no prev card
+        appliedDy = Math.sign(dy) * Math.sqrt(Math.abs(dy)) * 5;
+      } else if (dy < 0 && !hasNext) {
+        // Dragging up but no next — rubber-band
+        appliedDy = Math.sign(dy) * Math.sqrt(Math.abs(dy)) * 5;
+      }
+      // else: dragging up with next track — 1:1 finger follow
+
+      setTransform(appliedDy);
+      return true;
+    };
+
+    const onGestureEnd = (y: number) => {
+      if (!isDragging || !isVertical) { isDragging = false; return; }
+      isDragging = false;
+
+      const dy = currentDy;
+      const velocity = (y - lastY) / Math.max(Date.now() - lastTime, 1);
+      const h = getH();
+      const distThreshold = h * 0.15;
+      const velThreshold = 0.4;
+
+      if (dy < -distThreshold || velocity < -velThreshold) {
+        completeSwipe('up');
+      } else if (dy > distThreshold || velocity > velThreshold) {
+        completeSwipe('down');
+      } else {
+        springBack();
+      }
+    };
 
     // --- Touch ---
     const onTouchStart = (e: TouchEvent) => {
-      if (showHistoryRef.current) return;
       if (isInteractive(e.target as HTMLElement)) return;
-      touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, time: Date.now() };
-      touchMovedRef.current = false;
+      onGestureStart(e.touches[0].clientX, e.touches[0].clientY);
     };
     const onTouchMove = (e: TouchEvent) => {
-      touchMovedRef.current = true;
-      if (touchStartRef.current) {
-        const dx = Math.abs(e.touches[0].clientX - touchStartRef.current.x);
-        const dy = e.touches[0].clientY - touchStartRef.current.y;
-        if (Math.abs(dy) > 10 && Math.abs(dy) > dx) {
-          e.preventDefault();
-          applyDrag(dy);
-        }
-      }
+      if (onGestureMove(e.touches[0].clientX, e.touches[0].clientY)) e.preventDefault();
     };
-    const onTouchEnd = (e: TouchEvent) => {
-      springBack();
-      if (showHistoryRef.current || !touchStartRef.current || !touchMovedRef.current) {
-        touchStartRef.current = null;
-        return;
-      }
-      const dx = e.changedTouches[0].clientX - touchStartRef.current.x;
-      const dy = e.changedTouches[0].clientY - touchStartRef.current.y;
-      const elapsed = Date.now() - touchStartRef.current.time;
-      touchStartRef.current = null;
-      if (Math.abs(dy) < 60 || elapsed > 400 || Math.abs(dx) > Math.abs(dy) * 0.5) return;
-      triggerSkip(dy);
-    };
+    const onTouchEnd = (e: TouchEvent) => onGestureEnd(e.changedTouches[0].clientY);
 
-    // --- Mouse drag ---
-    let mouseStart: { x: number; y: number; time: number } | null = null;
-    let mouseMoved = false;
+    // --- Mouse ---
+    let mouseActive = false;
     const onMouseDown = (e: MouseEvent) => {
-      if (showHistoryRef.current) return;
       if (isInteractive(e.target as HTMLElement)) return;
-      if (e.button !== 0) return; // left click only
-      mouseStart = { x: e.clientX, y: e.clientY, time: Date.now() };
-      mouseMoved = false;
-      e.preventDefault(); // prevent text selection during drag
+      if (e.button !== 0) return;
+      mouseActive = true;
+      onGestureStart(e.clientX, e.clientY);
+      e.preventDefault();
     };
-    const onMouseMove = (e: MouseEvent) => {
-      if (!mouseStart) return;
-      mouseMoved = true;
-      const dx = Math.abs(e.clientX - mouseStart.x);
-      const dy = e.clientY - mouseStart.y;
-      if (Math.abs(dy) > 10 && Math.abs(dy) > dx) {
-        applyDrag(dy);
-      }
-    };
+    const onMouseMove = (e: MouseEvent) => { if (mouseActive) onGestureMove(e.clientX, e.clientY); };
     const onMouseUp = (e: MouseEvent) => {
-      springBack();
-      if (!mouseStart || !mouseMoved) { mouseStart = null; return; }
-      const dx = e.clientX - mouseStart.x;
-      const dy = e.clientY - mouseStart.y;
-      const elapsed = Date.now() - mouseStart.time;
-      mouseStart = null;
-      if (Math.abs(dy) < 60 || elapsed > 400 || Math.abs(dx) > Math.abs(dy) * 0.5) return;
-      triggerSkip(dy);
+      if (!mouseActive) return;
+      mouseActive = false;
+      onGestureEnd(e.clientY);
     };
 
-    // --- Wheel ---
+    // --- Wheel: full page transition ---
     const onWheel = (e: WheelEvent) => {
-      if (showHistoryRef.current) return;
+      if (showHistoryRef.current || swipeLockedRef.current) return;
       if (wheelCooldownRef.current) return;
-      if (Math.abs(e.deltaY) < 30) return; // ignore tiny scrolls
+      if (Math.abs(e.deltaY) < 30) return;
       wheelCooldownRef.current = true;
       setTimeout(() => { wheelCooldownRef.current = false; }, 800);
-      // Scroll down (positive deltaY) → next, scroll up → prev
-      bounceAndSkip(e.deltaY > 0 ? -1 : 1);
+      completeSwipe(e.deltaY > 0 ? 'up' : 'down');
     };
 
-    // Register all listeners
+    // Register
     el.addEventListener('touchstart', onTouchStart, { passive: true });
     el.addEventListener('touchmove', onTouchMove, { passive: false });
     el.addEventListener('touchend', onTouchEnd, { passive: true });
@@ -281,26 +346,25 @@ export const ChatInterface = ({
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseup', onMouseUp);
     };
-  }, [applyDrag, springBack, triggerSkip, bounceAndSkip]);
+  }, []);
 
-  // --- Keyboard: arrow up/down to skip ---
+  // --- Keyboard: arrow up/down for full page transitions ---
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (showHistoryRef.current) return;
-      // Don't intercept when typing in an input/textarea
       const tag = (e.target as HTMLElement).tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-      if (e.key === 'ArrowUp') {
+      if (e.key === 'ArrowDown') {
         e.preventDefault();
-        bounceAndSkip(1); // up = prev
-      } else if (e.key === 'ArrowDown') {
+        completeSwipeRef.current('up'); // down arrow = next track
+      } else if (e.key === 'ArrowUp') {
         e.preventDefault();
-        bounceAndSkip(-1); // down = next
+        completeSwipeRef.current('down'); // up arrow = prev track
       }
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [bounceAndSkip]);
+  }, []);
 
   // Wrap sendMessage — allow chatting without Apple Music auth;
   // playback errors are caught at the MusicKit layer with reconnect prompts.
@@ -340,23 +404,42 @@ export const ChatInterface = ({
           </div>
         )}
 
-        {/* Record Player - Always Visible, swipe up/down for next/prev */}
+        {/* TikTok-style vertical swipe container */}
         <div
           ref={swipeTargetRef}
-          className="absolute inset-0 flex items-center justify-center pb-36"
+          className="absolute inset-0 overflow-hidden"
           style={{ touchAction: 'none' }}
         >
-          <div ref={swipeContentRef} className="relative z-10 w-full max-w-xl px-8">
-            <RecordPlayer
-              currentTrack={currentTrack}
-              isPaused={!isPlaying}
-              isTransitioning={isTransitioning}
-              togglePlay={togglePlay}
-              isAppleMusicAuthorized={isAppleMusicAuthorized}
-              onLinkApple={onLinkApple}
-            />
-          </div>
+          <div ref={swipeContentRef} className="absolute inset-0" style={{ willChange: 'transform' }}>
+            {/* Current track card */}
+            <div className="absolute inset-0 flex items-center justify-center pb-36">
+              <div className="relative z-10 w-full max-w-xl px-8">
+                <RecordPlayer
+                  currentTrack={currentTrack}
+                  isPaused={!isPlaying}
+                  isTransitioning={isTransitioning}
+                  togglePlay={togglePlay}
+                  isAppleMusicAuthorized={isAppleMusicAuthorized}
+                  onLinkApple={onLinkApple}
+                />
+              </div>
+            </div>
 
+            {/* Next track card (positioned one full page below) */}
+            {nextTrack && (
+              <div className="absolute inset-0 flex items-center justify-center pb-36" style={{ transform: 'translateY(100%)' }}>
+                <div className="relative z-10 w-full max-w-xl px-8 pointer-events-none">
+                  <RecordPlayer
+                    currentTrack={nextTrack}
+                    isPaused={true}
+                    isTransitioning={false}
+                    togglePlay={() => {}}
+                    isAppleMusicAuthorized={isAppleMusicAuthorized}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Transcript Overlay */}
