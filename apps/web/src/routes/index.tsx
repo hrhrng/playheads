@@ -126,6 +126,7 @@ export function HomeRoute({
         onLinkApple={onLinkApple}
         onSkipNext={skipNext}
         onSkipPrev={skipPrev}
+        queue={queue.queue}
       />
     </AppLayout>
   );
@@ -233,6 +234,7 @@ export function ChatRoute({
         onLinkApple={onLinkApple}
         onSkipNext={skipNext}
         onSkipPrev={skipPrev}
+        queue={queue.queue}
       />
     </AppLayout>
   );

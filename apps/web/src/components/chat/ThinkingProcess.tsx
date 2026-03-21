@@ -1,5 +1,10 @@
 /**
- * ThinkingProcess - Thinking process display component
+ * ThinkingProcess - Minimal thinking/reasoning display
+ *
+ * Inspired by Vercel AI Elements <Reasoning>:
+ * - Collapsed by default, same visual weight as ToolCall
+ * - Single-line toggle, no loud colors
+ *
  * @module components/chat/ThinkingProcess
  */
 
@@ -10,38 +15,37 @@ interface ThinkingProcessProps {
   content: string;
 }
 
-/**
- * ThinkingProcess - 简洁的思考过程展示
- *
- * 设计理念：
- * - 低调展示，不抢主要内容的视觉焦点
- * - 默认折叠，节省空间
- */
 export const ThinkingProcess = ({ content }: ThinkingProcessProps): React.JSX.Element | null => {
-  const [isExpanded, setIsExpanded] = useState<boolean>(false);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   if (!content) return null;
 
   return (
-    <div className="text-sm w-full border border-indigo-200 bg-indigo-50/30 rounded-lg overflow-hidden">
-      <div
-        className="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-indigo-100/30 transition-colors"
+    <div className="group">
+      <button
+        type="button"
+        className="flex items-center gap-2 w-full text-left py-1 text-xs text-gray-500 hover:text-gray-700 transition-colors"
         onClick={() => setIsExpanded(!isExpanded)}
       >
-        <div className="flex items-center gap-2">
-          <span className="text-sm">💭</span>
-          <span className="text-xs font-medium text-indigo-700 font-mono">
-            Thinking
-          </span>
-        </div>
-        <span className="text-gray-400 text-xs">
-          {isExpanded ? '▼' : '▶'}
-        </span>
-      </div>
+        <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-violet-300" />
+        <span className="font-medium">Thinking</span>
+        <svg
+          className={`w-3 h-3 ml-auto shrink-0 text-gray-300 transition-transform duration-200 ${
+            isExpanded ? 'rotate-90' : ''
+          }`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+        </svg>
+      </button>
 
       {isExpanded && (
-        <div className="border-t border-indigo-200 px-3 py-2 text-xs text-gray-700 italic leading-relaxed bg-white/50">
-          {content}
+        <div className="ml-3.5 pl-3 border-l border-gray-100 pb-2">
+          <p className="text-[11px] text-gray-500 italic leading-relaxed whitespace-pre-wrap">
+            {content}
+          </p>
         </div>
       )}
     </div>

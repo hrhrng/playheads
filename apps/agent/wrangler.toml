@@ -25,8 +25,29 @@ invocation_logs = true
 head_sampling_rate = 1
 
 [vars]
+# LLM provider: "anthropic" (default) or "doubao"
+LLM_PROVIDER = "anthropic"
+
+# Anthropic settings (used when LLM_PROVIDER=anthropic)
 ANTHROPIC_MODEL = "claude-sonnet-4-6"
-ANTHROPIC_THINKING_BUDGET = "0"
+ANTHROPIC_THINKING_BUDGET = "5000"
+
+# Doubao (ByteDance Volcano Engine Ark) settings (used when LLM_PROVIDER=doubao)
+# Secret: set via `wrangler secret put DOUBAO_API_KEY`
+DOUBAO_MODEL = "doubao-1.5-pro-32k"
+
 APPLE_MUSIC_TOKEN_TTL_SECONDS = "3600"
 CLOUDFLARE_ACCOUNT_ID = "44af79e51582ca20c9003eb926540242"
 AI_GATEWAY_ID = "clash"
+
+# Search provider: "anthropic" (native, Anthropic LLM only) | "brave" | "tavily" | "none"
+# Switch to "brave" or "tavily" to use external search APIs with any LLM provider.
+SEARCH_PROVIDER = "anthropic"
+
+# Secrets (set via `wrangler secret put <NAME>`)
+# ADMIN_ENCRYPTION_KEY   — same 64-char hex as playheads-admin; used to decrypt DB keys at runtime
+# TAVILY_API_KEY         — Tavily search API key (https://tavily.com); used when SEARCH_PROVIDER=tavily
+# BRAVE_SEARCH_API_KEY   — Brave Search API key (https://brave.com/search/api); used when SEARCH_PROVIDER=brave
+# CF_AIG_TOKEN           — Cloudflare AI Gateway token (Anthropic env-based fallback)
+# DOUBAO_API_KEY         — Doubao API key (env-based fallback when no DB config)
+# APPLE_MUSIC_TEAM_ID, APPLE_MUSIC_KEY_ID, APPLE_MUSIC_PRIVATE_KEY

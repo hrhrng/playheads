@@ -1,10 +1,16 @@
 /**
- * ToolCall - Tool call display component
+ * ToolCall - Clean, collapsible tool call display
+ *
+ * Design inspired by Vercel AI Elements:
+ * - Collapsed by default — single line with status dot + name + chevron
+ * - Progressive disclosure — expand on click for details
+ * - No raw JSON by default — show meaningful summaries
+ * - Subtle styling — no loud colored backgrounds
+ *
  * @module components/chat/ToolCall
  */
 
 import { useState } from 'react';
-import type { ToolCallPart } from '../../types';
 
 interface ToolCallProps {
   /** Unique identifier for this tool call */
@@ -19,101 +25,115 @@ interface ToolCallProps {
   status?: 'pending' | 'success' | 'error';
 }
 
-/**
- * ToolCall - 简洁的工具调用展示组件
- *
- * 设计理念：
- * - 简洁紧凑，不占用过多空间
- * - 状态通过图标和颜色清晰表达
- * - 保持音乐主题但更低调
- */
+/** Human-readable tool names */
+const TOOL_LABELS: Record<string, string> = {
+  search_music: 'Search Music',
+  web_search: 'Web Search',
+  play_track: 'Play Track',
+  skip_next: 'Skip Next',
+  add_to_queue: 'Add to Queue',
+  remove_from_playlist: 'Remove from Playlist',
+  get_now_playing: 'Now Playing',
+  get_playlist: 'Get Playlist',
+};
+
+/** Summarize tool args into a short, readable string */
+function summarizeArgs(toolName: string, args: Record<string, unknown>): string | null {
+  if (!args || Object.keys(args).length === 0) return null;
+
+  // For search tools, show the query
+  if (args.query && typeof args.query === 'string') {
+    return `"${args.query}"`;
+  }
+  // For play tools, show the track name
+  if (args.track_name && typeof args.track_name === 'string') {
+    const artist = args.artist_name ? ` — ${args.artist_name}` : '';
+    return `${args.track_name}${artist}`;
+  }
+  if (args.name && typeof args.name === 'string') {
+    return args.name as string;
+  }
+
+  return null;
+}
+
 export const ToolCall = ({
   id,
   tool_name,
   args,
   result,
-  status = 'pending'
+  status = 'pending',
 }: ToolCallProps): React.JSX.Element => {
-  const [isExpanded, setIsExpanded] = useState<boolean>(true);  // 默认展开
+  const [isExpanded, setIsExpanded] = useState(false);
 
-  // 工具简化名称
-  const toolDisplayNames: Record<string, string> = {
-    search_music: 'Search',
-    web_search: 'Web Search',
-    play_track: 'Play',
-    skip_next: 'Skip',
-    add_to_queue: 'Add to Queue',
-    remove_from_playlist: 'Remove',
-    get_now_playing: 'Now Playing',
-    get_playlist: 'Get Playlist'
-  };
+  const label = TOOL_LABELS[tool_name] || tool_name || 'Tool';
+  const summary = summarizeArgs(tool_name, args);
 
-  // 状态配置
-  type StatusConfig = {
-    icon: string;
-    color: string;
-    iconClass: string;
-  };
-
-  const statusConfig: Record<string, StatusConfig> = {
-    pending: { icon: '○', color: 'text-blue-500 bg-blue-50/50 border-blue-200', iconClass: 'animate-pulse' },
-    success: { icon: '✓', color: 'text-green-600 bg-green-50/50 border-green-200', iconClass: '' },
-    error: { icon: '✗', color: 'text-red-600 bg-red-50/50 border-red-200', iconClass: '' }
-  };
-
-  const config = statusConfig[status] || statusConfig.pending;
-  const displayName = toolDisplayNames[tool_name] || tool_name || 'Tool';  // 确保总有显示名称
+  // Status dot colors
+  const dotClass =
+    status === 'pending'
+      ? 'bg-blue-400 animate-pulse'
+      : status === 'error'
+        ? 'bg-red-400'
+        : 'bg-green-400';
 
   return (
-    <div className={`text-sm w-full border rounded-lg overflow-hidden ${config.color}`}>
-      {/* Header - 总是可见 */}
-      <div
-        className="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-black/5 transition-colors"
+    <div className="group">
+      {/* Header — always visible, single compact line */}
+      <button
+        type="button"
+        className="flex items-center gap-2 w-full text-left py-1 text-xs text-gray-500 hover:text-gray-700 transition-colors"
         onClick={() => setIsExpanded(!isExpanded)}
       >
-        <div className="flex items-center gap-2">
-          <span className={`font-mono text-base ${config.iconClass}`}>{config.icon}</span>
-          <span className="font-medium font-mono text-xs tracking-wide">
-            {displayName}
-          </span>
-        </div>
+        {/* Status dot */}
+        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotClass}`} />
 
-        <div className="text-gray-400 text-xs">
-          {isExpanded ? '▼' : '▶'}
-        </div>
-      </div>
+        {/* Tool name */}
+        <span className="font-medium">{label}</span>
 
-      {/* Details - 默认展开 */}
+        {/* Inline summary (e.g. search query) */}
+        {summary && !isExpanded && (
+          <span className="text-gray-400 truncate">{summary}</span>
+        )}
+
+        {/* Chevron */}
+        <svg
+          className={`w-3 h-3 ml-auto shrink-0 text-gray-300 transition-transform duration-200 ${
+            isExpanded ? 'rotate-90' : ''
+          }`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+        </svg>
+      </button>
+
+      {/* Expanded details */}
       {isExpanded && (
-        <div className="border-t px-3 pb-3 pt-2 bg-white/50">
-          <div className="space-y-2">
-            {/* Arguments — hide if empty (e.g. server-side tools like web_search) */}
-            {args && Object.keys(args).length > 0 && (
+        <div className="ml-3.5 pl-3 border-l border-gray-100 pb-2 space-y-2 text-xs">
+          {/* Input */}
+          {args && Object.keys(args).length > 0 && (
             <div>
-              <div className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-1">
-                INPUT
-              </div>
-              <pre className="bg-white border border-gray-200 p-2 rounded text-[11px] overflow-x-auto font-mono text-gray-700">
+              <div className="text-[10px] uppercase tracking-wider text-gray-400 mb-1">Input</div>
+              <pre className="bg-gray-50 rounded-md p-2 text-[11px] font-mono text-gray-600 overflow-x-auto whitespace-pre-wrap break-words">
                 {JSON.stringify(args, null, 2)}
               </pre>
             </div>
-            )}
+          )}
 
-            {/* Result */}
-            <div>
-              <div className="text-[10px] uppercase tracking-wider text-gray-500 font-semibold mb-1">
-                OUTPUT
-              </div>
-              {result ? (
-                <pre className="bg-white border border-gray-200 p-2 rounded text-[11px] overflow-x-auto font-mono text-gray-700 whitespace-pre-wrap break-words max-h-48">
-                  {typeof result === 'string' ? result : JSON.stringify(result, null, 2)}
-                </pre>
-              ) : (
-                <div className="bg-white border border-gray-200 p-2 rounded text-[11px] font-mono text-gray-400 italic">
-                  {status === 'pending' ? 'Executing...' : 'No output'}
-                </div>
-              )}
-            </div>
+          {/* Output */}
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-gray-400 mb-1">Output</div>
+            {result ? (
+              <pre className="bg-gray-50 rounded-md p-2 text-[11px] font-mono text-gray-600 overflow-x-auto whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
+                {typeof result === 'string' ? result : JSON.stringify(result, null, 2)}
+              </pre>
+            ) : (
+              <span className="text-gray-400 italic text-[11px]">
+                {status === 'pending' ? 'Running…' : 'No output'}
+              </span>
+            )}
           </div>
         </div>
       )}

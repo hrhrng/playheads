@@ -3,9 +3,8 @@
  * @module components/ChatInterface
  */
 
-import { useEffect, useCallback, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { toast } from 'sonner';
 import { RecordPlayer } from './RecordPlayer';
 import { NewChatView } from './NewChatView';
 import { SkeletonLoader } from './SkeletonLoader';
@@ -17,7 +16,7 @@ import { useChat } from '../hooks/useChat';
 import { useLyrics } from '../hooks/useLyrics';
 import { useInitialMessage } from '../hooks/useChatHelpers';
 import { usePlaylistSheet } from '../contexts/PlaylistSheetContext';
-import type { PlaybackTime, Message } from '../types';
+import type { PlaybackTime } from '../types';
 import type { UnifiedTrack } from '../providers/types';
 import type { MusicActions, QueueOperations } from '../hooks/useAgentChatAdapter';
 
@@ -56,6 +55,8 @@ interface ChatInterfaceProps {
   onSkipNext?: () => Promise<void>;
   /** Skip to previous track */
   onSkipPrev?: () => Promise<void>;
+  /** Full queue — queue[0] is now playing, queue[1..] is up next */
+  queue?: UnifiedTrack[];
 }
 
 /**
@@ -85,6 +86,7 @@ export const ChatInterface = ({
   onLinkApple,
   onSkipNext,
   onSkipPrev,
+  queue: queueTracks = [],
 }: ChatInterfaceProps) => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -114,67 +116,6 @@ export const ChatInterface = ({
     onSessionCreated,
   });
 
-  // Note: Removed initial warning toast as connection handling is now done via overlay and actionable toasts
-
-  // --- Skip gesture handling (touch, mouse drag, wheel, keyboard) ---
-  // Uses callback ref so listeners attach when the DOM element mounts,
-  // even if the initial render shows SkeletonLoader / NewChatView.
-  const swipeContentRef = useRef<HTMLDivElement>(null);
-  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
-  const touchMovedRef = useRef(false);
-  const wheelCooldownRef = useRef(false);
-  const swipeCleanupRef = useRef<(() => void) | null>(null);
-
-  // Store latest callbacks in refs so native listeners always see current values
-  const showHistoryRef = useRef(showHistory);
-  showHistoryRef.current = showHistory;
-  const onSkipNextRef = useRef(onSkipNext);
-  onSkipNextRef.current = onSkipNext;
-  const onSkipPrevRef = useRef(onSkipPrev);
-  onSkipPrevRef.current = onSkipPrev;
-
-  // Shared: spring-back animation
-  const springBack = useCallback(() => {
-    const content = swipeContentRef.current;
-    if (content) {
-      content.style.transition = 'transform 0.35s cubic-bezier(0.25, 1.5, 0.5, 1)';
-      content.style.transform = 'translateY(0)';
-    }
-  }, []);
-
-  // Shared: apply dampened translateY during drag/swipe
-  const applyDrag = useCallback((dy: number) => {
-    const dampened = Math.sign(dy) * Math.min(Math.abs(dy) * 0.4, 80);
-    const content = swipeContentRef.current;
-    if (content) {
-      content.style.transition = 'none';
-      content.style.transform = `translateY(${dampened}px)`;
-    }
-  }, []);
-
-  // Shared: trigger skip based on direction
-  const triggerSkip = useCallback((dy: number) => {
-    if (dy < 0 && onSkipNextRef.current) {
-      onSkipNextRef.current();
-    } else if (dy > 0 && onSkipPrevRef.current) {
-      onSkipPrevRef.current();
-    }
-  }, []);
-
-  // Shared: bounce animation for instant triggers (wheel, keyboard)
-  const bounceAndSkip = useCallback((direction: number) => {
-    const content = swipeContentRef.current;
-    if (content) {
-      content.style.transition = 'none';
-      content.style.transform = `translateY(${direction * 30}px)`;
-      // Force reflow then spring back
-      content.getBoundingClientRect();
-      content.style.transition = 'transform 0.35s cubic-bezier(0.25, 1.5, 0.5, 1)';
-      content.style.transform = 'translateY(0)';
-    }
-    triggerSkip(direction < 0 ? -1 : 1);
-  }, [triggerSkip]);
-
   const formatTime = (seconds: number): string => {
     if (!seconds) return '0:00';
     const m = Math.floor(seconds / 60);
@@ -182,130 +123,116 @@ export const ChatInterface = ({
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
-  const isInteractive = (target: HTMLElement) =>
-    !!target.closest('button, input, [role="slider"], .rc-slider');
+  // --- Native scroll-snap vertical swipe (TikTok-style physics) ---
+  // Uses CSS scroll-snap for native inertia, momentum, and dampening.
+  // Layout: [prev placeholder] [current card] [next card]
+  // Always scrolled to the middle card (index 1). When the user scrolls
+  // to prev/next, we fire skip and reset scroll position on track change.
 
-  // Callback ref: attaches touch + mouse + wheel listeners when the element mounts
-  const swipeTargetRef = useCallback((el: HTMLDivElement | null) => {
-    // Clean up old listeners
-    if (swipeCleanupRef.current) {
-      swipeCleanupRef.current();
-      swipeCleanupRef.current = null;
-    }
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const isResettingRef = useRef(false);
+  const scrollTimerRef = useRef<number>(0);
+  const pendingResetRef = useRef(false);
+  const currentTrackIdRef = useRef(currentTrack?.id);
+
+  const onSkipNextRef = useRef(onSkipNext);
+  onSkipNextRef.current = onSkipNext;
+  const onSkipPrevRef = useRef(onSkipPrev);
+  onSkipPrevRef.current = onSkipPrev;
+  const showHistoryRef = useRef(showHistory);
+  showHistoryRef.current = showHistory;
+
+  const nextTrack = queueTracks[1] || null;
+
+  // Scroll to middle card (current) on mount
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    // Use rAF to ensure layout is computed
+    requestAnimationFrame(() => {
+      el.scrollTo({ top: el.clientHeight, behavior: 'instant' as ScrollBehavior });
+    });
+  }, [sessionId]); // re-center when session changes
+
+  // Detect scroll settle → fire skip if landed on prev/next card
+  useEffect(() => {
+    const el = scrollRef.current;
     if (!el) return;
 
-    // --- Touch ---
-    const onTouchStart = (e: TouchEvent) => {
-      if (showHistoryRef.current) return;
-      if (isInteractive(e.target as HTMLElement)) return;
-      touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, time: Date.now() };
-      touchMovedRef.current = false;
+    const onScroll = () => {
+      if (isResettingRef.current) return;
+      clearTimeout(scrollTimerRef.current);
+      scrollTimerRef.current = window.setTimeout(() => {
+        const page = Math.round(el.scrollTop / el.clientHeight);
+        if (page === 0 && !pendingResetRef.current) {
+          pendingResetRef.current = true;
+          onSkipPrevRef.current?.();
+          // Fallback: reset after 1.5s if track doesn't change
+          setTimeout(() => {
+            if (pendingResetRef.current) {
+              isResettingRef.current = true;
+              el.scrollTo({ top: el.clientHeight, behavior: 'instant' as ScrollBehavior });
+              requestAnimationFrame(() => { isResettingRef.current = false; pendingResetRef.current = false; });
+            }
+          }, 1500);
+        } else if (page >= 2 && !pendingResetRef.current) {
+          pendingResetRef.current = true;
+          onSkipNextRef.current?.();
+          setTimeout(() => {
+            if (pendingResetRef.current) {
+              isResettingRef.current = true;
+              el.scrollTo({ top: el.clientHeight, behavior: 'instant' as ScrollBehavior });
+              requestAnimationFrame(() => { isResettingRef.current = false; pendingResetRef.current = false; });
+            }
+          }, 1500);
+        }
+      }, 80);
     };
-    const onTouchMove = (e: TouchEvent) => {
-      touchMovedRef.current = true;
-      if (touchStartRef.current) {
-        const dx = Math.abs(e.touches[0].clientX - touchStartRef.current.x);
-        const dy = e.touches[0].clientY - touchStartRef.current.y;
-        if (Math.abs(dy) > 10 && Math.abs(dy) > dx) {
-          e.preventDefault();
-          applyDrag(dy);
+
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      el.removeEventListener('scroll', onScroll);
+      clearTimeout(scrollTimerRef.current);
+    };
+  }, []);
+
+  // When track changes after a skip, reset scroll to center
+  useEffect(() => {
+    if (currentTrackIdRef.current !== currentTrack?.id) {
+      currentTrackIdRef.current = currentTrack?.id;
+      if (pendingResetRef.current) {
+        const el = scrollRef.current;
+        if (el) {
+          isResettingRef.current = true;
+          el.scrollTo({ top: el.clientHeight, behavior: 'instant' as ScrollBehavior });
+          requestAnimationFrame(() => {
+            isResettingRef.current = false;
+            pendingResetRef.current = false;
+          });
         }
       }
-    };
-    const onTouchEnd = (e: TouchEvent) => {
-      springBack();
-      if (showHistoryRef.current || !touchStartRef.current || !touchMovedRef.current) {
-        touchStartRef.current = null;
-        return;
-      }
-      const dx = e.changedTouches[0].clientX - touchStartRef.current.x;
-      const dy = e.changedTouches[0].clientY - touchStartRef.current.y;
-      const elapsed = Date.now() - touchStartRef.current.time;
-      touchStartRef.current = null;
-      if (Math.abs(dy) < 60 || elapsed > 400 || Math.abs(dx) > Math.abs(dy) * 0.5) return;
-      triggerSkip(dy);
-    };
+    }
+  }, [currentTrack?.id]);
 
-    // --- Mouse drag ---
-    let mouseStart: { x: number; y: number; time: number } | null = null;
-    let mouseMoved = false;
-    const onMouseDown = (e: MouseEvent) => {
-      if (showHistoryRef.current) return;
-      if (isInteractive(e.target as HTMLElement)) return;
-      if (e.button !== 0) return; // left click only
-      mouseStart = { x: e.clientX, y: e.clientY, time: Date.now() };
-      mouseMoved = false;
-      e.preventDefault(); // prevent text selection during drag
-    };
-    const onMouseMove = (e: MouseEvent) => {
-      if (!mouseStart) return;
-      mouseMoved = true;
-      const dx = Math.abs(e.clientX - mouseStart.x);
-      const dy = e.clientY - mouseStart.y;
-      if (Math.abs(dy) > 10 && Math.abs(dy) > dx) {
-        applyDrag(dy);
-      }
-    };
-    const onMouseUp = (e: MouseEvent) => {
-      springBack();
-      if (!mouseStart || !mouseMoved) { mouseStart = null; return; }
-      const dx = e.clientX - mouseStart.x;
-      const dy = e.clientY - mouseStart.y;
-      const elapsed = Date.now() - mouseStart.time;
-      mouseStart = null;
-      if (Math.abs(dy) < 60 || elapsed > 400 || Math.abs(dx) > Math.abs(dy) * 0.5) return;
-      triggerSkip(dy);
-    };
-
-    // --- Wheel ---
-    const onWheel = (e: WheelEvent) => {
-      if (showHistoryRef.current) return;
-      if (wheelCooldownRef.current) return;
-      if (Math.abs(e.deltaY) < 30) return; // ignore tiny scrolls
-      wheelCooldownRef.current = true;
-      setTimeout(() => { wheelCooldownRef.current = false; }, 800);
-      // Scroll down (positive deltaY) → next, scroll up → prev
-      bounceAndSkip(e.deltaY > 0 ? -1 : 1);
-    };
-
-    // Register all listeners
-    el.addEventListener('touchstart', onTouchStart, { passive: true });
-    el.addEventListener('touchmove', onTouchMove, { passive: false });
-    el.addEventListener('touchend', onTouchEnd, { passive: true });
-    el.addEventListener('mousedown', onMouseDown);
-    el.addEventListener('wheel', onWheel, { passive: true });
-    document.addEventListener('mousemove', onMouseMove);
-    document.addEventListener('mouseup', onMouseUp);
-
-    swipeCleanupRef.current = () => {
-      el.removeEventListener('touchstart', onTouchStart);
-      el.removeEventListener('touchmove', onTouchMove);
-      el.removeEventListener('touchend', onTouchEnd);
-      el.removeEventListener('mousedown', onMouseDown);
-      el.removeEventListener('wheel', onWheel);
-      document.removeEventListener('mousemove', onMouseMove);
-      document.removeEventListener('mouseup', onMouseUp);
-    };
-  }, [applyDrag, springBack, triggerSkip, bounceAndSkip]);
-
-  // --- Keyboard: arrow up/down to skip ---
+  // Keyboard: arrow keys trigger programmatic smooth scroll
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (showHistoryRef.current) return;
-      // Don't intercept when typing in an input/textarea
       const tag = (e.target as HTMLElement).tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-      if (e.key === 'ArrowUp') {
+      const el = scrollRef.current;
+      if (!el) return;
+      if (e.key === 'ArrowDown') {
         e.preventDefault();
-        bounceAndSkip(1); // up = prev
-      } else if (e.key === 'ArrowDown') {
+        el.scrollBy({ top: el.clientHeight, behavior: 'smooth' });
+      } else if (e.key === 'ArrowUp') {
         e.preventDefault();
-        bounceAndSkip(-1); // down = next
+        el.scrollBy({ top: -el.clientHeight, behavior: 'smooth' });
       }
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [bounceAndSkip]);
+  }, []);
 
   // Wrap sendMessage — allow chatting without Apple Music auth;
   // playback errors are caught at the MusicKit layer with reconnect prompts.
@@ -345,24 +272,94 @@ export const ChatInterface = ({
           </div>
         )}
 
-        {/* Record Player - Always Visible, swipe up/down for next/prev */}
+        {/* Scroll-snap vertical swipe container */}
         <div
-          ref={swipeTargetRef}
-          className="absolute inset-0 flex items-center justify-center pb-36"
-          style={{ touchAction: 'none' }}
+          ref={scrollRef}
+          className={`absolute inset-0 snap-y snap-mandatory no-scrollbar ${
+            showHistory ? 'overflow-hidden' : 'overflow-y-scroll'
+          }`}
+          style={{ overscrollBehaviorY: 'contain' }}
         >
-          <div ref={swipeContentRef} className="relative z-10 w-full max-w-xl px-8">
-            <RecordPlayer
-              currentTrack={currentTrack}
-              isPaused={!isPlaying}
-              isTransitioning={isTransitioning}
-              togglePlay={togglePlay}
-              isAppleMusicAuthorized={isAppleMusicAuthorized}
-              onLinkApple={onLinkApple}
-            />
-            <MiniLyrics lyrics={lyrics} onClick={() => setShowLyrics(true)} />
+          {/* Previous card placeholder — enables swipe-down for prev track */}
+          <div className="h-full shrink-0 snap-start snap-always" />
+
+          {/* Current track card */}
+          <div className="h-full shrink-0 snap-start snap-always flex flex-col items-center justify-center pb-36">
+            <div className="relative z-10 w-full max-w-xl px-8">
+              <RecordPlayer
+                currentTrack={currentTrack}
+                isPaused={!isPlaying}
+                isTransitioning={isTransitioning}
+                togglePlay={togglePlay}
+                isAppleMusicAuthorized={isAppleMusicAuthorized}
+                onLinkApple={onLinkApple}
+              />
+              <MiniLyrics lyrics={lyrics} onClick={() => setShowLyrics(true)} />
+            </div>
+            {/* Seek bar — directly below album art, moves with swipe */}
+            {currentTrack && !showHistory && !isAppleMusicAuthorized && onLinkApple && (
+              <div className="w-full max-w-sm px-8 mt-4 flex justify-center">
+                <button
+                  onClick={onLinkApple}
+                  className="text-sm text-pink-500 hover:text-pink-600 transition-colors font-medium flex items-center gap-1.5"
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M9 18V5l12-2v13" />
+                    <circle cx="6" cy="18" r="3" />
+                    <circle cx="18" cy="16" r="3" />
+                  </svg>
+                  Connect Apple Music for full playback
+                </button>
+              </div>
+            )}
+            {currentTrack && !showHistory && isAppleMusicAuthorized && (
+              <div className="w-full max-w-sm px-8 mt-4 flex items-center gap-2">
+                <span className="text-xs font-mono text-gray-400 tabular-nums shrink-0">
+                  {formatTime(seekDisplayValue)}
+                </span>
+                <div className="relative flex-1 h-5 flex items-center">
+                  <div className="w-full h-1.5 bg-gray-100 rounded-full pointer-events-none">
+                    <div
+                      className="h-full bg-gray-900 rounded-full"
+                      style={{ width: `${(seekDisplayValue / (playbackTime?.total || 1)) * 100}%` }}
+                    />
+                  </div>
+                  <div
+                    className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow border border-gray-300 pointer-events-none"
+                    style={{ left: `calc(${(seekDisplayValue / (playbackTime?.total || 1)) * 100}% - 6px)` }}
+                  />
+                  <input
+                    type="range"
+                    min={0}
+                    max={playbackTime?.total || 1}
+                    step={0.1}
+                    value={seekDisplayValue}
+                    onChange={(e) => { setSeekDragging(true); setSeekDragValue(parseFloat(e.target.value)); }}
+                    onPointerUp={(e) => { onSeek?.(parseFloat((e.target as HTMLInputElement).value)); setSeekDragging(false); }}
+                    className="absolute inset-0 w-full opacity-0 cursor-pointer"
+                  />
+                </div>
+                <span className="text-xs font-mono text-gray-400 tabular-nums shrink-0">
+                  {formatTime(playbackTime?.total || 0)}
+                </span>
+              </div>
+            )}
           </div>
 
+          {/* Next track card */}
+          {nextTrack && (
+            <div className="h-full shrink-0 snap-start snap-always flex flex-col items-center justify-center pb-36">
+              <div className="relative z-10 w-full max-w-xl px-8 pointer-events-none">
+                <RecordPlayer
+                  currentTrack={nextTrack}
+                  isPaused={true}
+                  isTransitioning={false}
+                  togglePlay={() => {}}
+                  isAppleMusicAuthorized={isAppleMusicAuthorized}
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Transcript Overlay */}
@@ -383,55 +380,6 @@ export const ChatInterface = ({
 
       {/* Command Console - Fixed at Bottom */}
       <div className="absolute bottom-0 left-0 right-0 px-6 pb-5 pt-10 z-30 bg-gradient-to-t from-white via-white/95 to-transparent">
-        {/* Seek Bar or Apple Music link - above toggle button, outside swipe container */}
-        {currentTrack && !showHistory && !isAppleMusicAuthorized && onLinkApple && (
-          <div className="max-w-sm mx-auto mb-3 flex justify-center">
-            <button
-              onClick={onLinkApple}
-              className="text-sm text-pink-500 hover:text-pink-600 transition-colors font-medium flex items-center gap-1.5"
-            >
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M9 18V5l12-2v13" />
-                <circle cx="6" cy="18" r="3" />
-                <circle cx="18" cy="16" r="3" />
-              </svg>
-              Connect Apple Music for full playback
-            </button>
-          </div>
-        )}
-        {currentTrack && !showHistory && isAppleMusicAuthorized && (
-          <div className="max-w-sm mx-auto mb-3 flex items-center gap-2">
-            <span className="text-xs font-mono text-gray-400 tabular-nums shrink-0">
-              {formatTime(seekDisplayValue)}
-            </span>
-            <div className="relative flex-1 h-5 flex items-center">
-              <div className="w-full h-1.5 bg-gray-100 rounded-full pointer-events-none">
-                <div
-                  className="h-full bg-gray-900 rounded-full"
-                  style={{ width: `${(seekDisplayValue / (playbackTime?.total || 1)) * 100}%` }}
-                />
-              </div>
-              <div
-                className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow border border-gray-300 pointer-events-none"
-                style={{ left: `calc(${(seekDisplayValue / (playbackTime?.total || 1)) * 100}% - 6px)` }}
-              />
-              <input
-                type="range"
-                min={0}
-                max={playbackTime?.total || 1}
-                step={0.1}
-                value={seekDisplayValue}
-                onChange={(e) => { setSeekDragging(true); setSeekDragValue(parseFloat(e.target.value)); }}
-                onPointerUp={(e) => { onSeek?.(parseFloat((e.target as HTMLInputElement).value)); setSeekDragging(false); }}
-                className="absolute inset-0 w-full opacity-0 cursor-pointer"
-              />
-            </div>
-            <span className="text-xs font-mono text-gray-400 tabular-nums shrink-0">
-              {formatTime(playbackTime?.total || 0)}
-            </span>
-          </div>
-        )}
-
         {/* Toggle Button + Mobile Playlist Button */}
         <div className="max-w-xl mx-auto mb-2 flex items-center">
           <button
