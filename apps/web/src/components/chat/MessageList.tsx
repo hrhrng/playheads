@@ -48,7 +48,7 @@ export const MessageList = ({ messages, isLoading }: MessageListProps): React.JS
           }`}
         >
           {/* Unified message container */}
-          <div className="w-full max-w-[90%]">
+          <div className={`max-w-[90%] ${msg.role === 'user' ? 'ml-auto' : ''}`}>
             {isModernMessage(msg) ? (
               // New format: render parts in chronological order
               <div className="space-y-3">
