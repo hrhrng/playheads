@@ -36,9 +36,11 @@ export const TranscriptOverlay = ({
         Studio Transcript
       </h3>
 
-      <div className="w-full max-w-xl px-6 overflow-y-auto no-scrollbar pb-44">
+      <div className="w-full px-6 overflow-y-auto no-scrollbar pb-44">
+      <div className="max-w-xl mx-auto">
         <MessageList messages={messages} isLoading={isLoading} />
         <div ref={endRef} />
+      </div>
       </div>
     </div>
   );
