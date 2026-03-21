@@ -45,8 +45,13 @@ export default {
     const url = new URL(request.url);
 
     // Auto-migrate: create config tables if missing
-    await ensureLlmTable(env);
-    await ensureSearchTable(env);
+    try {
+      await ensureLlmTable(env);
+      await ensureSearchTable(env);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return new Response(`DB init error: ${msg}`, { status: 500 });
+    }
 
     if (url.pathname === "/") return serveHTML();
     if (url.pathname === "/api/waitlist" && request.method === "GET") return handleList(request, env);
