@@ -11,7 +11,10 @@ import { NewChatView } from './NewChatView';
 import { SkeletonLoader } from './SkeletonLoader';
 import { ChatInput } from './chat/ChatInput';
 import { TranscriptOverlay } from './chat/TranscriptOverlay';
+import { MiniLyrics } from './lyrics/MiniLyrics';
+import { FullLyrics } from './lyrics/FullLyrics';
 import { useChat } from '../hooks/useChat';
+import { useLyrics } from '../hooks/useLyrics';
 import { useInitialMessage } from '../hooks/useChatHelpers';
 import { usePlaylistSheet } from '../contexts/PlaylistSheetContext';
 import type { PlaybackTime, Message } from '../types';
@@ -89,6 +92,8 @@ export const ChatInterface = ({
   const [seekDragging, setSeekDragging] = useState(false);
   const [seekDragValue, setSeekDragValue] = useState(0);
   const seekDisplayValue = seekDragging ? seekDragValue : (playbackTime?.current || 0);
+  const [showLyrics, setShowLyrics] = useState(false);
+  const lyrics = useLyrics(currentTrack, playbackTime?.current || 0);
 
   // Use chat hook for state and methods
   const {
@@ -355,6 +360,7 @@ export const ChatInterface = ({
               isAppleMusicAuthorized={isAppleMusicAuthorized}
               onLinkApple={onLinkApple}
             />
+            <MiniLyrics lyrics={lyrics} onClick={() => setShowLyrics(true)} />
           </div>
 
         </div>
@@ -364,6 +370,14 @@ export const ChatInterface = ({
           messages={messages}
           isLoading={isLoading}
           showHistory={showHistory}
+        />
+
+        {/* Lyrics Overlay */}
+        <FullLyrics
+          lyrics={lyrics}
+          isOpen={showLyrics && !showHistory}
+          onClose={() => setShowLyrics(false)}
+          onSeek={(time) => onSeek?.(time)}
         />
       </div>
 
