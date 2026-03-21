@@ -8,8 +8,10 @@
  * Ported from apps/backend/agent.py
  */
 import { AIChatAgent } from "@cloudflare/ai-chat";
-import { streamText, convertToModelMessages, stepCountIs } from "ai";
+import { streamText, convertToModelMessages, stepCountIs, tool } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { z } from "zod";
 import { createMusicTools } from "./tools";
 import { generateAndUpdateTitle } from "./title";
 import { createLogger } from "./logger";
@@ -54,6 +56,64 @@ IMPORTANT:
 - When asked to build a playlist, use web_search for ideas, then search_music + add_to_queue for each track.
 
 Be conversational and fun! Keep responses concise.`;
+
+/**
+ * Build a web_search tool.
+ * Priority: DB config (from search_provider_config table) > env vars.
+ *
+ * SEARCH_PROVIDER env values: "brave" | "tavily" | "none" (anything else = no search)
+ * Defaults for Anthropic provider are handled in the caller (native webSearch_20250305).
+ */
+function buildWebSearchTool(env: Env, dbOverride?: { providerType: string; apiKey: string }) {
+  const provider = (dbOverride?.providerType || env.SEARCH_PROVIDER || "").toLowerCase();
+
+  if (provider === "brave") {
+    const apiKey = dbOverride?.apiKey || env.BRAVE_SEARCH_API_KEY;
+    if (!apiKey) return undefined;
+    return tool({
+      description: "Search the web for music recommendations, artist info, trending songs, or genre exploration.",
+      inputSchema: z.object({ query: z.string().describe("Search query") }),
+      execute: async ({ query }: { query: string }) => {
+        try {
+          const res = await fetch(
+            `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5`,
+            { headers: { "X-Subscription-Token": apiKey, Accept: "application/json" } }
+          );
+          const data = await res.json() as { web?: { results?: Array<{ title: string; url: string; description: string }> } };
+          const results = data.web?.results || [];
+          if (!results.length) return `No results found for: ${query}`;
+          return results.map((r, i) => `${i + 1}. ${r.title}\n${r.url}\n${r.description}`).join("\n\n");
+        } catch (e) {
+          return `Web search failed: ${e}`;
+        }
+      },
+    });
+  }
+
+  if (provider === "tavily") {
+    const apiKey = dbOverride?.apiKey || env.TAVILY_API_KEY;
+    if (!apiKey) return undefined;
+    return tool({
+      description: "Search the web for music recommendations, artist info, trending songs, or genre exploration.",
+      inputSchema: z.object({ query: z.string().describe("Search query") }),
+      execute: async ({ query }: { query: string }) => {
+        try {
+          const res = await fetch("https://api.tavily.com/search", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+            body: JSON.stringify({ query, max_results: 5, search_depth: "basic" }),
+          });
+          const data = await res.json() as { results?: Array<{ title: string; url: string; content: string }> };
+          return (data.results || []).map((r, i) => `${i + 1}. ${r.title}\n${r.url}\n${r.content}`).join("\n\n");
+        } catch (e) {
+          return `Web search failed: ${e}`;
+        }
+      },
+    });
+  }
+
+  return undefined;
+}
 
 function buildSystemPrompt(state: PlaybackState): string {
   const lines: string[] = [];
@@ -146,34 +206,123 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
       isPlaying: globalState.isPlaying,
     });
 
-    // Route through Cloudflare AI Gateway
-    const anthropic = createAnthropic({
-      apiKey: this.env.CF_AIG_TOKEN,
-      baseURL: `https://gateway.ai.cloudflare.com/v1/${this.env.CLOUDFLARE_ACCOUNT_ID}/${this.env.AI_GATEWAY_ID}/anthropic`,
-    });
-    const resolvedModel = this.env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
-    const model = anthropic(resolvedModel);
+    // ---------------------------------------------------------------------------
+    // Resolve active LLM config: DB first, env vars as fallback.
+    // DB config is set via the admin panel (/api/llm-config).
+    // ---------------------------------------------------------------------------
+    const [dbConfig, dbSearchConfig] = await Promise.all([
+      this.env.DB.prepare(
+        "SELECT * FROM llm_provider_config WHERE isActive = 1 LIMIT 1"
+      ).first<{
+        providerType: string; model: string; gateway: string;
+        gatewayAccountId: string | null; gatewayId: string | null;
+        gatewayToken: string | null; apiKey: string; baseUrl: string | null;
+      }>().catch(() => null),
+      this.env.DB.prepare(
+        "SELECT providerType, apiKey FROM search_provider_config WHERE isActive = 1 LIMIT 1"
+      ).first<{ providerType: string; apiKey: string }>().catch(() => null),
+    ]);
 
-    // All tools have `execute` on the server. Player control tools embed
-    // `_action` in their results — the frontend picks these up and dispatches
-    // MusicKit JS operations as a side effect (same as old SSE action pattern).
-    // Claude's native web_search is added as a server-side tool for discovery.
-    const tools = {
-      ...createMusicTools({ env: this.env, state: globalState, storefront }),
-      web_search: anthropic.tools.webSearch_20250305({ maxUses: 5 }),
+    // Decrypt helper — mirrors apps/admin/src/index.ts decrypt()
+    const decryptKey = async (encoded: string): Promise<string> => {
+      const hex = (this.env as unknown as Record<string, string>)["ADMIN_ENCRYPTION_KEY"];
+      if (!hex || hex.length < 64) return encoded;
+      try {
+        const raw = new Uint8Array(hex.match(/.{2}/g)!.map((b: string) => parseInt(b, 16)));
+        const key = await crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, false, ["decrypt"]);
+        const buf = Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0));
+        const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: buf.slice(0, 12) }, key, buf.slice(12));
+        return new TextDecoder().decode(pt);
+      } catch { return encoded; }
     };
 
-    // Extended thinking (configurable via ANTHROPIC_THINKING_BUDGET env var)
-    const thinkingBudget = parseInt(this.env.ANTHROPIC_THINKING_BUDGET || "0");
-    const maxOutputTokens = thinkingBudget > 0 ? 16384 : 4096;
+    const resolvedProvider = dbConfig?.providerType || this.env.LLM_PROVIDER || "anthropic";
+    const resolvedApiKey = dbConfig ? await decryptKey(dbConfig.apiKey) : "";
+    const resolvedGwToken = dbConfig?.gatewayToken ? await decryptKey(dbConfig.gatewayToken) : this.env.CF_AIG_TOKEN;
+
+    // Resolve search provider: DB config takes priority over env vars
+    const searchDbOverride = dbSearchConfig
+      ? { providerType: dbSearchConfig.providerType, apiKey: dbSearchConfig.apiKey ? await decryptKey(dbSearchConfig.apiKey) : "" }
+      : undefined;
+
+    let model: Parameters<typeof streamText>[0]["model"];
+    let tools: Parameters<typeof streamText>[0]["tools"];
+    let maxOutputTokens: number;
+    let providerOptions: Parameters<typeof streamText>[0]["providerOptions"];
+
+    if (resolvedProvider === "anthropic") {
+      // -----------------------------------------------------------------------
+      // Anthropic — via Cloudflare AI Gateway (or direct if no gateway config)
+      // -----------------------------------------------------------------------
+      const useGateway = dbConfig
+        ? dbConfig.gateway === "cf_ai_gateway"
+        : true; // env-based default always uses gateway
+
+      const anthropicApiKey = resolvedApiKey || this.env.CF_AIG_TOKEN;
+      const anthropicBaseURL = useGateway
+        ? `https://gateway.ai.cloudflare.com/v1/${dbConfig?.gatewayAccountId || this.env.CLOUDFLARE_ACCOUNT_ID}/${dbConfig?.gatewayId || this.env.AI_GATEWAY_ID}/anthropic`
+        : undefined;
+
+      const anthropic = createAnthropic({ apiKey: anthropicApiKey, baseURL: anthropicBaseURL });
+
+      model = anthropic(dbConfig?.model || this.env.ANTHROPIC_MODEL || "claude-sonnet-4-6") as unknown as Parameters<typeof streamText>[0]["model"];
+      const effectiveSearchProvider = (searchDbOverride?.providerType || this.env.SEARCH_PROVIDER || "anthropic").toLowerCase();
+      const nativeSearch = effectiveSearchProvider === "anthropic"
+        ? { web_search: anthropic.tools.webSearch_20250305({ maxUses: 5 }) }
+        : (() => { const t = buildWebSearchTool(this.env, searchDbOverride); return t ? { web_search: t } : {}; })();
+      tools = {
+        ...createMusicTools({ env: this.env, state: globalState, storefront }),
+        ...nativeSearch,
+      };
+      const thinkingBudget = parseInt(this.env.ANTHROPIC_THINKING_BUDGET || "0");
+      maxOutputTokens = thinkingBudget > 0 ? 16384 : 4096;
+      providerOptions = thinkingBudget > 0
+        ? { anthropic: { thinking: { type: "enabled" as const, budgetTokens: thinkingBudget } } }
+        : undefined;
+    } else {
+      // -----------------------------------------------------------------------
+      // Any OpenAI-compatible provider (Doubao, OpenAI, custom, etc.)
+      // Uses Tavily for web search — the de-facto standard community search tool
+      // for AI agents (works with any LLM, no provider-specific hacks needed).
+      // -----------------------------------------------------------------------
+      const apiKey = resolvedApiKey || this.env.DOUBAO_API_KEY;
+      const baseURL = dbConfig?.baseUrl ||
+        (resolvedProvider === "doubao" ? "https://ark.cn-beijing.volces.com/api/v3" : undefined);
+
+      // Cloudflare AI Gateway wrapping for OpenAI-compatible providers
+      let finalBaseURL = baseURL;
+      if (dbConfig?.gateway === "cf_ai_gateway" && dbConfig.gatewayAccountId && dbConfig.gatewayId) {
+        const cfBase = `https://gateway.ai.cloudflare.com/v1/${dbConfig.gatewayAccountId}/${dbConfig.gatewayId}`;
+        finalBaseURL = resolvedProvider === "openai"
+          ? `${cfBase}/openai`
+          : `${cfBase}/openai-compatible`;
+      }
+
+      const provider = createOpenAICompatible({
+        name: resolvedProvider,
+        apiKey,
+        baseURL: finalBaseURL || "https://api.openai.com/v1",
+      });
+
+      model = provider(dbConfig?.model || this.env.DOUBAO_MODEL || "doubao-1.5-pro-32k") as unknown as Parameters<typeof streamText>[0]["model"];
+
+      const webSearchTool = buildWebSearchTool(this.env, searchDbOverride);
+      tools = {
+        ...createMusicTools({ env: this.env, state: globalState, storefront }),
+        ...(webSearchTool ? { web_search: webSearchTool } : {}),
+      };
+      maxOutputTokens = 4096;
+      providerOptions = undefined;
+    }
 
     const systemPrompt = buildSystemPrompt(globalState);
     const modelMessages = await convertToModelMessages(this.messages);
 
     log.info("config", {
-      provider: "anthropic",
-      model: resolvedModel,
-      thinkingBudget,
+      provider: resolvedProvider,
+      model: dbConfig?.model || "env-default",
+      source: dbConfig ? "db" : "env",
+      search: searchDbOverride?.providerType || this.env.SEARCH_PROVIDER || "anthropic",
       maxOutputTokens,
       systemPromptLen: systemPrompt.length,
       inputMessageCount: modelMessages.length,
@@ -184,11 +333,7 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
     const result = streamText({
       model,
       maxOutputTokens,
-      providerOptions: thinkingBudget > 0 ? {
-        anthropic: {
-          thinking: { type: "enabled" as const, budgetTokens: thinkingBudget },
-        },
-      } : undefined,
+      providerOptions,
       system: systemPrompt,
       messages: modelMessages,
       tools,
@@ -302,7 +447,6 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
         // streamText's onFinish fires when the LLM is done, BEFORE the SDK
         // persists the assistant message to this.messages. So we use the
         // result `text` directly and add +1 for the assistant message.
-        const now = Date.now();
         const totalMessages = messageCount + 1; // +1 for the assistant reply
         const preview = (text || "...").slice(0, 100);
 
