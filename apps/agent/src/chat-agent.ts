@@ -151,7 +151,7 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
 
     // Route through Cloudflare AI Gateway
     const anthropic = createAnthropic({
-      apiKey: this.env.CF_AIG_TOKEN,
+      apiKey: this.env.CF_AIG_TOKEN || "via-cf-ai-gateway",
       baseURL: `https://gateway.ai.cloudflare.com/v1/${this.env.CLOUDFLARE_ACCOUNT_ID}/${this.env.AI_GATEWAY_ID}/anthropic`,
     });
     const model = anthropic(this.env.ANTHROPIC_MODEL || "claude-sonnet-4-6");
