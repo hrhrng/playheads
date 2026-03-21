@@ -215,11 +215,9 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
     // ---------------------------------------------------------------------------
     const [dbConfig, dbSearchConfig] = await Promise.all([
       this.env.DB.prepare(
-        "SELECT * FROM llm_provider_config WHERE isActive = 1 LIMIT 1"
+        "SELECT providerType, model, apiKey, baseUrl FROM llm_provider_config WHERE isActive = 1 LIMIT 1"
       ).first<{
-        providerType: string; model: string; gateway: string;
-        gatewayAccountId: string | null; gatewayId: string | null;
-        gatewayToken: string | null; apiKey: string; baseUrl: string | null;
+        providerType: string; model: string; apiKey: string; baseUrl: string | null;
       }>().catch(() => null),
       this.env.DB.prepare(
         "SELECT providerType, apiKey FROM search_provider_config WHERE isActive = 1 LIMIT 1"
@@ -241,7 +239,6 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
 
     const resolvedProvider = dbConfig?.providerType || this.env.LLM_PROVIDER || "anthropic";
     const resolvedApiKey = dbConfig ? await decryptKey(dbConfig.apiKey) : "";
-    const resolvedGwToken = dbConfig?.gatewayToken ? await decryptKey(dbConfig.gatewayToken) : this.env.CF_AIG_TOKEN;
 
     // Resolve search provider: DB config takes priority over env vars
     const searchDbOverride = dbSearchConfig
@@ -255,16 +252,10 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
 
     if (resolvedProvider === "anthropic") {
       // -----------------------------------------------------------------------
-      // Anthropic — via Cloudflare AI Gateway (or direct if no gateway config)
+      // Anthropic — always via Cloudflare AI Gateway (worker env vars)
       // -----------------------------------------------------------------------
-      const useGateway = dbConfig
-        ? dbConfig.gateway === "cf_ai_gateway"
-        : true; // env-based default always uses gateway
-
       const anthropicApiKey = resolvedApiKey || this.env.CF_AIG_TOKEN;
-      const anthropicBaseURL = useGateway
-        ? `https://gateway.ai.cloudflare.com/v1/${dbConfig?.gatewayAccountId || this.env.CLOUDFLARE_ACCOUNT_ID}/${dbConfig?.gatewayId || this.env.AI_GATEWAY_ID}/anthropic`
-        : undefined;
+      const anthropicBaseURL = `https://gateway.ai.cloudflare.com/v1/${this.env.CLOUDFLARE_ACCOUNT_ID}/${this.env.AI_GATEWAY_ID}/anthropic`;
 
       const anthropic = createAnthropic({ apiKey: anthropicApiKey, baseURL: anthropicBaseURL });
 
@@ -292,13 +283,10 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
       const baseURL = dbConfig?.baseUrl ||
         (resolvedProvider === "doubao" ? "https://ark.cn-beijing.volces.com/api/v3" : undefined);
 
-      // Cloudflare AI Gateway wrapping for OpenAI-compatible providers
+      // Route OpenAI through CF Gateway; others connect directly
       let finalBaseURL = baseURL;
-      if (dbConfig?.gateway === "cf_ai_gateway" && dbConfig.gatewayAccountId && dbConfig.gatewayId) {
-        const cfBase = `https://gateway.ai.cloudflare.com/v1/${dbConfig.gatewayAccountId}/${dbConfig.gatewayId}`;
-        finalBaseURL = resolvedProvider === "openai"
-          ? `${cfBase}/openai`
-          : `${cfBase}/openai-compatible`;
+      if (resolvedProvider === "openai" && this.env.CLOUDFLARE_ACCOUNT_ID && this.env.AI_GATEWAY_ID) {
+        finalBaseURL = `https://gateway.ai.cloudflare.com/v1/${this.env.CLOUDFLARE_ACCOUNT_ID}/${this.env.AI_GATEWAY_ID}/openai`;
       }
 
       const provider = createOpenAICompatible({

@@ -35,8 +35,8 @@ export async function generateConversationTitle(
 
     // Resolve provider from DB config (same logic as chat-agent.ts)
     const dbConfig = await (env.DB as D1Database).prepare(
-      "SELECT providerType, model, gateway, gatewayAccountId, gatewayId, apiKey, baseUrl FROM llm_provider_config WHERE isActive = 1 LIMIT 1"
-    ).first<{ providerType: string; model: string; gateway: string; gatewayAccountId: string | null; gatewayId: string | null; apiKey: string; baseUrl: string | null }>().catch(() => null);
+      "SELECT providerType, model, apiKey, baseUrl FROM llm_provider_config WHERE isActive = 1 LIMIT 1"
+    ).first<{ providerType: string; model: string; apiKey: string; baseUrl: string | null }>().catch(() => null);
 
     const decryptKey = async (encoded: string): Promise<string> => {
       const hex = (env as unknown as Record<string, string>)["ADMIN_ENCRYPTION_KEY"];
@@ -55,10 +55,7 @@ export async function generateConversationTitle(
 
     if (resolvedProvider === "anthropic") {
       const apiKey = dbConfig ? await decryptKey(dbConfig.apiKey) : env.CF_AIG_TOKEN;
-      const useGateway = !dbConfig || dbConfig.gateway === "cf_ai_gateway";
-      const baseURL = useGateway
-        ? `https://gateway.ai.cloudflare.com/v1/${dbConfig?.gatewayAccountId || env.CLOUDFLARE_ACCOUNT_ID}/${dbConfig?.gatewayId || env.AI_GATEWAY_ID}/anthropic`
-        : undefined;
+      const baseURL = `https://gateway.ai.cloudflare.com/v1/${env.CLOUDFLARE_ACCOUNT_ID}/${env.AI_GATEWAY_ID}/anthropic`;
       const anthropic = createAnthropic({ apiKey, baseURL });
       titleModel = anthropic("claude-haiku-4-5-20251001") as unknown as Parameters<typeof generateText>[0]["model"];
     } else {
