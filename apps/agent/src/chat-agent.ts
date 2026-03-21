@@ -243,6 +243,24 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
     const resolvedApiKey = dbConfig ? await decryptKey(dbConfig.apiKey) : "";
     const resolvedGwToken = dbConfig?.gatewayToken ? await decryptKey(dbConfig.gatewayToken) : this.env.CF_AIG_TOKEN;
 
+    console.log("[llm-config] dbConfig:", dbConfig ? {
+      providerType: dbConfig.providerType, model: dbConfig.model,
+      gateway: dbConfig.gateway, gatewayAccountId: dbConfig.gatewayAccountId,
+      gatewayId: dbConfig.gatewayId,
+      hasApiKey: !!dbConfig.apiKey, apiKeyLen: dbConfig.apiKey?.length,
+      hasGatewayToken: !!dbConfig.gatewayToken,
+      baseUrl: dbConfig.baseUrl,
+    } : "null (using env vars)");
+    console.log("[llm-config] resolvedProvider:", resolvedProvider,
+      "| resolvedApiKey len:", resolvedApiKey.length,
+      "| resolvedApiKey prefix:", resolvedApiKey.slice(0, 8) + "...",
+      "| CF_AIG_TOKEN present:", !!this.env.CF_AIG_TOKEN,
+      "| CF_AIG_TOKEN len:", this.env.CF_AIG_TOKEN?.length);
+    console.log("[llm-config] dbSearchConfig:", dbSearchConfig ? {
+      providerType: dbSearchConfig.providerType,
+      hasApiKey: !!dbSearchConfig.apiKey,
+    } : "null");
+
     // Resolve search provider: DB config takes priority over env vars
     const searchDbOverride = dbSearchConfig
       ? { providerType: dbSearchConfig.providerType, apiKey: dbSearchConfig.apiKey ? await decryptKey(dbSearchConfig.apiKey) : "" }
@@ -265,6 +283,12 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
       const anthropicBaseURL = useGateway
         ? `https://gateway.ai.cloudflare.com/v1/${dbConfig?.gatewayAccountId || this.env.CLOUDFLARE_ACCOUNT_ID}/${dbConfig?.gatewayId || this.env.AI_GATEWAY_ID}/anthropic`
         : undefined;
+
+      console.log("[anthropic] useGateway:", useGateway,
+        "| apiKey prefix:", anthropicApiKey?.slice(0, 8) + "...",
+        "| apiKey len:", anthropicApiKey?.length,
+        "| baseURL:", anthropicBaseURL,
+        "| model:", dbConfig?.model || this.env.ANTHROPIC_MODEL || "claude-sonnet-4-6");
 
       const anthropic = createAnthropic({ apiKey: anthropicApiKey, baseURL: anthropicBaseURL });
 
