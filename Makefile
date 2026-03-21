@@ -205,9 +205,6 @@ secret-llm-config:
 	echo "$$KEY" | (cd apps/admin && npx wrangler secret put ADMIN_ENCRYPTION_KEY); \
 	echo "$$KEY" | (cd apps/agent && npx wrangler secret put ADMIN_ENCRYPTION_KEY)
 	@echo ""
-	@echo "TAVILY_API_KEY (from https://tavily.com, free 1000/mo):"
-	@(cd apps/agent && npx wrangler secret put TAVILY_API_KEY)
-	@echo ""
 	@echo "Done. Both workers share the same encryption key."
 
 # =============================================================================

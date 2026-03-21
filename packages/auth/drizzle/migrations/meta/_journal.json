@@ -8,6 +8,13 @@
       "when": 1773559966473,
       "tag": "0000_dizzy_chat",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1774054400000,
+      "tag": "0001_global_queue",
+      "breakpoints": true
     }
   ]
 }
