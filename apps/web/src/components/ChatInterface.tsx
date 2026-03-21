@@ -393,7 +393,7 @@ export const ChatInterface = ({
         >
           <div ref={swipeContentRef} className="absolute inset-0" style={{ willChange: 'transform' }}>
             {/* Current track card */}
-            <div className="absolute inset-0 flex items-center justify-center pb-36">
+            <div className="absolute inset-0 flex flex-col items-center justify-center pb-36">
               <div className="relative z-10 w-full max-w-xl px-8">
                 <RecordPlayer
                   currentTrack={currentTrack}
@@ -404,6 +404,54 @@ export const ChatInterface = ({
                   onLinkApple={onLinkApple}
                 />
               </div>
+              {/* Seek bar — directly below album art, moves with swipe */}
+              {currentTrack && !showHistory && !isAppleMusicAuthorized && onLinkApple && (
+                <div className="w-full max-w-sm px-8 mt-4 flex justify-center">
+                  <button
+                    onClick={onLinkApple}
+                    className="text-sm text-pink-500 hover:text-pink-600 transition-colors font-medium flex items-center gap-1.5"
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M9 18V5l12-2v13" />
+                      <circle cx="6" cy="18" r="3" />
+                      <circle cx="18" cy="16" r="3" />
+                    </svg>
+                    Connect Apple Music for full playback
+                  </button>
+                </div>
+              )}
+              {currentTrack && !showHistory && isAppleMusicAuthorized && (
+                <div className="w-full max-w-sm px-8 mt-4 flex items-center gap-2">
+                  <span className="text-xs font-mono text-gray-400 tabular-nums shrink-0">
+                    {formatTime(seekDisplayValue)}
+                  </span>
+                  <div className="relative flex-1 h-5 flex items-center">
+                    <div className="w-full h-1.5 bg-gray-100 rounded-full pointer-events-none">
+                      <div
+                        className="h-full bg-gray-900 rounded-full"
+                        style={{ width: `${(seekDisplayValue / (playbackTime?.total || 1)) * 100}%` }}
+                      />
+                    </div>
+                    <div
+                      className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow border border-gray-300 pointer-events-none"
+                      style={{ left: `calc(${(seekDisplayValue / (playbackTime?.total || 1)) * 100}% - 6px)` }}
+                    />
+                    <input
+                      type="range"
+                      min={0}
+                      max={playbackTime?.total || 1}
+                      step={0.1}
+                      value={seekDisplayValue}
+                      onChange={(e) => { setSeekDragging(true); setSeekDragValue(parseFloat(e.target.value)); }}
+                      onPointerUp={(e) => { onSeek?.(parseFloat((e.target as HTMLInputElement).value)); setSeekDragging(false); }}
+                      className="absolute inset-0 w-full opacity-0 cursor-pointer"
+                    />
+                  </div>
+                  <span className="text-xs font-mono text-gray-400 tabular-nums shrink-0">
+                    {formatTime(playbackTime?.total || 0)}
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Next track card (positioned one full page below) */}
@@ -433,55 +481,6 @@ export const ChatInterface = ({
 
       {/* Command Console - Fixed at Bottom */}
       <div className="absolute bottom-0 left-0 right-0 px-6 pb-5 pt-10 z-30 bg-gradient-to-t from-white via-white/95 to-transparent">
-        {/* Seek Bar or Apple Music link - above toggle button, outside swipe container */}
-        {currentTrack && !showHistory && !isAppleMusicAuthorized && onLinkApple && (
-          <div className="max-w-sm mx-auto mb-3 flex justify-center">
-            <button
-              onClick={onLinkApple}
-              className="text-sm text-pink-500 hover:text-pink-600 transition-colors font-medium flex items-center gap-1.5"
-            >
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M9 18V5l12-2v13" />
-                <circle cx="6" cy="18" r="3" />
-                <circle cx="18" cy="16" r="3" />
-              </svg>
-              Connect Apple Music for full playback
-            </button>
-          </div>
-        )}
-        {currentTrack && !showHistory && isAppleMusicAuthorized && (
-          <div className="max-w-sm mx-auto mb-3 flex items-center gap-2">
-            <span className="text-xs font-mono text-gray-400 tabular-nums shrink-0">
-              {formatTime(seekDisplayValue)}
-            </span>
-            <div className="relative flex-1 h-5 flex items-center">
-              <div className="w-full h-1.5 bg-gray-100 rounded-full pointer-events-none">
-                <div
-                  className="h-full bg-gray-900 rounded-full"
-                  style={{ width: `${(seekDisplayValue / (playbackTime?.total || 1)) * 100}%` }}
-                />
-              </div>
-              <div
-                className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow border border-gray-300 pointer-events-none"
-                style={{ left: `calc(${(seekDisplayValue / (playbackTime?.total || 1)) * 100}% - 6px)` }}
-              />
-              <input
-                type="range"
-                min={0}
-                max={playbackTime?.total || 1}
-                step={0.1}
-                value={seekDisplayValue}
-                onChange={(e) => { setSeekDragging(true); setSeekDragValue(parseFloat(e.target.value)); }}
-                onPointerUp={(e) => { onSeek?.(parseFloat((e.target as HTMLInputElement).value)); setSeekDragging(false); }}
-                className="absolute inset-0 w-full opacity-0 cursor-pointer"
-              />
-            </div>
-            <span className="text-xs font-mono text-gray-400 tabular-nums shrink-0">
-              {formatTime(playbackTime?.total || 0)}
-            </span>
-          </div>
-        )}
-
         {/* Toggle Button + Mobile Playlist Button */}
         <div className="max-w-xl mx-auto mb-2 flex items-center">
           <button
