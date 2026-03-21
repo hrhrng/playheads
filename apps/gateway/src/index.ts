@@ -147,8 +147,11 @@ export default {
           : (url.pathname.replace(/^\/api/, "") || "/") + url.search;
 
       if (lane) {
+        const useAgentLane = env.USE_NEW_AGENT === "true";
         const target = new URL(request.url);
-        target.hostname = `backend-${lane}.${env.PREVIEW_DOMAIN}`;
+        target.hostname = useAgentLane
+          ? `agent-${lane}.${env.PREVIEW_DOMAIN}`
+          : `backend-${lane}.${env.PREVIEW_DOMAIN}`;
         target.pathname = backendPath.split("?")[0];
         target.search = url.search;
         const backendReq = new Request(target.toString(), {
