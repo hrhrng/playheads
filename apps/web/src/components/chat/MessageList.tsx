@@ -47,10 +47,6 @@ export const MessageList = ({ messages, isLoading }: MessageListProps): React.JS
             msg.role === 'user' ? 'items-end' : 'items-start'
           }`}
         >
-          <span className="text-[10px] text-gray-400 mb-1.5 px-1 uppercase tracking-widest font-medium">
-            {msg.role === 'agent' ? 'DJ' : 'You'}
-          </span>
-
           {/* Unified message container */}
           <div className="w-full max-w-[90%]">
             {isModernMessage(msg) ? (
