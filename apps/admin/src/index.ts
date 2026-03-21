@@ -252,7 +252,7 @@ async function syncWaitlistApproval(db: ReturnType<typeof drizzle>, email: strin
 // ---------------------------------------------------------------------------
 
 async function ensureLlmTable(env: Env): Promise<void> {
-  await env.DB.exec(`CREATE TABLE IF NOT EXISTS llm_provider_config (
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS llm_provider_config (
     id            TEXT PRIMARY KEY,
     name          TEXT NOT NULL,
     providerType  TEXT NOT NULL,
@@ -266,7 +266,7 @@ async function ensureLlmTable(env: Env): Promise<void> {
     isActive      INTEGER NOT NULL DEFAULT 0,
     createdAt     INTEGER NOT NULL,
     updatedAt     INTEGER NOT NULL
-  )`);
+  )`).run();
 }
 
 // ---------------------------------------------------------------------------
@@ -390,7 +390,7 @@ async function handleLlmActivate(id: string, env: Env): Promise<Response> {
 // ---------------------------------------------------------------------------
 
 async function ensureSearchTable(env: Env): Promise<void> {
-  await env.DB.exec(`CREATE TABLE IF NOT EXISTS search_provider_config (
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS search_provider_config (
     id           TEXT PRIMARY KEY,
     name         TEXT NOT NULL,
     providerType TEXT NOT NULL,
@@ -398,7 +398,7 @@ async function ensureSearchTable(env: Env): Promise<void> {
     isActive     INTEGER NOT NULL DEFAULT 0,
     createdAt    INTEGER NOT NULL,
     updatedAt    INTEGER NOT NULL
-  )`);
+  )`).run();
 }
 
 // ---------------------------------------------------------------------------
