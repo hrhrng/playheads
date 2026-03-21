@@ -3,6 +3,5 @@ packages:
   - 'apps/landing'
   - 'apps/gateway'
   - 'apps/admin'
-  - 'apps/backend-worker'
   - 'apps/agent'
   - 'packages/*'
