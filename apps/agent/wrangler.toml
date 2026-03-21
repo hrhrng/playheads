@@ -30,7 +30,7 @@ LLM_PROVIDER = "anthropic"
 
 # Anthropic settings (used when LLM_PROVIDER=anthropic)
 ANTHROPIC_MODEL = "claude-sonnet-4-6"
-ANTHROPIC_THINKING_BUDGET = "0"
+ANTHROPIC_THINKING_BUDGET = "5000"
 
 # Doubao (ByteDance Volcano Engine Ark) settings (used when LLM_PROVIDER=doubao)
 # Secret: set via `wrangler secret put DOUBAO_API_KEY`
