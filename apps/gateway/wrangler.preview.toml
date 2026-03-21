@@ -12,10 +12,6 @@ binding = "LANDING"
 service = "playheads-landing"
 
 [[services]]
-binding = "BACKEND"
-service = "playheads-backend"
-
-[[services]]
 binding = "ADMIN"
 service = "playheads-admin"
 
@@ -40,4 +36,3 @@ head_sampling_rate = 1
 APP_HOSTNAME = ""
 ADMIN_HOSTNAME = ""
 PREVIEW_DOMAIN = ""
-USE_NEW_AGENT = "true"

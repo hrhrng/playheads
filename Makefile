@@ -1,5 +1,5 @@
-.PHONY: dev dev-web dev-backend dev-landing install install-web install-backend \
-       install-landing clean help test test-backend test-web lint lint-web \
+.PHONY: dev dev-web dev-landing install install-web install-landing \
+       clean help test test-web lint lint-web \
        type-check ci build-landing deploy-landing \
        deploy deploy-preview deploy-production build-web \
        deploy-preview-web deploy-preview-gateway \
@@ -14,16 +14,12 @@
 # =============================================================================
 
 dev:
-	@echo "Starting frontend and backend..."
-	@make -j2 dev-web dev-backend
+	@echo "Starting frontend..."
+	@make dev-web
 
 dev-web:
 	@echo "Starting web frontend..."
 	rm -rf apps/web/node_modules/.vite && pnpm --filter web dev
-
-dev-backend:
-	@echo "Starting backend..."
-	uv run --package backend uvicorn apps.backend.main:app --port 8001 --reload
 
 dev-landing:
 	@echo "Starting landing page..."
@@ -33,7 +29,7 @@ dev-landing:
 # Install
 # =============================================================================
 
-install: install-web install-landing install-backend
+install: install-web install-landing
 	@echo "All dependencies installed!"
 
 install-web:
@@ -44,18 +40,11 @@ install-landing:
 	@echo "Installing landing dependencies..."
 	pnpm install --filter landing
 
-install-backend:
-	@echo "Installing backend dependencies..."
-	uv sync --project apps/backend --extra dev
-
 # =============================================================================
 # Test
 # =============================================================================
 
-test: test-backend test-web test-auth
-
-test-backend:
-	uv run --project apps/backend pytest apps/backend/ -v
+test: test-web test-auth
 
 test-web:
 	pnpm --filter web test
@@ -96,7 +85,6 @@ clean:
 	@echo "Cleaning caches..."
 	rm -rf apps/web/node_modules/.vite
 	rm -rf apps/web/.next
-	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	@echo "Cleaned!"
 
 # =============================================================================
@@ -186,20 +174,17 @@ help:
 	@echo "Available commands:"
 	@echo ""
 	@echo "  Development:"
-	@echo "    make dev            - Start both frontend and backend"
+	@echo "    make dev            - Start frontend"
 	@echo "    make dev-web        - Start frontend only"
-	@echo "    make dev-backend    - Start backend only"
 	@echo "    make dev-landing    - Start landing page only"
 	@echo ""
 	@echo "  Install:"
 	@echo "    make install        - Install all dependencies"
 	@echo "    make install-web    - Install frontend dependencies"
 	@echo "    make install-landing - Install landing dependencies"
-	@echo "    make install-backend - Install backend dependencies"
 	@echo ""
 	@echo "  Test:"
-	@echo "    make test           - Run all tests (backend + frontend)"
-	@echo "    make test-backend   - Run backend tests only"
+	@echo "    make test           - Run all tests"
 	@echo "    make test-web       - Run frontend tests only"
 	@echo ""
 	@echo "  Quality:"
@@ -217,9 +202,7 @@ help:
 	@echo "    make deploy-preview      - Build + deploy to preview"
 	@echo "    make deploy-production   - Build + deploy to production"
 	@echo "    make build-web           - Build frontend"
-	@echo "    make deploy-secrets-preview    - Set secrets for preview"
-	@echo "    make deploy-secrets-production - Set secrets for production"
-	@echo "    make secret-llm-config         - Set ADMIN_ENCRYPTION_KEY + TAVILY_API_KEY"
+	@echo "    make secret-llm-config   - Set ADMIN_ENCRYPTION_KEY + TAVILY_API_KEY"
 	@echo ""
 	@echo "  Other:"
 	@echo "    make clean          - Clean caches"
