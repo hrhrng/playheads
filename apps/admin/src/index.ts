@@ -329,7 +329,8 @@ async function handleLlmList(env: Env): Promise<Response> {
 
 async function handleLlmCreate(request: Request, env: Env): Promise<Response> {
   const body = await request.json() as Partial<LlmProviderRow>;
-  if (!body.providerType || !body.model || !body.apiKey) {
+  const requiresApiKey = body.gateway !== "cf_ai_gateway";
+  if (!body.providerType || !body.model || (requiresApiKey && !body.apiKey)) {
     return Response.json({ error: "providerType, model, apiKey required" }, { status: 400 });
   }
   const now = Date.now();
@@ -387,6 +388,13 @@ async function handleLlmTest(id: string, env: Env): Promise<Response> {
 
   const apiKey = await decrypt(row.apiKey, env);
   const isGateway = row.gateway === "cf_ai_gateway";
+
+  if (!apiKey) {
+    return Response.json({
+      success: false,
+      error: "No API key stored — when using CF AI Gateway without an explicit key, the agent uses its CF_AIG_TOKEN env var (not testable from admin)",
+    });
+  }
 
   try {
     if (row.providerType === "anthropic") {
