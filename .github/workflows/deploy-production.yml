@@ -134,6 +134,7 @@ jobs:
           # [vars] in wrangler.toml — do NOT set them as secrets (name conflict).
           declare -A SECRETS=(
             [CF_AIG_TOKEN]="${{ secrets.CF_AIG_TOKEN }}"
+            [ADMIN_ENCRYPTION_KEY]="${{ secrets.ADMIN_ENCRYPTION_KEY }}"
             [APPLE_MUSIC_TEAM_ID]="${{ secrets.APPLE_MUSIC_TEAM_ID }}"
             [APPLE_MUSIC_KEY_ID]="${{ secrets.APPLE_MUSIC_KEY_ID }}"
             [APPLE_MUSIC_PRIVATE_KEY]="${{ secrets.APPLE_MUSIC_PRIVATE_KEY }}"
