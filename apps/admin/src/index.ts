@@ -16,7 +16,10 @@ interface LlmProviderRow {
   name: string;
   providerType: string;
   model: string;
-  apiKey: string; // encrypted
+  gateway: string;          // 'direct' | 'cf_ai_gateway'
+  gatewayAccountId: string | null;
+  gatewayId: string | null;
+  apiKey: string;           // encrypted; for CF gateway, store CF_AIG_TOKEN here
   baseUrl: string | null;
   isActive: number;
   createdAt: number;
@@ -249,15 +252,18 @@ async function syncWaitlistApproval(db: ReturnType<typeof drizzle>, email: strin
 
 async function ensureLlmTable(env: Env): Promise<void> {
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS llm_provider_config (
-    id           TEXT PRIMARY KEY,
-    name         TEXT NOT NULL,
-    providerType TEXT NOT NULL,
-    model        TEXT NOT NULL,
-    apiKey       TEXT NOT NULL,
-    baseUrl      TEXT,
-    isActive     INTEGER NOT NULL DEFAULT 0,
-    createdAt    INTEGER NOT NULL,
-    updatedAt    INTEGER NOT NULL
+    id               TEXT PRIMARY KEY,
+    name             TEXT NOT NULL,
+    providerType     TEXT NOT NULL,
+    model            TEXT NOT NULL,
+    gateway          TEXT NOT NULL DEFAULT 'direct',
+    gatewayAccountId TEXT,
+    gatewayId        TEXT,
+    apiKey           TEXT NOT NULL,
+    baseUrl          TEXT,
+    isActive         INTEGER NOT NULL DEFAULT 0,
+    createdAt        INTEGER NOT NULL,
+    updatedAt        INTEGER NOT NULL
   )`).run();
 }
 
@@ -328,9 +334,10 @@ async function handleLlmCreate(request: Request, env: Env): Promise<Response> {
   const id = crypto.randomUUID();
   const encKey = await encrypt(body.apiKey, env);
   await env.DB.prepare(
-    `INSERT INTO llm_provider_config (id,name,providerType,model,apiKey,baseUrl,isActive,createdAt,updatedAt)
-     VALUES (?,?,?,?,?,?,0,?,?)`
+    `INSERT INTO llm_provider_config (id,name,providerType,model,gateway,gatewayAccountId,gatewayId,apiKey,baseUrl,isActive,createdAt,updatedAt)
+     VALUES (?,?,?,?,?,?,?,?,?,0,?,?)`
   ).bind(id, body.name || body.providerType, body.providerType, body.model,
+    body.gateway || "direct", body.gatewayAccountId || null, body.gatewayId || null,
     encKey, body.baseUrl || null, now, now).run();
   return Response.json({ success: true, id });
 }
@@ -344,6 +351,9 @@ async function handleLlmUpdate(id: string, request: Request, env: Env): Promise<
   if (body.name !== undefined) { updates.push("name = ?"); vals.push(body.name); }
   if (body.providerType !== undefined) { updates.push("providerType = ?"); vals.push(body.providerType); }
   if (body.model !== undefined) { updates.push("model = ?"); vals.push(body.model); }
+  if (body.gateway !== undefined) { updates.push("gateway = ?"); vals.push(body.gateway); }
+  if (body.gatewayAccountId !== undefined) { updates.push("gatewayAccountId = ?"); vals.push(body.gatewayAccountId || null); }
+  if (body.gatewayId !== undefined) { updates.push("gatewayId = ?"); vals.push(body.gatewayId || null); }
   if (body.apiKey !== undefined && body.apiKey && !body.apiKey.startsWith("••••")) {
     updates.push("apiKey = ?"); vals.push(await encrypt(body.apiKey, env));
   }
@@ -642,7 +652,7 @@ function renderLlmConfigPage() {
       <div>
         <div style="font-size:11px;color:#9ca3af;font-weight:500;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Active Provider</div>
         <div style="font-weight:600;font-size:15px">\${active.name}</div>
-        <div style="font-size:12px;color:#6b7280;margin-top:2px">\${active.model}</div>
+        <div style="font-size:12px;color:#6b7280;margin-top:2px">\${active.model} · \${active.gateway === 'cf_ai_gateway' ? 'CF Gateway' : 'Direct'}</div>
       </div>
       <div style="display:flex;align-items:center;gap:8px">
         <span style="width:8px;height:8px;background:#22c55e;border-radius:50%;display:inline-block"></span>
@@ -665,6 +675,7 @@ function renderLlmConfigPage() {
         </div>
       </td>
       <td style="font-family:monospace;font-size:12px">\${p.model}</td>
+      <td><span class="badge \${p.gateway === 'cf_ai_gateway' ? 'badge-approved' : 'badge-pending'}">\${p.gateway === 'cf_ai_gateway' ? 'CF Gateway' : 'Direct'}</span></td>
       <td style="font-family:monospace;font-size:12px;color:#9ca3af">\${p.apiKey}</td>
       <td class="actions">
         \${!p.isActive ? \`<button class="btn btn-green" onclick="llmActivate('\${p.id}')">Activate</button>\` : ''}
@@ -684,7 +695,7 @@ function renderLlmConfigPage() {
         llmProviders.length === 0 ? '<p class="empty">No providers configured</p>' : \`
         <table>
           <thead><tr>
-            <th>Provider</th><th>Model</th><th>API Key</th><th style="text-align:right">Actions</th>
+            <th>Provider</th><th>Model</th><th>Gateway</th><th>API Key</th><th style="text-align:right">Actions</th>
           </tr></thead>
           <tbody>\${rows}</tbody>
         </table>\`}
@@ -695,6 +706,22 @@ function renderLlmModal() {
   const d = llmModal.data || {};
   const isEdit = llmModal.mode === 'edit';
   const preset = PROVIDER_PRESETS[d.providerType || 'anthropic'];
+  const isCfGateway = (d.gateway || 'direct') === 'cf_ai_gateway';
+
+  const gwFields = isCfGateway ? \`
+    <div class="form-group">
+      <label>CF Account ID</label>
+      <input id="lm_gatewayAccountId" value="\${d.gatewayAccountId || ''}" placeholder="44af79e51582..." />
+    </div>
+    <div class="form-group">
+      <label>CF Gateway ID</label>
+      <input id="lm_gatewayId" value="\${d.gatewayId || ''}" placeholder="clash" />
+    </div>\` : '';
+
+  // When using CF Gateway, apiKey = the token passed to the gateway endpoint
+  // (equivalent to CF_AIG_TOKEN in env). For direct, apiKey = provider API key.
+  const apiKeyLabel = isCfGateway ? 'CF Gateway Token' : 'API Key';
+  const apiKeyPlaceholder = isCfGateway ? 'CF AI Gateway token' : 'sk-...';
 
   return \`<div class="modal-overlay" id="llmModalOverlay">
     <div class="modal" style="max-width:480px;max-height:90vh;overflow-y:auto">
@@ -719,9 +746,17 @@ function renderLlmModal() {
           <input id="lm_model" value="\${d.model || preset?.model || ''}" placeholder="doubao-1.5-pro-32k" />
         </div>
         <div class="form-group">
-          <label>API Key \${isEdit ? '(leave masked to keep existing)' : ''}</label>
+          <label>Gateway</label>
+          <select id="lm_gateway" onchange="llmOnGatewayChange()" style="width:100%;height:42px;padding:0 14px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;outline:none;background:#fff">
+            <option value="direct" \${!isCfGateway?'selected':''}>Direct</option>
+            <option value="cf_ai_gateway" \${isCfGateway?'selected':''}>Cloudflare AI Gateway</option>
+          </select>
+        </div>
+        \${gwFields}
+        <div class="form-group">
+          <label>\${apiKeyLabel}\${isEdit ? ' (leave masked to keep existing)' : ''}</label>
           <div style="position:relative">
-            <input id="lm_apiKey" type="\${llmKeyVisible ? 'text' : 'password'}" value="\${d.apiKey || ''}" placeholder="sk-..." style="padding-right:44px" />
+            <input id="lm_apiKey" type="\${llmKeyVisible ? 'text' : 'password'}" value="\${d.apiKey || ''}" placeholder="\${apiKeyPlaceholder}" style="padding-right:44px" />
             <button type="button" onclick="llmToggleKey()" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#9ca3af;font-size:16px">\${llmKeyVisible ? '🙈' : '👁'}</button>
           </div>
         </div>
@@ -996,6 +1031,9 @@ function bind() {
       name: document.getElementById('lm_name').value.trim(),
       providerType: document.getElementById('lm_providerType').value,
       model: document.getElementById('lm_model').value.trim(),
+      gateway: document.getElementById('lm_gateway').value,
+      gatewayAccountId: document.getElementById('lm_gatewayAccountId')?.value.trim() || null,
+      gatewayId: document.getElementById('lm_gatewayId')?.value.trim() || null,
       apiKey: document.getElementById('lm_apiKey').value,
       baseUrl: document.getElementById('lm_baseUrl').value.trim() || null,
     };
@@ -1068,6 +1106,9 @@ window.llmOnProviderChange = () => {
     if (modelEl && !modelEl.value) modelEl.value = preset.model;
     if (baseEl) baseEl.value = preset.baseUrl;
   }
+};
+window.llmOnGatewayChange = () => {
+  if (llmModal) { llmModal.data.gateway = document.getElementById('lm_gateway').value; render(); }
 };
 window.llmActivate = async (id) => {
   await fetch(\`/api/llm-config/\${id}/activate\`, { method: 'POST' });
