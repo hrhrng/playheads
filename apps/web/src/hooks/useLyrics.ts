@@ -35,13 +35,21 @@ const lyricsCache = new Map<string, LyricLine[]>();
 const noLyricsCache = new Set<string>();
 
 /**
- * Get the MusicKit singleton instance (if available).
- * MusicKit.configure() returns the same instance on subsequent calls,
- * but we can also access it via the getInstance() pattern.
+ * Get the MusicKit singleton instance.
+ * MusicKit v3 exposes getInstance() on the global.
  */
 function getMusicKitInstance(): any {
-  // MusicKit v3 stores the instance on the global
-  return (window as any).MusicKit?.getInstance?.() || null;
+  try {
+    const mk = (window as any).MusicKit;
+    if (!mk) return null;
+    // MusicKit v3: getInstance() returns the configured singleton
+    if (typeof mk.getInstance === 'function') {
+      return mk.getInstance();
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 export function useLyrics({
@@ -74,35 +82,61 @@ export function useLyrics({
     }
 
     // Fetch from API
-    const abortController = new AbortController();
+    let cancelled = false;
     fetchingRef.current = trackId;
 
     const fetchLyrics = async () => {
       setIsLoading(true);
       try {
         const mk = getMusicKitInstance();
-        if (!mk) {
+        if (!mk?.api?.music) {
+          console.warn('[useLyrics] MusicKit instance or API not available');
           setLyrics([]);
           return;
         }
 
-        // Apple Music catalog lyrics API
-        // The song ID might have a prefix like 'i.' for library items
-        const catalogId = trackId.startsWith('i.') ? trackId : trackId;
-        const response = await mk.api.music(
-          `v1/catalog/${storefrontId}/songs/${catalogId}`,
-          { include: 'lyrics' }
-        );
+        // Try multiple approaches to get lyrics
 
-        if (abortController.signal.aborted) return;
+        // Approach 1: Dedicated lyrics endpoint
+        // GET /v1/catalog/{storefront}/songs/{id}/lyrics
+        let ttmlContent: string | null = null;
 
-        // Extract TTML from response
-        const songData = (response?.data as any)?.data?.[0];
-        const lyricsRelationship = songData?.relationships?.lyrics?.data?.[0];
-        const ttmlContent = lyricsRelationship?.attributes?.ttml;
+        try {
+          const lyricsResponse = await mk.api.music(
+            `v1/catalog/${storefrontId}/songs/${trackId}/lyrics`
+          );
+          if (cancelled) return;
+
+          const lyricsData = lyricsResponse?.data?.data?.[0] || lyricsResponse?.data?.[0];
+          ttmlContent = lyricsData?.attributes?.ttml || null;
+          console.log('[useLyrics] Dedicated endpoint result:', ttmlContent ? 'has TTML' : 'no TTML');
+        } catch (e: any) {
+          console.log('[useLyrics] Dedicated lyrics endpoint failed:', e?.message || e);
+        }
+
+        // Approach 2: Songs endpoint with include=lyrics
+        if (!ttmlContent) {
+          try {
+            const songResponse = await mk.api.music(
+              `v1/catalog/${storefrontId}/songs/${trackId}`,
+              { include: 'lyrics' }
+            );
+            if (cancelled) return;
+
+            const songData = songResponse?.data?.data?.[0] || songResponse?.data?.[0];
+            const lyricsRel = songData?.relationships?.lyrics?.data?.[0];
+            ttmlContent = lyricsRel?.attributes?.ttml || null;
+            console.log('[useLyrics] Include=lyrics result:', ttmlContent ? 'has TTML' : 'no TTML');
+          } catch (e: any) {
+            console.log('[useLyrics] Include=lyrics endpoint failed:', e?.message || e);
+          }
+        }
+
+        if (cancelled) return;
 
         if (ttmlContent) {
           const parsed = parseTTML(ttmlContent);
+          console.log(`[useLyrics] Parsed ${parsed.length} lyric lines for track ${trackId}`);
           if (parsed.length > 0) {
             lyricsCache.set(trackId, parsed);
             if (fetchingRef.current === trackId) {
@@ -115,6 +149,7 @@ export function useLyrics({
             }
           }
         } else {
+          console.log(`[useLyrics] No lyrics available for track ${trackId}`);
           noLyricsCache.add(trackId);
           if (fetchingRef.current === trackId) {
             setLyrics([]);
@@ -136,7 +171,7 @@ export function useLyrics({
     fetchLyrics();
 
     return () => {
-      abortController.abort();
+      cancelled = true;
     };
   }, [trackId, storefrontId, isAppleMusicAuthorized]);
 
