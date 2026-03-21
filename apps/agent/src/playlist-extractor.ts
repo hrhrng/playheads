@@ -38,6 +38,7 @@ export interface ParsedUrl {
   platform: PlaylistInfo["platform"];
   id: string;
   storefront?: string;
+  resourceType?: "playlist" | "album";
 }
 
 export function parsePlaylistUrl(url: string): ParsedUrl {
@@ -52,11 +53,15 @@ export function parsePlaylistUrl(url: string): ParsedUrl {
     return { platform: "apple_music", id: idMatch[1], storefront: sfMatch?.[1] || "us" };
   }
 
-  // Spotify: open.spotify.com/playlist/{id}
-  if (/open\.spotify\.com\/playlist\//i.test(trimmed)) {
+  // Spotify: open.spotify.com/playlist/{id} or open.spotify.com/album/{id}
+  if (/open\.spotify\.com\/(playlist|album)\//i.test(trimmed)) {
+    const albumMatch = trimmed.match(/\/album\/([A-Za-z0-9]+)/);
+    if (albumMatch) {
+      return { platform: "spotify", id: albumMatch[1], resourceType: "album" };
+    }
     const idMatch = trimmed.match(/\/playlist\/([A-Za-z0-9]+)/);
     if (!idMatch) throw new Error("Could not extract Spotify playlist ID from URL");
-    return { platform: "spotify", id: idMatch[1] };
+    return { platform: "spotify", id: idMatch[1], resourceType: "playlist" };
   }
 
   // NetEase: music.163.com/#/playlist?id=xxx  or  music.163.com/playlist?id=xxx
@@ -252,6 +257,69 @@ async function extractSpotify(playlistId: string, env: Env): Promise<PlaylistInf
     platform: "spotify",
     description: pl.description || undefined,
     artwork_url: pl.images?.[0]?.url,
+    track_count: tracks.length,
+    tracks,
+  };
+}
+
+async function extractSpotifyAlbum(albumId: string, env: Env): Promise<PlaylistInfo> {
+  const token = await getSpotifyToken(env);
+
+  const resp = await fetch(
+    `https://api.spotify.com/v1/albums/${albumId}`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!resp.ok) {
+    throw new Error(`Spotify API error: ${resp.status} ${await resp.text()}`);
+  }
+
+  const album = (await resp.json()) as {
+    name: string;
+    artists: Array<{ name: string }>;
+    images?: Array<{ url: string }>;
+    tracks: {
+      total: number;
+      items: Array<{
+        name: string;
+        artists: Array<{ name: string }>;
+        track_number: number;
+      }>;
+      next: string | null;
+    };
+  };
+
+  const albumName = album.name;
+  const tracks: PlaylistTrack[] = [];
+
+  for (const item of album.tracks.items) {
+    tracks.push({
+      name: item.name,
+      artist: item.artists.map((a) => a.name).join(", "),
+      album: albumName,
+    });
+  }
+
+  let nextUrl = album.tracks.next;
+  while (nextUrl) {
+    const pageResp = await fetch(nextUrl, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!pageResp.ok) break;
+    const page = (await pageResp.json()) as typeof album.tracks;
+    for (const item of page.items) {
+      tracks.push({
+        name: item.name,
+        artist: item.artists.map((a) => a.name).join(", "),
+        album: albumName,
+      });
+    }
+    nextUrl = page.next;
+  }
+
+  return {
+    name: albumName,
+    platform: "spotify",
+    artwork_url: album.images?.[0]?.url,
     track_count: tracks.length,
     tracks,
   };
@@ -491,7 +559,9 @@ export async function extractPlaylistFromUrl(
     case "apple_music":
       return extractAppleMusic(parsed.id, env, parsed.storefront);
     case "spotify":
-      return extractSpotify(parsed.id, env);
+      return parsed.resourceType === "album"
+        ? extractSpotifyAlbum(parsed.id, env)
+        : extractSpotify(parsed.id, env);
     case "netease":
       return extractNetease(parsed.id);
     case "qqmusic":

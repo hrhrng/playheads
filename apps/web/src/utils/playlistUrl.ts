@@ -9,7 +9,7 @@ const PLATFORM_PATTERNS: Array<{
   displayName: string;
 }> = [
   { regex: /music\.apple\.com/i, platform: "apple_music", displayName: "Apple Music" },
-  { regex: /open\.spotify\.com\/playlist/i, platform: "spotify", displayName: "Spotify" },
+  { regex: /open\.spotify\.com\/(playlist|album)/i, platform: "spotify", displayName: "Spotify" },
   { regex: /music\.youtube\.com/i, platform: "youtube_music", displayName: "YouTube Music" },
   { regex: /music\.163\.com/i, platform: "netease", displayName: "网易云音乐" },
   { regex: /y\.qq\.com/i, platform: "qqmusic", displayName: "QQ音乐" },
