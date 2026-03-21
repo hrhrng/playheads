@@ -68,6 +68,8 @@ export default {
     }
     const llmActivateMatch = url.pathname.match(/^\/api\/llm-config\/([^/]+)\/activate$/);
     if (llmActivateMatch && request.method === "POST") return handleLlmActivate(llmActivateMatch[1], env);
+    const llmTestMatch = url.pathname.match(/^\/api\/llm-config\/([^/]+)\/test$/);
+    if (llmTestMatch && request.method === "POST") return handleLlmTest(llmTestMatch[1], env);
 
     // Search config endpoints
     if (url.pathname === "/api/search-config" && request.method === "GET") return handleSearchList(env);
@@ -377,6 +379,68 @@ async function handleLlmActivate(id: string, env: Env): Promise<Response> {
   return Response.json({ success: true });
 }
 
+async function handleLlmTest(id: string, env: Env): Promise<Response> {
+  const row = await env.DB.prepare(
+    "SELECT * FROM llm_provider_config WHERE id = ?"
+  ).bind(id).first<LlmProviderRow>();
+  if (!row) return Response.json({ error: "Not found" }, { status: 404 });
+
+  const apiKey = await decrypt(row.apiKey, env);
+  const isGateway = row.gateway === "cf_ai_gateway";
+
+  try {
+    if (row.providerType === "anthropic") {
+      // Mirror agent: use gatewayAccountId/gatewayId from row (same as DB config path)
+      const baseURL = (isGateway && row.gatewayAccountId && row.gatewayId)
+        ? `https://gateway.ai.cloudflare.com/v1/${row.gatewayAccountId}/${row.gatewayId}/anthropic`
+        : "https://api.anthropic.com";
+      const res = await fetch(`${baseURL}/v1/messages`, {
+        method: "POST",
+        headers: {
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model: row.model,
+          max_tokens: 8,
+          messages: [{ role: "user", content: "hi" }],
+        }),
+      });
+      const body = await res.json() as Record<string, unknown>;
+      if (res.ok) return Response.json({ success: true, model: body["model"] });
+      return Response.json({ success: false, error: (body["error"] as Record<string,unknown>)?.["message"] || res.statusText });
+    } else {
+      // OpenAI-compatible — mirror agent URL logic
+      const baseURL = row.baseUrl ||
+        (row.providerType === "doubao" ? "https://ark.cn-beijing.volces.com/api/v3" : "https://api.openai.com/v1");
+      let finalBaseURL = baseURL;
+      if (isGateway && row.gatewayAccountId && row.gatewayId) {
+        const cfBase = `https://gateway.ai.cloudflare.com/v1/${row.gatewayAccountId}/${row.gatewayId}`;
+        finalBaseURL = row.providerType === "openai" ? `${cfBase}/openai` : `${cfBase}/openai-compatible`;
+      }
+      const res = await fetch(`${finalBaseURL}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model: row.model,
+          max_tokens: 8,
+          messages: [{ role: "user", content: "hi" }],
+        }),
+      });
+      const body = await res.json() as Record<string, unknown>;
+      if (res.ok) return Response.json({ success: true, model: (body["model"] as string) || row.model });
+      const err = body["error"] as Record<string, unknown> | undefined;
+      return Response.json({ success: false, error: (err?.["message"] as string) || res.statusText });
+    }
+  } catch (e) {
+    return Response.json({ success: false, error: e instanceof Error ? e.message : String(e) });
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Search Config — DB migration
 // ---------------------------------------------------------------------------
@@ -679,6 +743,7 @@ function renderLlmConfigPage() {
       <td style="font-family:monospace;font-size:12px;color:#9ca3af">\${p.apiKey}</td>
       <td class="actions">
         \${!p.isActive ? \`<button class="btn btn-green" onclick="llmActivate('\${p.id}')">Activate</button>\` : ''}
+        <button class="btn btn-ghost" onclick="llmTest('\${p.id}', this)">Test</button>
         <button class="btn btn-ghost" onclick="llmEdit('\${p.id}')">Edit</button>
         <button class="btn btn-red" onclick="llmDelete('\${p.id}')">Delete</button>
       </td>
@@ -1109,6 +1174,30 @@ window.llmOnProviderChange = () => {
 };
 window.llmOnGatewayChange = () => {
   if (llmModal) { llmModal.data.gateway = document.getElementById('lm_gateway').value; render(); }
+};
+window.llmTest = async (id, btn) => {
+  const orig = btn.textContent;
+  btn.textContent = 'Testing…';
+  btn.disabled = true;
+  try {
+    const res = await fetch(\`/api/llm-config/\${id}/test\`, { method: 'POST' });
+    const data = await res.json();
+    if (data.success) {
+      btn.textContent = '✓ OK';
+      btn.style.background = '#dcfce7';
+      btn.style.color = '#15803d';
+    } else {
+      btn.textContent = '✗ Fail';
+      btn.style.background = '#fef2f2';
+      btn.style.color = '#b91c1c';
+      btn.title = data.error || 'Unknown error';
+    }
+  } catch {
+    btn.textContent = '✗ Error';
+  } finally {
+    btn.disabled = false;
+    setTimeout(() => { btn.textContent = orig; btn.style = ''; btn.title = ''; }, 4000);
+  }
 };
 window.llmActivate = async (id) => {
   await fetch(\`/api/llm-config/\${id}/activate\`, { method: 'POST' });

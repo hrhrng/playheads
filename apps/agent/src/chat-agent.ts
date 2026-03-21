@@ -378,3 +378,23 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
     return result.toUIMessageStreamResponse();
   }
 }
+
+// Wrap onChatMessage to send errors back to the client instead of silently failing
+const _orig = MusicChatAgent.prototype.onChatMessage;
+MusicChatAgent.prototype.onChatMessage = async function (this: MusicChatAgent, ...args) {
+  try {
+    return await _orig.apply(this, args);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error("[MusicChatAgent] onChatMessage error:", msg);
+    const stream = new ReadableStream({
+      start(c) {
+        c.enqueue(new TextEncoder().encode(`3:"Agent error: ${msg.replace(/"/g, "'")}"\n`));
+        c.close();
+      },
+    });
+    return new Response(stream, {
+      headers: { "Content-Type": "text/event-stream", "X-Vercel-AI-Data-Stream": "v1" },
+    });
+  }
+};
