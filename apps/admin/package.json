@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@playheads/auth": "workspace:*",
+    "@playheads/llm-config": "workspace:*",
     "drizzle-orm": "^0.44.0"
   },
   "devDependencies": {

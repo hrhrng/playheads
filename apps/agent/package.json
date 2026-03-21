@@ -8,6 +8,7 @@
     "types": "wrangler types"
   },
   "dependencies": {
+    "@playheads/llm-config": "workspace:*",
     "@ai-sdk/anthropic": "^3.0.58",
     "@ai-sdk/openai-compatible": "^2.0.0",
     "@cloudflare/ai-chat": "^0.1.0",

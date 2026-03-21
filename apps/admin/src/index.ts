@@ -1,6 +1,7 @@
 import { drizzle } from "drizzle-orm/d1";
 import { schema } from "@playheads/auth";
 import { eq, inArray, count, asc } from "drizzle-orm";
+import { MODEL_REGISTRY, CALLER_TYPES } from "@playheads/llm-config";
 
 interface Env {
   DB: D1Database;
@@ -21,6 +22,7 @@ interface LlmProviderRow {
   gatewayId: string | null;
   apiKey: string;           // encrypted; for CF gateway, store CF_AIG_TOKEN here
   baseUrl: string | null;
+  thinkingEnabled: number;  // 0 | 1
   isActive: number;
   createdAt: number;
   updatedAt: number;
@@ -70,6 +72,13 @@ export default {
     if (llmActivateMatch && request.method === "POST") return handleLlmActivate(llmActivateMatch[1], env);
     const llmTestMatch = url.pathname.match(/^\/api\/llm-config\/([^/]+)\/test$/);
     if (llmTestMatch && request.method === "POST") return handleLlmTest(llmTestMatch[1], env);
+
+    // LLM caller binding endpoints
+    if (url.pathname === "/api/llm-callers" && request.method === "GET") return handleCallerList(env);
+    if (url.pathname === "/api/llm-callers" && request.method === "PUT") return handleCallerUpdate(request, env);
+
+    // Model registry endpoint (for frontend)
+    if (url.pathname === "/api/model-registry" && request.method === "GET") return handleModelRegistry();
 
     // Search config endpoints
     if (url.pathname === "/api/search-config" && request.method === "GET") return handleSearchList(env);
@@ -263,9 +272,24 @@ async function ensureLlmTable(env: Env): Promise<void> {
     gatewayId        TEXT,
     apiKey           TEXT NOT NULL,
     baseUrl          TEXT,
+    thinkingEnabled  INTEGER NOT NULL DEFAULT 0,
     isActive         INTEGER NOT NULL DEFAULT 0,
     createdAt        INTEGER NOT NULL,
     updatedAt        INTEGER NOT NULL
+  )`).run();
+
+  // Migration: add thinkingEnabled column if missing (existing installs)
+  try {
+    await env.DB.prepare("SELECT thinkingEnabled FROM llm_provider_config LIMIT 1").first();
+  } catch {
+    await env.DB.prepare("ALTER TABLE llm_provider_config ADD COLUMN thinkingEnabled INTEGER NOT NULL DEFAULT 0").run();
+  }
+
+  // Caller → Resource binding table
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS llm_caller_config (
+    callerType TEXT PRIMARY KEY,
+    resourceId TEXT,
+    updatedAt  INTEGER NOT NULL
   )`).run();
 }
 
@@ -335,13 +359,13 @@ async function handleLlmCreate(request: Request, env: Env): Promise<Response> {
   }
   const now = Date.now();
   const id = crypto.randomUUID();
-  const encKey = await encrypt(body.apiKey, env);
+  const encKey = await encrypt(body.apiKey || "", env);
   await env.DB.prepare(
-    `INSERT INTO llm_provider_config (id,name,providerType,model,gateway,gatewayAccountId,gatewayId,apiKey,baseUrl,isActive,createdAt,updatedAt)
-     VALUES (?,?,?,?,?,?,?,?,?,0,?,?)`
+    `INSERT INTO llm_provider_config (id,name,providerType,model,gateway,gatewayAccountId,gatewayId,apiKey,baseUrl,thinkingEnabled,isActive,createdAt,updatedAt)
+     VALUES (?,?,?,?,?,?,?,?,?,?,0,?,?)`
   ).bind(id, body.name || body.providerType, body.providerType, body.model,
     body.gateway || "direct", body.gatewayAccountId || null, body.gatewayId || null,
-    encKey, body.baseUrl || null, now, now).run();
+    encKey, body.baseUrl || null, body.thinkingEnabled ? 1 : 0, now, now).run();
   return Response.json({ success: true, id });
 }
 
@@ -361,6 +385,7 @@ async function handleLlmUpdate(id: string, request: Request, env: Env): Promise<
     updates.push("apiKey = ?"); vals.push(await encrypt(body.apiKey, env));
   }
   if (body.baseUrl !== undefined) { updates.push("baseUrl = ?"); vals.push(body.baseUrl || null); }
+  if (body.thinkingEnabled !== undefined) { updates.push("thinkingEnabled = ?"); vals.push(body.thinkingEnabled ? 1 : 0); }
 
   vals.push(id);
   await env.DB.prepare(`UPDATE llm_provider_config SET ${updates.join(", ")} WHERE id = ?`).bind(...vals).run();
@@ -368,7 +393,10 @@ async function handleLlmUpdate(id: string, request: Request, env: Env): Promise<
 }
 
 async function handleLlmDelete(id: string, env: Env): Promise<Response> {
-  await env.DB.prepare("DELETE FROM llm_provider_config WHERE id = ?").bind(id).run();
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM llm_provider_config WHERE id = ?").bind(id),
+    env.DB.prepare("UPDATE llm_caller_config SET resourceId = NULL WHERE resourceId = ?").bind(id),
+  ]);
   return Response.json({ success: true });
 }
 
@@ -447,6 +475,48 @@ async function handleLlmTest(id: string, env: Env): Promise<Response> {
   } catch (e) {
     return Response.json({ success: false, error: e instanceof Error ? e.message : String(e) });
   }
+}
+
+// ---------------------------------------------------------------------------
+// LLM Caller binding — API handlers
+// ---------------------------------------------------------------------------
+
+async function handleCallerList(env: Env): Promise<Response> {
+  const rows = await env.DB.prepare(
+    "SELECT callerType, resourceId FROM llm_caller_config"
+  ).all<{ callerType: string; resourceId: string | null }>();
+  return Response.json({ data: rows.results || [] });
+}
+
+async function handleCallerUpdate(request: Request, env: Env): Promise<Response> {
+  const body = await request.json() as { callerType: string; resourceId: string | null };
+  if (!body.callerType || !CALLER_TYPES.includes(body.callerType as "chat" | "title")) {
+    return Response.json({ error: "Invalid callerType" }, { status: 400 });
+  }
+  const now = Date.now();
+  await env.DB.prepare(
+    `INSERT INTO llm_caller_config (callerType, resourceId, updatedAt) VALUES (?, ?, ?)
+     ON CONFLICT(callerType) DO UPDATE SET resourceId = excluded.resourceId, updatedAt = excluded.updatedAt`
+  ).bind(body.callerType, body.resourceId || null, now).run();
+  return Response.json({ success: true });
+}
+
+function handleModelRegistry(): Response {
+  const cards = Object.fromEntries(
+    Object.entries(MODEL_REGISTRY).map(([id, card]) => [
+      id,
+      {
+        label: card.label,
+        group: card.group,
+        sdk: card.sdk,
+        providerType: id.split("/")[0],
+        modelId: card.modelId,
+        hasThinking: !!card.thinking,
+        defaultBaseUrl: card.defaultBaseUrl || null,
+      },
+    ])
+  );
+  return Response.json({ data: cards });
 }
 
 // ---------------------------------------------------------------------------
@@ -658,12 +728,10 @@ const SEARCH_PROVIDER_PRESETS = {
   none:   { label: 'None (disabled)', keyLabel: 'API Key (not needed)', keyPlaceholder: '' },
 };
 
-const PROVIDER_PRESETS = {
-  anthropic: { baseUrl: '', model: 'claude-sonnet-4-6', label: 'Anthropic' },
-  doubao:    { baseUrl: 'https://ark.cn-beijing.volces.com/api/v3', model: 'doubao-1.5-pro-32k', label: 'Doubao' },
-  openai:    { baseUrl: '', model: 'gpt-4o', label: 'OpenAI' },
-  custom:    { baseUrl: '', model: '', label: 'Custom (OpenAI-compatible)' },
-};
+// Model cards loaded from /api/model-registry (shared from @playheads/llm-config)
+let MODEL_CARDS = {};
+// Caller bindings state
+let callerBindings = []; // [{ callerType, resourceId }]
 
 // Icons (inline SVG)
 const icons = {
@@ -718,57 +786,68 @@ function renderPageContent() {
 }
 
 function renderLlmConfigPage() {
-  const active = llmProviders.find(p => p.isActive);
-  const activeCard = active ? \`
-    <div style="background:#fff;border:2px solid #111;border-radius:12px;padding:20px 24px;margin-bottom:24px;display:flex;align-items:center;justify-content:space-between">
-      <div>
-        <div style="font-size:11px;color:#9ca3af;font-weight:500;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Active Provider</div>
-        <div style="font-weight:600;font-size:15px">\${active.name}</div>
-        <div style="font-size:12px;color:#6b7280;margin-top:2px">\${active.model} · \${active.gateway === 'cf_ai_gateway' ? 'CF Gateway' : 'Direct'}</div>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px">
-        <span style="width:8px;height:8px;background:#22c55e;border-radius:50%;display:inline-block"></span>
-        <span style="font-size:12px;color:#15803d;font-weight:500">Active</span>
-      </div>
-    </div>\` : \`
-    <div style="background:#fefce8;border:1px solid #fef08a;border-radius:12px;padding:16px 20px;margin-bottom:24px;font-size:13px;color:#a16207">
-      No active provider set. Add a provider and activate it.
+  // Caller bindings section
+  const callerRows = ['chat', 'title'].map(ct => {
+    const binding = callerBindings.find(b => b.callerType === ct);
+    const resId = binding?.resourceId || '';
+    const res = llmProviders.find(p => p.id === resId);
+    return \`<tr>
+      <td style="font-weight:600;text-transform:capitalize">\${ct}</td>
+      <td>
+        <select onchange="callerAssign('\${ct}', this.value)" style="width:100%;max-width:300px;height:36px;padding:0 10px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;outline:none;background:#fff">
+          <option value="">— env fallback —</option>
+          \${llmProviders.map(p => \`<option value="\${p.id}" \${resId===p.id?'selected':''}>\${p.name} (\${p.model})</option>\`).join('')}
+        </select>
+      </td>
+      <td style="font-size:12px;color:#9ca3af">\${res ? (res.thinkingEnabled ? 'Thinking ON' : 'Thinking OFF') : '—'}</td>
+    </tr>\`;
+  }).join('');
+
+  const callerSection = \`
+    <div style="margin-bottom:24px">
+      <div style="font-size:13px;font-weight:600;margin-bottom:8px">Caller Bindings</div>
+      <div style="font-size:12px;color:#6b7280;margin-bottom:12px">Assign an LLM resource to each usage point. Unassigned callers fall back to env vars.</div>
+      <table>
+        <thead><tr><th>Caller</th><th>Resource</th><th>Info</th></tr></thead>
+        <tbody>\${callerRows}</tbody>
+      </table>
     </div>\`;
 
-  const rows = llmProviders.map(p => \`
+  const rows = llmProviders.map(p => {
+    const cardId = p.providerType + '/' + p.model;
+    const card = MODEL_CARDS[cardId];
+    return \`
     <tr>
       <td>
-        <div style="display:flex;align-items:center;gap:8px">
-          \${p.isActive ? '<span style="font-size:14px">★</span>' : '<span style="font-size:14px;opacity:.2">★</span>'}
-          <div>
-            <div style="font-weight:500">\${p.name}</div>
-            <div style="font-size:11px;color:#9ca3af">\${PROVIDER_PRESETS[p.providerType]?.label || p.providerType}</div>
-          </div>
+        <div>
+          <div style="font-weight:500">\${p.name}</div>
+          <div style="font-size:11px;color:#9ca3af">\${card?.group || p.providerType} · \${card?.label || p.model}</div>
         </div>
       </td>
       <td style="font-family:monospace;font-size:12px">\${p.model}</td>
       <td><span class="badge \${p.gateway === 'cf_ai_gateway' ? 'badge-approved' : 'badge-pending'}">\${p.gateway === 'cf_ai_gateway' ? 'CF Gateway' : 'Direct'}</span></td>
+      <td>\${p.thinkingEnabled ? '<span class="badge badge-approved">Thinking</span>' : ''}</td>
       <td style="font-family:monospace;font-size:12px;color:#9ca3af">\${p.apiKey}</td>
       <td class="actions">
-        \${!p.isActive ? \`<button class="btn btn-green" onclick="llmActivate('\${p.id}')">Activate</button>\` : ''}
         <button class="btn btn-ghost" onclick="llmTest('\${p.id}', this)">Test</button>
         <button class="btn btn-ghost" onclick="llmEdit('\${p.id}')">Edit</button>
         <button class="btn btn-red" onclick="llmDelete('\${p.id}')">Delete</button>
       </td>
-    </tr>\`).join('');
+    </tr>\`;
+  }).join('');
 
   return \`
     <div class="main-header">
       <h2>LLM Configuration</h2>
-      <button class="btn btn-primary" onclick="llmOpenAdd()">\${icons.plus} Add Provider</button>
+      <button class="btn btn-primary" onclick="llmOpenAdd()">\${icons.plus} Add Resource</button>
     </div>
     <div class="main-body">
-      \${activeCard}
+      \${callerSection}
       \${llmLoading ? '<p class="empty">Loading...</p>' :
-        llmProviders.length === 0 ? '<p class="empty">No providers configured</p>' : \`
+        llmProviders.length === 0 ? '<p class="empty">No resources configured</p>' : \`
         <table>
           <thead><tr>
-            <th>Provider</th><th>Model</th><th>Gateway</th><th>API Key</th><th style="text-align:right">Actions</th>
+            <th>Resource</th><th>Model</th><th>Gateway</th><th>Thinking</th><th>API Key</th><th style="text-align:right">Actions</th>
           </tr></thead>
           <tbody>\${rows}</tbody>
         </table>\`}
@@ -778,8 +857,21 @@ function renderLlmConfigPage() {
 function renderLlmModal() {
   const d = llmModal.data || {};
   const isEdit = llmModal.mode === 'edit';
-  const preset = PROVIDER_PRESETS[d.providerType || 'anthropic'];
+  const currentCardId = d.providerType && d.model ? d.providerType + '/' + d.model : '';
+  const currentCard = MODEL_CARDS[currentCardId];
   const isCfGateway = (d.gateway || 'direct') === 'cf_ai_gateway';
+
+  // Group cards by group for optgroup
+  const groups = {};
+  Object.entries(MODEL_CARDS).forEach(([id, c]) => {
+    if (!groups[c.group]) groups[c.group] = [];
+    groups[c.group].push({ id, ...c });
+  });
+  const modelOptions = Object.entries(groups).map(([g, cards]) =>
+    \`<optgroup label="\${g}">\${cards.map(c =>
+      \`<option value="\${c.id}" \${currentCardId===c.id?'selected':''}>\${c.label}</option>\`
+    ).join('')}</optgroup>\`
+  ).join('');
 
   const gwFields = isCfGateway ? \`
     <div class="form-group">
@@ -791,33 +883,35 @@ function renderLlmModal() {
       <input id="lm_gatewayId" value="\${d.gatewayId || ''}" placeholder="clash" />
     </div>\` : '';
 
-  // When using CF Gateway, apiKey = the token passed to the gateway endpoint
-  // (equivalent to CF_AIG_TOKEN in env). For direct, apiKey = provider API key.
   const apiKeyLabel = isCfGateway ? 'CF Gateway Token' : 'API Key';
   const apiKeyPlaceholder = isCfGateway ? 'CF AI Gateway token' : 'sk-...';
 
+  const showThinking = currentCard?.hasThinking;
+
   return \`<div class="modal-overlay" id="llmModalOverlay">
     <div class="modal" style="max-width:480px;max-height:90vh;overflow-y:auto">
-      <h3>\${isEdit ? 'Edit Provider' : 'Add LLM Provider'}</h3>
-      <p>Configure an LLM provider. API keys are encrypted at rest (AES-256-GCM).</p>
+      <h3>\${isEdit ? 'Edit Resource' : 'Add LLM Resource'}</h3>
+      <p>Configure an LLM resource. API keys are encrypted at rest (AES-256-GCM).</p>
       \${llmMsg ? \`<div class="msg \${llmMsgType === 'error' ? 'msg-err' : 'msg-ok'}">\${llmMsg}</div>\` : ''}
       <form id="llmForm">
         <div class="form-group">
           <label>Display Name</label>
-          <input id="lm_name" value="\${d.name || ''}" placeholder="My Doubao Config" />
-        </div>
-        <div class="form-group">
-          <label>Provider Type</label>
-          <select id="lm_providerType" onchange="llmOnProviderChange()" style="width:100%;height:42px;padding:0 14px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;outline:none;background:#fff">
-            \${Object.entries(PROVIDER_PRESETS).map(([k,v]) =>
-              \`<option value="\${k}" \${(d.providerType||'anthropic')===k?'selected':''}>\${v.label}</option>\`
-            ).join('')}
-          </select>
+          <input id="lm_name" value="\${d.name || ''}" placeholder="My Anthropic Config" />
         </div>
         <div class="form-group">
           <label>Model</label>
-          <input id="lm_model" value="\${d.model || preset?.model || ''}" placeholder="doubao-1.5-pro-32k" />
+          <select id="lm_cardId" onchange="llmOnCardChange()" style="width:100%;height:42px;padding:0 14px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;outline:none;background:#fff">
+            <option value="">— Select a model —</option>
+            \${modelOptions}
+          </select>
         </div>
+        \${showThinking ? \`
+        <div class="form-group">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" id="lm_thinking" \${d.thinkingEnabled ? 'checked' : ''} style="width:auto" />
+            Enable Thinking / Reasoning
+          </label>
+        </div>\` : ''}
         <div class="form-group">
           <label>Gateway</label>
           <select id="lm_gateway" onchange="llmOnGatewayChange()" style="width:100%;height:42px;padding:0 14px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;outline:none;background:#fff">
@@ -834,12 +928,12 @@ function renderLlmModal() {
           </div>
         </div>
         <div class="form-group">
-          <label>Base URL (optional)</label>
-          <input id="lm_baseUrl" value="\${d.baseUrl || preset?.baseUrl || ''}" placeholder="https://ark.cn-beijing.volces.com/api/v3" />
+          <label>Base URL (optional, auto-filled from model card)</label>
+          <input id="lm_baseUrl" value="\${d.baseUrl || currentCard?.defaultBaseUrl || ''}" placeholder="https://api.example.com/v1" />
         </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-ghost" onclick="llmCloseModal()">Cancel</button>
-          <button type="submit" class="btn btn-primary">\${isEdit ? 'Save Changes' : 'Add Provider'}</button>
+          <button type="submit" class="btn btn-primary">\${isEdit ? 'Save Changes' : 'Add Resource'}</button>
         </div>
       </form>
     </div>
@@ -1100,23 +1194,30 @@ function bind() {
   const llmForm = document.getElementById('llmForm');
   if (llmForm) llmForm.onsubmit = async (e) => {
     e.preventDefault();
+    const cardId = document.getElementById('lm_cardId')?.value || '';
+    const card = MODEL_CARDS[cardId];
+    const [providerType, ...modelParts] = cardId.split('/');
+    const model = modelParts.join('/');
+    const thinkingEl = document.getElementById('lm_thinking');
     const body = {
       name: document.getElementById('lm_name').value.trim(),
-      providerType: document.getElementById('lm_providerType').value,
-      model: document.getElementById('lm_model').value.trim(),
+      providerType: providerType || llmModal.data?.providerType || '',
+      model: model || llmModal.data?.model || '',
       gateway: document.getElementById('lm_gateway').value,
       gatewayAccountId: document.getElementById('lm_gatewayAccountId')?.value.trim() || null,
       gatewayId: document.getElementById('lm_gatewayId')?.value.trim() || null,
       apiKey: document.getElementById('lm_apiKey').value,
       baseUrl: document.getElementById('lm_baseUrl').value.trim() || null,
+      thinkingEnabled: thinkingEl ? thinkingEl.checked : false,
     };
-    if (!body.name) body.name = PROVIDER_PRESETS[body.providerType]?.label || body.providerType;
+    if (!body.providerType || !body.model) { llmMsg = 'Please select a model'; llmMsgType = 'error'; render(); return; }
+    if (!body.name) body.name = card?.label || body.providerType;
     try {
       const isEdit = llmModal.mode === 'edit';
       const url = isEdit ? \`/api/llm-config/\${llmModal.data.id}\` : '/api/llm-config';
       const res = await fetch(url, { method: isEdit ? 'PATCH' : 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
       const data = await res.json();
-      if (res.ok) { llmMsg = isEdit ? 'Saved!' : 'Provider added!'; llmMsgType = 'ok'; render(); setTimeout(() => { llmCloseModal(); fetchLlmData(); }, 900); }
+      if (res.ok) { llmMsg = isEdit ? 'Saved!' : 'Resource added!'; llmMsgType = 'ok'; render(); setTimeout(() => { llmCloseModal(); fetchLlmData(); }, 900); }
       else { llmMsg = data.error || 'Failed'; llmMsgType = 'error'; render(); }
     } catch { llmMsg = 'Network error'; llmMsgType = 'error'; render(); }
   };
@@ -1156,9 +1257,19 @@ window.bulkAction = (action) => { doAction([...selected], action); };
 // LLM Config actions
 async function fetchLlmData() {
   llmLoading = true; render();
-  const res = await fetch('/api/llm-config');
-  const json = await res.json();
-  llmProviders = json.data || [];
+  const [provRes, callerRes, registryRes] = await Promise.all([
+    fetch('/api/llm-config'),
+    fetch('/api/llm-callers'),
+    Object.keys(MODEL_CARDS).length === 0 ? fetch('/api/model-registry') : null,
+  ]);
+  const provJson = await provRes.json();
+  const callerJson = await callerRes.json();
+  llmProviders = provJson.data || [];
+  callerBindings = callerJson.data || [];
+  if (registryRes) {
+    const regJson = await registryRes.json();
+    MODEL_CARDS = regJson.data || {};
+  }
   llmLoading = false;
   render();
 }
@@ -1170,15 +1281,33 @@ window.llmEdit = (id) => {
 };
 window.llmCloseModal = () => { llmModal = null; llmMsg = ''; render(); };
 window.llmToggleKey = () => { llmKeyVisible = !llmKeyVisible; render(); };
-window.llmOnProviderChange = () => {
-  const type = document.getElementById('lm_providerType').value;
-  const preset = PROVIDER_PRESETS[type];
-  if (preset) {
-    const modelEl = document.getElementById('lm_model');
+window.llmOnCardChange = () => {
+  const cardId = document.getElementById('lm_cardId')?.value || '';
+  const card = MODEL_CARDS[cardId];
+  if (card) {
     const baseEl = document.getElementById('lm_baseUrl');
-    if (modelEl && !modelEl.value) modelEl.value = preset.model;
-    if (baseEl) baseEl.value = preset.baseUrl;
+    if (baseEl) baseEl.value = card.defaultBaseUrl || '';
+    const nameEl = document.getElementById('lm_name');
+    if (nameEl && !nameEl.value) nameEl.value = card.label;
   }
+  // Update modal data so thinking checkbox re-renders correctly
+  if (llmModal) {
+    const [pt, ...mp] = cardId.split('/');
+    llmModal.data.providerType = pt;
+    llmModal.data.model = mp.join('/');
+    render();
+  }
+};
+window.callerAssign = async (callerType, resourceId) => {
+  await fetch('/api/llm-callers', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ callerType, resourceId: resourceId || null }),
+  });
+  const res = await fetch('/api/llm-callers');
+  const json = await res.json();
+  callerBindings = json.data || [];
+  render();
 };
 window.llmOnGatewayChange = () => {
   if (llmModal) { llmModal.data.gateway = document.getElementById('lm_gateway').value; render(); }
@@ -1206,10 +1335,6 @@ window.llmTest = async (id, btn) => {
     btn.disabled = false;
     setTimeout(() => { btn.textContent = orig; btn.style = ''; btn.title = ''; }, 4000);
   }
-};
-window.llmActivate = async (id) => {
-  await fetch(\`/api/llm-config/\${id}/activate\`, { method: 'POST' });
-  fetchLlmData();
 };
 window.llmDelete = async (id) => {
   if (!confirm('Delete this provider?')) return;

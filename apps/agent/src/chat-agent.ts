@@ -9,11 +9,10 @@
  */
 import { AIChatAgent } from "@cloudflare/ai-chat";
 import { streamText, convertToModelMessages, stepCountIs, tool } from "ai";
-import { createAnthropic } from "@ai-sdk/anthropic";
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { z } from "zod";
 import { createMusicTools } from "./tools";
 import { generateAndUpdateTitle } from "./title";
+import { resolveLLM } from "./resolve-llm";
 import type { Env, PlaybackState } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -210,125 +209,43 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
     });
 
     // ---------------------------------------------------------------------------
-    // Resolve active LLM config: DB first, env vars as fallback.
-    // DB config is set via the admin panel (/api/llm-config).
+    // Resolve LLM via Model Card architecture (DB caller → resource → card)
     // ---------------------------------------------------------------------------
-    const [dbConfig, dbSearchConfig] = await Promise.all([
-      this.env.DB.prepare(
-        "SELECT providerType, model, gateway, gatewayAccountId, gatewayId, apiKey, baseUrl FROM llm_provider_config WHERE isActive = 1 LIMIT 1"
-      ).first<{
-        providerType: string; model: string; gateway: string;
-        gatewayAccountId: string | null; gatewayId: string | null;
-        apiKey: string; baseUrl: string | null;
-      }>().catch(() => null),
-      this.env.DB.prepare(
-        "SELECT providerType, apiKey FROM search_provider_config WHERE isActive = 1 LIMIT 1"
-      ).first<{ providerType: string; apiKey: string }>().catch(() => null),
-    ]);
+    const { model, card, providerOptions, maxOutputTokens, anthropicInstance } =
+      await resolveLLM(this.env, "chat");
 
-    // Decrypt helper — mirrors apps/admin/src/index.ts decrypt()
-    const decryptKey = async (encoded: string): Promise<string> => {
-      const hex = (this.env as unknown as Record<string, string>)["ADMIN_ENCRYPTION_KEY"];
-      if (!hex || hex.length < 64) return encoded;
-      try {
-        const raw = new Uint8Array(hex.match(/.{2}/g)!.map((b: string) => parseInt(b, 16)));
-        const key = await crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, false, ["decrypt"]);
-        const buf = Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0));
-        const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: buf.slice(0, 12) }, key, buf.slice(12));
-        return new TextDecoder().decode(pt);
-      } catch { return encoded; }
-    };
+    // Resolve search provider: DB config > env vars
+    const dbSearchConfig = await this.env.DB.prepare(
+      "SELECT providerType, apiKey FROM search_provider_config WHERE isActive = 1 LIMIT 1"
+    ).first<{ providerType: string; apiKey: string }>().catch(() => null);
 
-    const resolvedProvider = dbConfig?.providerType || this.env.LLM_PROVIDER || "anthropic";
-    const resolvedApiKey = dbConfig ? await decryptKey(dbConfig.apiKey) : "";
-
-    // Resolve search provider: DB config takes priority over env vars
     const searchDbOverride = dbSearchConfig
-      ? { providerType: dbSearchConfig.providerType, apiKey: dbSearchConfig.apiKey ? await decryptKey(dbSearchConfig.apiKey) : "" }
+      ? { providerType: dbSearchConfig.providerType, apiKey: dbSearchConfig.apiKey || "" }
       : undefined;
 
-    let model: Parameters<typeof streamText>[0]["model"];
-    let tools: Parameters<typeof streamText>[0]["tools"];
-    let maxOutputTokens: number;
-    let providerOptions: Parameters<typeof streamText>[0]["providerOptions"];
+    // Build web search tool: native Anthropic search or external (Brave/Tavily)
+    const effectiveSearchProvider = (searchDbOverride?.providerType || this.env.SEARCH_PROVIDER || (card?.nativeSearch ? "anthropic" : "")).toLowerCase();
 
-    if (resolvedProvider === "anthropic") {
-      // -----------------------------------------------------------------------
-      // Anthropic — via Cloudflare AI Gateway (or direct).
-      // DB config gateway field controls routing; falls back to env vars.
-      // apiKey: for CF Gateway = gateway token (CF_AIG_TOKEN equivalent);
-      //         for direct = actual Anthropic API key.
-      // -----------------------------------------------------------------------
-      const useGateway = dbConfig ? dbConfig.gateway === "cf_ai_gateway" : true;
-      const accountId = dbConfig?.gatewayAccountId || this.env.CLOUDFLARE_ACCOUNT_ID;
-      const gatewayId = dbConfig?.gatewayId || this.env.AI_GATEWAY_ID;
-      const anthropicApiKey = resolvedApiKey || this.env.CF_AIG_TOKEN;
-      const anthropicBaseURL = useGateway
-        ? `https://gateway.ai.cloudflare.com/v1/${accountId}/${gatewayId}/anthropic`
-        : undefined;
+    const musicTools = createMusicTools({ env: this.env, state: globalState, storefront });
+    let tools: Parameters<typeof streamText>[0]["tools"] = musicTools;
 
-      const anthropic = createAnthropic({ apiKey: anthropicApiKey, baseURL: anthropicBaseURL });
-
-      model = anthropic(dbConfig?.model || this.env.ANTHROPIC_MODEL || "claude-sonnet-4-6") as unknown as Parameters<typeof streamText>[0]["model"];
-      const effectiveSearchProvider = (searchDbOverride?.providerType || this.env.SEARCH_PROVIDER || "anthropic").toLowerCase();
-      const nativeSearch = effectiveSearchProvider === "anthropic"
-        ? { web_search: anthropic.tools.webSearch_20250305({ maxUses: 5 }) }
-        : (() => { const t = buildWebSearchTool(this.env, searchDbOverride); return t ? { web_search: t } : {}; })();
-      tools = {
-        ...createMusicTools({ env: this.env, state: globalState, storefront }),
-        ...nativeSearch,
-      };
-      const thinkingBudget = parseInt(this.env.ANTHROPIC_THINKING_BUDGET || "0");
-      maxOutputTokens = thinkingBudget > 0 ? 16384 : 4096;
-      providerOptions = thinkingBudget > 0
-        ? { anthropic: { thinking: { type: "enabled" as const, budgetTokens: thinkingBudget } } }
-        : undefined;
+    if (effectiveSearchProvider === "anthropic" && anthropicInstance) {
+      tools = { ...musicTools, web_search: anthropicInstance.tools.webSearch_20250305({ maxUses: 5 }) };
     } else {
-      // -----------------------------------------------------------------------
-      // Any OpenAI-compatible provider (Doubao, OpenAI, custom, etc.)
-      // Uses Tavily for web search — the de-facto standard community search tool
-      // for AI agents (works with any LLM, no provider-specific hacks needed).
-      // -----------------------------------------------------------------------
-      const apiKey = resolvedApiKey || this.env.DOUBAO_API_KEY;
-      const baseURL = dbConfig?.baseUrl ||
-        (resolvedProvider === "doubao" ? "https://ark.cn-beijing.volces.com/api/v3" : undefined);
-
-      // Cloudflare AI Gateway wrapping (respects DB gateway config)
-      let finalBaseURL = baseURL;
-      if (dbConfig?.gateway === "cf_ai_gateway") {
-        const accountId = dbConfig.gatewayAccountId || this.env.CLOUDFLARE_ACCOUNT_ID;
-        const gwId = dbConfig.gatewayId || this.env.AI_GATEWAY_ID;
-        const cfBase = `https://gateway.ai.cloudflare.com/v1/${accountId}/${gwId}`;
-        finalBaseURL = resolvedProvider === "openai"
-          ? `${cfBase}/openai`
-          : `${cfBase}/openai-compatible`;
-      }
-
-      const provider = createOpenAICompatible({
-        name: resolvedProvider,
-        apiKey,
-        baseURL: finalBaseURL || "https://api.openai.com/v1",
-      });
-
-      model = provider(dbConfig?.model || this.env.DOUBAO_MODEL || "doubao-1.5-pro-32k") as unknown as Parameters<typeof streamText>[0]["model"];
-
       const webSearchTool = buildWebSearchTool(this.env, searchDbOverride);
-      tools = {
-        ...createMusicTools({ env: this.env, state: globalState, storefront }),
-        ...(webSearchTool ? { web_search: webSearchTool } : {}),
-      };
-      maxOutputTokens = 4096;
-      providerOptions = undefined;
+      if (webSearchTool) {
+        tools = { ...musicTools, web_search: webSearchTool };
+      }
     }
 
-    console.log("[MusicChatAgent] provider=%s model=%s source=%s search=%s", resolvedProvider,
-      dbConfig?.model || "env", dbConfig ? "db" : "env",
-      searchDbOverride?.providerType || this.env.SEARCH_PROVIDER || "anthropic");
+    console.log("[MusicChatAgent] card=%s thinking=%s maxOut=%d search=%s",
+      card?.id || "unknown", !!providerOptions, maxOutputTokens,
+      effectiveSearchProvider || "none");
 
     const result = streamText({
-      model,
+      model: model as Parameters<typeof streamText>[0]["model"],
       maxOutputTokens,
-      providerOptions,
+      providerOptions: providerOptions as Parameters<typeof streamText>[0]["providerOptions"],
       system: buildSystemPrompt(globalState),
       messages: await convertToModelMessages(this.messages),
       tools,
