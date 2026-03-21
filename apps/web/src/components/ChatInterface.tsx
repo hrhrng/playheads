@@ -182,47 +182,28 @@ export const ChatInterface = ({
       slider.style.transform = `translateY(${y}px)`;
     };
 
-    const springBack = () => setTransform(0, 'transform 0.4s cubic-bezier(0.25, 1, 0.5, 1)');
+    const springBack = () => setTransform(0, 'transform 300ms cubic-bezier(0.25, 0.46, 0.45, 0.94)');
 
     const completeSwipe = (direction: 'up' | 'down') => {
       if (swipeLockedRef.current) return;
       swipeLockedRef.current = true;
       const h = getH();
+      const targetY = direction === 'up' ? -h : h;
+      const skipFn = direction === 'up' ? onSkipNextRef : onSkipPrevRef;
 
-      if (direction === 'down') {
-        // Previous: quick bounce + skip (no prev card to show)
-        setTransform(h * 0.12, 'transform 0.15s ease-out');
-        setTimeout(() => {
-          springBack();
+      // Full page transition in both directions
+      setTransform(targetY, 'transform 300ms cubic-bezier(0, 0, 0.58, 1)');
+      pendingResetRef.current = true;
+      skipFn.current?.();
+
+      // Fallback reset if track doesn't change within 1.5s
+      setTimeout(() => {
+        if (pendingResetRef.current) {
+          setTransform(0);
+          pendingResetRef.current = false;
           swipeLockedRef.current = false;
-        }, 160);
-        onSkipPrevRef.current?.();
-        return;
-      }
-
-      // Next: full page slide-up transition
-      const hasNext = !!queueTracksRef.current[1];
-      setTransform(-h, 'transform 0.35s cubic-bezier(0.16, 1, 0.3, 1)');
-
-      if (hasNext) {
-        pendingResetRef.current = true;
-        onSkipNextRef.current?.();
-        // Fallback reset if track doesn't change within 1.5s
-        setTimeout(() => {
-          if (pendingResetRef.current) {
-            setTransform(0);
-            pendingResetRef.current = false;
-            swipeLockedRef.current = false;
-          }
-        }, 1500);
-      } else {
-        // No next track — spring back after brief pause
-        setTimeout(() => {
-          springBack();
-          swipeLockedRef.current = false;
-        }, 200);
-        onSkipNextRef.current?.();
-      }
+        }
+      }, 1500);
     };
 
     // Expose for keyboard handler
@@ -260,14 +241,14 @@ export const ChatInterface = ({
       const hasNext = !!queueTracksRef.current[1];
       let appliedDy = dy;
 
+      // 1:1 finger follow by default; linear resistance (0.15) at edges
       if (dy > 0) {
-        // Dragging down (prev) — rubber-band, no prev card
-        appliedDy = Math.sign(dy) * Math.sqrt(Math.abs(dy)) * 5;
+        // Dragging down (prev) — 1:1 follow (card slides down)
+        appliedDy = dy;
       } else if (dy < 0 && !hasNext) {
-        // Dragging up but no next — rubber-band
-        appliedDy = Math.sign(dy) * Math.sqrt(Math.abs(dy)) * 5;
+        // Dragging up but no next — edge resistance
+        appliedDy = dy * 0.15;
       }
-      // else: dragging up with next track — 1:1 finger follow
 
       setTransform(appliedDy);
       return true;
@@ -280,8 +261,8 @@ export const ChatInterface = ({
       const dy = currentDy;
       const velocity = (y - lastY) / Math.max(Date.now() - lastTime, 1);
       const h = getH();
-      const distThreshold = h * 0.15;
-      const velThreshold = 0.4;
+      const distThreshold = h * 0.2;
+      const velThreshold = 0.3; // px/ms (~300px/s)
 
       if (dy < -distThreshold || velocity < -velThreshold) {
         completeSwipe('up');
