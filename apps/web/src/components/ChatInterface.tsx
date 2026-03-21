@@ -1,70 +1,65 @@
 /**
- * ChatInterface - Main chat UI component
+ * ChatInterface - Three-state main chat UI component.
+ *
+ * Orchestrates Default, Lyrics, and Chat views with smooth transitions.
+ * Replaces the old binary "player + transcript overlay" design.
+ *
  * @module components/ChatInterface
  */
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { RecordPlayer } from './RecordPlayer';
+import { PlayerSection } from './PlayerSection';
+import { LyricsSnippet } from './LyricsSnippet';
+import { LyricsView } from './LyricsView';
+import { ChatFlow } from './ChatFlow';
 import { NewChatView } from './NewChatView';
 import { SkeletonLoader } from './SkeletonLoader';
 import { ChatInput } from './chat/ChatInput';
-import { TranscriptOverlay } from './chat/TranscriptOverlay';
 import { useChat } from '../hooks/useChat';
+import { useViewState } from '../hooks/useViewState';
+import { useLyrics } from '../hooks/useLyrics';
 import { useInitialMessage } from '../hooks/useChatHelpers';
 import { usePlaylistSheet } from '../contexts/PlaylistSheetContext';
 import type { PlaybackTime } from '../types';
 import type { UnifiedTrack } from '../providers/types';
 import type { MusicActions, QueueOperations } from '../hooks/useAgentChatAdapter';
+import type { Message, TextPart } from '../types/chat';
 
 interface ChatInterfaceProps {
-  /** Whether the DJ is currently speaking */
   isDJSpeaking: boolean;
-  /** Whether music is currently playing */
   isPlaying: boolean;
-  /** Whether a playback transition is in progress */
   isTransitioning?: boolean;
-  /** Current track being played */
   currentTrack: UnifiedTrack | null;
-  /** Toggle play/pause */
   togglePlay: () => void;
-  /** Current playback position and duration */
   playbackTime: PlaybackTime;
-  /** Seek to specific position */
   onSeek?: (time: number) => void;
-  /** Current session ID */
   sessionId: string | null;
-  /** Current user ID */
   userId: string | null;
-  /** Whether Apple Music is authorized */
   isAppleMusicAuthorized: boolean;
-  /** Music actions for client tools (player control) */
   musicActions?: MusicActions;
-  /** Queue operations for agent action dispatch */
   queueOps?: QueueOperations;
-  /** Callback when message is sent */
   onMessageSent?: () => void;
-  /** Callback when new session is created */
   onSessionCreated?: (newSessionId: string, initialMessage: string) => void;
-  /** Callback to link Apple Music account */
   onLinkApple?: () => Promise<void>;
-  /** Skip to next track */
   onSkipNext?: () => Promise<void>;
-  /** Skip to previous track */
   onSkipPrev?: () => Promise<void>;
-  /** Full queue — queue[0] is now playing, queue[1..] is up next */
   queue?: UnifiedTrack[];
 }
 
 /**
- * ChatInterface - main chat UI component
- *
- * Responsibilities:
- * - Display record player and chat UI
- * - Handle user input and message sending
- * - Show transcript overlay
- * - Delegate state management to store and hooks
+ * Extract display text from a message for the preview in Default view.
  */
+function getMessagePreviewText(msg: Message): string {
+  if ('parts' in msg && msg.parts) {
+    for (const part of msg.parts) {
+      if (part.type === 'text') return (part as TextPart).content;
+    }
+  }
+  if ('content' in msg && typeof msg.content === 'string') return msg.content;
+  return '';
+}
+
 export const ChatInterface = ({
   isDJSpeaking,
   isPlaying,
@@ -88,20 +83,18 @@ export const ChatInterface = ({
   const location = useLocation();
   const navigate = useNavigate();
   const { openPlaylist, hasPlaylist } = usePlaylistSheet();
-  const [seekDragging, setSeekDragging] = useState(false);
-  const [seekDragValue, setSeekDragValue] = useState(0);
-  const seekDisplayValue = seekDragging ? seekDragValue : (playbackTime?.current || 0);
 
-  // Use chat hook for state and methods
+  // View state machine
+  const { mode, goToDefault, goToLyrics, goToChat, setLyricsAvailable } = useViewState();
+
+  // Chat hook
   const {
     messages,
     input,
     isLoading,
     isLoadingHistory,
-    showHistory,
     setInput,
-    toggleHistory,
-    sendMessage
+    sendMessage,
   } = useChat({
     sessionId,
     userId,
@@ -111,126 +104,26 @@ export const ChatInterface = ({
     onSessionCreated,
   });
 
-  const formatTime = (seconds: number): string => {
-    if (!seconds) return '0:00';
-    const m = Math.floor(seconds / 60);
-    const s = Math.floor(seconds % 60);
-    return `${m}:${s < 10 ? '0' : ''}${s}`;
-  };
+  // Lyrics hook
+  const storefrontId = musicActions?.storefront || 'us';
+  const lyricsData = useLyrics({
+    trackId: currentTrack?.id || null,
+    playbackTime,
+    storefrontId,
+    isAppleMusicAuthorized,
+  });
 
-  // --- Native scroll-snap vertical swipe (TikTok-style physics) ---
-  // Uses CSS scroll-snap for native inertia, momentum, and dampening.
-  // Layout: [prev placeholder] [current card] [next card]
-  // Always scrolled to the middle card (index 1). When the user scrolls
-  // to prev/next, we fire skip and reset scroll position on track change.
-
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const isResettingRef = useRef(false);
-  const scrollTimerRef = useRef<number>(0);
-  const pendingResetRef = useRef(false);
-  const currentTrackIdRef = useRef(currentTrack?.id);
-
-  const onSkipNextRef = useRef(onSkipNext);
-  onSkipNextRef.current = onSkipNext;
-  const onSkipPrevRef = useRef(onSkipPrev);
-  onSkipPrevRef.current = onSkipPrev;
-  const showHistoryRef = useRef(showHistory);
-  showHistoryRef.current = showHistory;
-
-  const nextTrack = queueTracks[1] || null;
-
-  // Scroll to middle card (current) on mount
+  // Sync lyrics availability to view state
   useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    // Use rAF to ensure layout is computed
-    requestAnimationFrame(() => {
-      el.scrollTo({ top: el.clientHeight, behavior: 'instant' as ScrollBehavior });
-    });
-  }, [sessionId]); // re-center when session changes
+    setLyricsAvailable(lyricsData.hasLyrics);
+  }, [lyricsData.hasLyrics, setLyricsAvailable]);
 
-  // Detect scroll settle → fire skip if landed on prev/next card
+  // Reset view state when session changes
   useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
+    goToDefault();
+  }, [sessionId]);
 
-    const onScroll = () => {
-      if (isResettingRef.current) return;
-      clearTimeout(scrollTimerRef.current);
-      scrollTimerRef.current = window.setTimeout(() => {
-        const page = Math.round(el.scrollTop / el.clientHeight);
-        if (page === 0 && !pendingResetRef.current) {
-          pendingResetRef.current = true;
-          onSkipPrevRef.current?.();
-          // Fallback: reset after 1.5s if track doesn't change
-          setTimeout(() => {
-            if (pendingResetRef.current) {
-              isResettingRef.current = true;
-              el.scrollTo({ top: el.clientHeight, behavior: 'instant' as ScrollBehavior });
-              requestAnimationFrame(() => { isResettingRef.current = false; pendingResetRef.current = false; });
-            }
-          }, 1500);
-        } else if (page >= 2 && !pendingResetRef.current) {
-          pendingResetRef.current = true;
-          onSkipNextRef.current?.();
-          setTimeout(() => {
-            if (pendingResetRef.current) {
-              isResettingRef.current = true;
-              el.scrollTo({ top: el.clientHeight, behavior: 'instant' as ScrollBehavior });
-              requestAnimationFrame(() => { isResettingRef.current = false; pendingResetRef.current = false; });
-            }
-          }, 1500);
-        }
-      }, 80);
-    };
-
-    el.addEventListener('scroll', onScroll, { passive: true });
-    return () => {
-      el.removeEventListener('scroll', onScroll);
-      clearTimeout(scrollTimerRef.current);
-    };
-  }, []);
-
-  // When track changes after a skip, reset scroll to center
-  useEffect(() => {
-    if (currentTrackIdRef.current !== currentTrack?.id) {
-      currentTrackIdRef.current = currentTrack?.id;
-      if (pendingResetRef.current) {
-        const el = scrollRef.current;
-        if (el) {
-          isResettingRef.current = true;
-          el.scrollTo({ top: el.clientHeight, behavior: 'instant' as ScrollBehavior });
-          requestAnimationFrame(() => {
-            isResettingRef.current = false;
-            pendingResetRef.current = false;
-          });
-        }
-      }
-    }
-  }, [currentTrack?.id]);
-
-  // Keyboard: arrow keys trigger programmatic smooth scroll
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (showHistoryRef.current) return;
-      const tag = (e.target as HTMLElement).tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-      const el = scrollRef.current;
-      if (!el) return;
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        el.scrollBy({ top: el.clientHeight, behavior: 'smooth' });
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        el.scrollBy({ top: -el.clientHeight, behavior: 'smooth' });
-      }
-    };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, []);
-
-  // Wrap sendMessage — allow chatting without Apple Music auth;
-  // playback errors are caught at the MusicKit layer with reconnect prompts.
+  // Wrap sendMessage
   const handleSendMessage = useCallback(async (text?: string, skipAddingUserMessage?: boolean) => {
     await sendMessage(text, skipAddingUserMessage);
   }, [sendMessage]);
@@ -238,12 +131,12 @@ export const ChatInterface = ({
   // Auto-send initial message from navigation state
   useInitialMessage(location.state as any, handleSendMessage, isLoading, messages, navigate, location.pathname);
 
-  // Show loading skeleton while fetching history
+  // Loading skeleton
   if (isLoadingHistory) {
     return <SkeletonLoader />;
   }
 
-  // Show new chat view for empty new chats (no sessionId = new chat)
+  // New chat view (no session)
   if (!sessionId) {
     return (
       <NewChatView
@@ -255,188 +148,148 @@ export const ChatInterface = ({
     );
   }
 
-  // Main chat interface
+  // Recent messages for Default view preview (last 3)
+  const recentMessages = messages.slice(-3);
+
+  // Main three-state interface
   return (
     <div className="flex flex-col h-full relative bg-white rounded-3xl overflow-hidden shadow-sm border border-white">
-      {/* Hero Stage */}
-      <div className="flex-1 flex flex-col items-center justify-center relative pb-48">
-        {/* Visualizer Background */}
-        {isPlaying && (
-          <div className="absolute inset-0 flex items-center justify-center opacity-10 pointer-events-none">
-            <div className="w-96 h-96 bg-blue-500 rounded-full blur-3xl animate-pulse" />
-          </div>
-        )}
+      {/* ── DEFAULT VIEW ── */}
+      {mode === 'default' && (
+        <div className="flex flex-col h-full">
+          {/* Player area - centered */}
+          <div className="flex-1 flex flex-col items-center justify-center relative">
+            {/* Visualizer Background */}
+            {isPlaying && (
+              <div className="absolute inset-0 flex items-center justify-center opacity-10 pointer-events-none">
+                <div className="w-96 h-96 bg-blue-500 rounded-full blur-3xl animate-pulse" />
+              </div>
+            )}
 
-        {/* Scroll-snap vertical swipe container */}
-        <div
-          ref={scrollRef}
-          className={`absolute inset-0 snap-y snap-mandatory no-scrollbar ${
-            showHistory ? 'overflow-hidden' : 'overflow-y-scroll'
-          }`}
-          style={{ overscrollBehaviorY: 'contain' }}
-        >
-          {/* Previous card placeholder — enables swipe-down for prev track */}
-          <div className="h-full shrink-0 snap-start snap-always" />
-
-          {/* Current track card */}
-          <div className="h-full shrink-0 snap-start snap-always flex flex-col items-center justify-center pb-36">
-            <div className="relative z-10 w-full max-w-xl px-8">
-              <RecordPlayer
+            <div className="relative z-10 w-full">
+              <PlayerSection
+                mode="full"
                 currentTrack={currentTrack}
                 isPaused={!isPlaying}
                 isTransitioning={isTransitioning}
                 togglePlay={togglePlay}
                 isAppleMusicAuthorized={isAppleMusicAuthorized}
                 onLinkApple={onLinkApple}
+                playbackTime={playbackTime}
+                onSeek={onSeek}
               />
             </div>
-            {/* Seek bar — directly below album art, moves with swipe */}
-            {currentTrack && !showHistory && !isAppleMusicAuthorized && onLinkApple && (
-              <div className="w-full max-w-sm px-8 mt-4 flex justify-center">
-                <button
-                  onClick={onLinkApple}
-                  className="text-sm text-pink-500 hover:text-pink-600 transition-colors font-medium flex items-center gap-1.5"
-                >
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M9 18V5l12-2v13" />
-                    <circle cx="6" cy="18" r="3" />
-                    <circle cx="18" cy="16" r="3" />
-                  </svg>
-                  Connect Apple Music for full playback
-                </button>
-              </div>
-            )}
-            {currentTrack && !showHistory && isAppleMusicAuthorized && (
-              <div className="w-full max-w-sm px-8 mt-4 flex items-center gap-2">
-                <span className="text-xs font-mono text-gray-400 tabular-nums shrink-0">
-                  {formatTime(seekDisplayValue)}
-                </span>
-                <div className="relative flex-1 h-5 flex items-center">
-                  <div className="w-full h-1.5 bg-gray-100 rounded-full pointer-events-none">
-                    <div
-                      className="h-full bg-gray-900 rounded-full"
-                      style={{ width: `${(seekDisplayValue / (playbackTime?.total || 1)) * 100}%` }}
-                    />
-                  </div>
-                  <div
-                    className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow border border-gray-300 pointer-events-none"
-                    style={{ left: `calc(${(seekDisplayValue / (playbackTime?.total || 1)) * 100}% - 6px)` }}
-                  />
-                  <input
-                    type="range"
-                    min={0}
-                    max={playbackTime?.total || 1}
-                    step={0.1}
-                    value={seekDisplayValue}
-                    onChange={(e) => { setSeekDragging(true); setSeekDragValue(parseFloat(e.target.value)); }}
-                    onPointerUp={(e) => { onSeek?.(parseFloat((e.target as HTMLInputElement).value)); setSeekDragging(false); }}
-                    className="absolute inset-0 w-full opacity-0 cursor-pointer"
-                  />
-                </div>
-                <span className="text-xs font-mono text-gray-400 tabular-nums shrink-0">
-                  {formatTime(playbackTime?.total || 0)}
-                </span>
-              </div>
-            )}
           </div>
 
-          {/* Next track card */}
-          {nextTrack && (
-            <div className="h-full shrink-0 snap-start snap-always flex flex-col items-center justify-center pb-36">
-              <div className="relative z-10 w-full max-w-xl px-8 pointer-events-none">
-                <RecordPlayer
-                  currentTrack={nextTrack}
-                  isPaused={true}
-                  isTransitioning={false}
-                  togglePlay={() => {}}
-                  isAppleMusicAuthorized={isAppleMusicAuthorized}
-                />
+          {/* Lyrics snippet */}
+          <div className="shrink-0">
+            <LyricsSnippet
+              currentLine={lyricsData.currentLine}
+              nextLine={lyricsData.nextLine}
+              onClick={goToLyrics}
+              lyricsAvailable={lyricsData.hasLyrics}
+            />
+          </div>
+
+          {/* Recent chat messages preview */}
+          <div className="shrink-0 px-6 mb-2 max-h-28 overflow-hidden">
+            <div className="max-w-xl mx-auto">
+              {recentMessages.length > 0 && (
+                <button
+                  onClick={goToChat}
+                  className="w-full text-left rounded-xl hover:bg-gray-50 transition-colors p-2 -mx-2 cursor-pointer"
+                >
+                  {recentMessages.map((msg, i) => {
+                    const text = getMessagePreviewText(msg);
+                    if (!text) return null;
+                    const isUser = msg.role === 'user';
+                    return (
+                      <div key={i} className="flex gap-2 items-start py-0.5">
+                        <span className="text-[10px] font-mono text-gray-400 uppercase shrink-0 mt-0.5 w-6">
+                          {isUser ? 'You' : 'DJ'}
+                        </span>
+                        <p className={`text-sm line-clamp-1 ${isUser ? 'text-gray-500 italic' : 'text-gray-600'}`}>
+                          {text}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Input + footer pinned at bottom */}
+          <div className="shrink-0 px-6 pb-5 pt-2 pb-[env(safe-area-inset-bottom)]">
+            <div className="max-w-xl mx-auto">
+              <ChatInput
+                input={input}
+                isLoading={isLoading}
+                isDJSpeaking={isDJSpeaking}
+                isPlaying={isPlaying}
+                onInputChange={setInput}
+                onSend={() => handleSendMessage()}
+              />
+
+              {/* Footer */}
+              <div className="flex items-center justify-center mt-2.5 gap-3">
+                <span className="text-[9px] text-gray-300 tracking-[0.2em] uppercase">
+                  Global Queue &bull; {queueTracks.length} {queueTracks.length === 1 ? 'Track' : 'Tracks'}
+                </span>
+
+                {/* Mobile playlist button */}
+                {hasPlaylist && (
+                  <button
+                    onClick={openPlaylist}
+                    className="md:hidden w-6 h-6 rounded-full flex items-center justify-center text-gray-300 hover:text-gray-500 transition-colors"
+                    title="View Playlist"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19V6l12-3v13" />
+                    </svg>
+                  </button>
+                )}
               </div>
             </div>
-          )}
+          </div>
         </div>
+      )}
 
-        {/* Transcript Overlay */}
-        <TranscriptOverlay
-          messages={messages}
-          isLoading={isLoading}
-          showHistory={showHistory}
-        />
-      </div>
-
-      {/* Command Console - Fixed at Bottom */}
-      <div className="absolute bottom-0 left-0 right-0 px-6 pb-5 pt-10 z-30 bg-gradient-to-t from-white via-white/95 to-transparent">
-        {/* Toggle Button + Mobile Playlist Button */}
-        <div className="max-w-xl mx-auto mb-2 flex items-center">
-          <button
-            onClick={toggleHistory}
-            className="relative w-8 h-8 rounded-full flex items-center justify-center"
-            title={showHistory ? 'Back to Player' : 'View Transcript'}
-          >
-            {(() => {
-              const artUrl = currentTrack?.artworkUrl
-                ? currentTrack.artworkUrl.replace('{w}', '64').replace('{h}', '64')
-                : '';
-              const hasArt = !!currentTrack && !!artUrl;
-
-              if (hasArt && showHistory) {
-                return (
-                  <div className="w-8 h-8 rounded-full overflow-hidden ring-2 ring-gray-200">
-                    <img src={artUrl} alt="" className="w-full h-full object-cover" />
-                  </div>
-                );
-              }
-
-              return (
-                <div className={`w-8 h-8 rounded-full border flex items-center justify-center transition-colors duration-200 ${
-                  showHistory
-                    ? 'bg-gray-800 text-white border-gray-800'
-                    : 'bg-white text-gray-400 border-gray-200 hover:text-gray-600 hover:border-gray-300'
-                }`}>
-                  {showHistory ? (
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19V6l12-3v13M9 10l12-3" />
-                    </svg>
-                  ) : (
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                  )}
-                </div>
-              );
-            })()}
-          </button>
-
-          {/* Playlist button — mobile only, right-aligned, shown when a playlist exists */}
-          {hasPlaylist && (
-            <button
-              onClick={openPlaylist}
-              className="md:hidden ml-auto w-8 h-8 rounded-full border border-gray-200 bg-white flex items-center justify-center text-gray-400 hover:text-gray-600 hover:border-gray-300 transition-colors"
-              title="View Playlist"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19V6l12-3v13" />
-                <circle cx="6" cy="19" r="3" fill="currentColor" stroke="none" />
-                <circle cx="18" cy="16" r="3" fill="currentColor" stroke="none" />
-              </svg>
-            </button>
-          )}
+      {/* ── LYRICS VIEW ── */}
+      {mode === 'lyrics' && (
+        <div className="flex flex-col h-full">
+          <PlayerSection
+            mode="mini"
+            currentTrack={currentTrack}
+            isPaused={!isPlaying}
+            isTransitioning={isTransitioning}
+            togglePlay={togglePlay}
+            isAppleMusicAuthorized={isAppleMusicAuthorized}
+            playbackTime={playbackTime}
+            onClickMiniPlayer={goToDefault}
+          />
+          <LyricsView
+            lyrics={lyricsData.lyrics}
+            currentLineIndex={lyricsData.currentLineIndex}
+            playbackTime={playbackTime}
+            onClose={goToDefault}
+            onOpenChat={goToChat}
+          />
         </div>
+      )}
 
-        {/* Input Bar */}
-        <ChatInput
-          input={input}
-          isLoading={isLoading}
-          isDJSpeaking={isDJSpeaking}
-          isPlaying={isPlaying}
-          onInputChange={setInput}
-          onSend={() => handleSendMessage()}
-        />
-
-        <div className="text-center mt-2.5 text-[9px] text-gray-300 tracking-[0.2em] uppercase">
-          Playhead Radio &bull; Live
-        </div>
-      </div>
+      {/* ── CHAT OVERLAY (always rendered, slides in/out) ── */}
+      <ChatFlow
+        messages={messages}
+        isLoading={isLoading}
+        input={input}
+        onInputChange={setInput}
+        onSend={() => handleSendMessage()}
+        isDJSpeaking={isDJSpeaking}
+        isPlaying={isPlaying}
+        isVisible={mode === 'chat'}
+        onClose={goToDefault}
+      />
     </div>
   );
 };

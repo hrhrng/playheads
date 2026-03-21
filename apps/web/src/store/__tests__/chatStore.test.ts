@@ -3,7 +3,8 @@
  *
  * Messaging is handled by useAgentChatAdapter (WebSocket to AIChatAgent).
  * Queue is managed globally by usePlayQueue.
- * This store only manages: input text and sidebar visibility.
+ * View mode is managed by useViewState.
+ * This store only manages: input text.
  *
  * @module store/__tests__/chatStore
  */
@@ -23,10 +24,9 @@ beforeEach(() => {
 // ==================================================================
 
 describe('chatStore initial state', () => {
-  it('has empty input and default UI state', () => {
+  it('has empty input', () => {
     const s = state();
     expect(s.input).toBe('');
-    expect(s.showHistory).toBe(false);
   });
 });
 
@@ -39,19 +39,6 @@ describe('UI state', () => {
     state().setInput('play jazz');
     expect(state().input).toBe('play jazz');
   });
-
-  it('setShowHistory() sets sidebar visibility', () => {
-    state().setShowHistory(true);
-    expect(state().showHistory).toBe(true);
-  });
-
-  it('toggleHistory() toggles sidebar visibility', () => {
-    expect(state().showHistory).toBe(false);
-    state().toggleHistory();
-    expect(state().showHistory).toBe(true);
-    state().toggleHistory();
-    expect(state().showHistory).toBe(false);
-  });
 });
 
 // ==================================================================
@@ -61,12 +48,10 @@ describe('UI state', () => {
 describe('reset()', () => {
   it('clears all state back to defaults', () => {
     state().setInput('draft');
-    state().setShowHistory(true);
 
     state().reset();
 
     const s = state();
     expect(s.input).toBe('');
-    expect(s.showHistory).toBe(false);
   });
 });

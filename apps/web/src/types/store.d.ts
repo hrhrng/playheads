@@ -3,6 +3,7 @@
  *
  * Chat messaging is handled by useAgentChatAdapter (WebSocket to AIChatAgent).
  * Queue is managed globally by usePlayQueue.
+ * View mode is managed by useViewState.
  * The store only manages ephemeral UI state.
  */
 
@@ -12,12 +13,9 @@
 export interface ChatStoreState {
   // UI state
   input: string;
-  showHistory: boolean;
 
   // Actions
   setInput: (input: string) => void;
-  setShowHistory: (show: boolean) => void;
-  toggleHistory: () => void;
   reset: () => void;
 }
 

@@ -31,10 +31,7 @@ interface UseChatReturn {
   input: string;
   isLoading: boolean;
   isLoadingHistory: boolean;
-  showHistory: boolean;
   setInput: (input: string) => void;
-  setShowHistory: (show: boolean) => void;
-  toggleHistory: () => void;
   sendMessage: (text?: string, skipAddingUserMessage?: boolean) => Promise<void>;
 }
 
@@ -50,13 +47,7 @@ export function useChat({
   onMessageSent,
   onSessionCreated,
 }: UseChatParams): UseChatReturn {
-  const {
-    input,
-    showHistory,
-    setInput,
-    setShowHistory,
-    toggleHistory,
-  } = useChatStore();
+  const { input, setInput } = useChatStore();
 
   // Use the agent chat adapter when we have a session
   const adapter = useAgentChatAdapter({
@@ -131,10 +122,7 @@ export function useChat({
     input,
     isLoading,
     isLoadingHistory,
-    showHistory,
     setInput,
-    setShowHistory,
-    toggleHistory,
     sendMessage: handleSendMessage
   };
 }
