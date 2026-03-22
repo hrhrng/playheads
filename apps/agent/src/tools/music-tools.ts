@@ -49,14 +49,13 @@ export function createMusicTools(ctx: ToolContext) {
           .describe('Apple Music song ID (e.g. "12345" from search results)'),
       }),
       execute: async ({ track_id }) => {
-        console.log("[tool:add_to_queue] track_id=%s storefront=%s", track_id, ctx.storefront);
         try {
-          // Fetch full track info from Apple Music catalog (like old Python backend)
+          // Fetch full track info from Apple Music catalog
           const url = `v1/catalog/${ctx.storefront}/songs/${track_id}`;
-          console.log("[tool:add_to_queue] fetching:", url);
+          const apiStart = Date.now();
           const result = await appleMusicGet(url, ctx.env);
           const songs = (result.data as Array<Record<string, unknown>>) || [];
-          console.log("[tool:add_to_queue] songs returned: %d", songs.length);
+          console.log("[tool:add_to_queue] apple-music-api elapsed=%dms songs=%d", Date.now() - apiStart, songs.length);
           if (!songs.length) {
             return `No track found for ID '${track_id}'.`;
           }
@@ -67,7 +66,6 @@ export function createMusicTools(ctx: ToolContext) {
           const name = (attrs.name as string) || "Unknown";
           const artist = (attrs.artistName as string) || "Unknown Artist";
 
-          console.log("[tool:add_to_queue] resolved: '%s' by %s (id: %s)", name, artist, song.id);
           // Return result with embedded action for client-side MusicKit dispatch
           return JSON.stringify({
             message: `Added '${name}' by ${artist} to queue.`,
@@ -99,7 +97,6 @@ export function createMusicTools(ctx: ToolContext) {
           .describe("Track position number starting from 1"),
       }),
       execute: async ({ index }) => {
-        console.log("[tool:play_track] index=%s", index);
         let idx: number;
         try {
           idx = parseInt(index);
@@ -108,7 +105,6 @@ export function createMusicTools(ctx: ToolContext) {
         }
         if (isNaN(idx)) return "Please provide a valid track number.";
 
-        console.log("[tool:play_track] resolved idx=%d (0-indexed: %d)", idx, idx - 1);
         return JSON.stringify({
           message: `Playing track ${idx}.`,
           _action: {
@@ -123,7 +119,6 @@ export function createMusicTools(ctx: ToolContext) {
       description: "Skip to the next track in the playlist.",
       inputSchema: z.object({}),
       execute: async () => {
-        console.log("[tool:skip_next]");
         return JSON.stringify({
           message: "Skipping to the next track.",
           _action: {
@@ -143,7 +138,6 @@ export function createMusicTools(ctx: ToolContext) {
           .describe("Track position number starting from 1"),
       }),
       execute: async ({ index }) => {
-        console.log("[tool:remove_from_playlist] index=%s", index);
         let idx: number;
         try {
           idx = parseInt(index);
@@ -152,7 +146,6 @@ export function createMusicTools(ctx: ToolContext) {
         }
         if (isNaN(idx)) return "Please provide a valid track number.";
 
-        console.log("[tool:remove_from_playlist] resolved idx=%d (0-indexed: %d)", idx, idx - 1);
         return JSON.stringify({
           message: `Removed track ${idx} from playlist.`,
           _action: {
@@ -177,7 +170,6 @@ export function createMusicTools(ctx: ToolContext) {
         limit: z.number().min(1).max(25).optional().default(5).describe("Max results per query (default 5)."),
       }),
       execute: async ({ queries, limit = 5 }) => {
-        console.log("[tool:search_music] queries=%j limit=%d storefront=%s", queries, limit, ctx.storefront);
         const clampedLimit = Math.min(Math.max(1, limit), 25);
         const RRF_K = 60;
 
@@ -197,7 +189,9 @@ export function createMusicTools(ctx: ToolContext) {
           }
         };
 
+        const apiStart = Date.now();
         const resultsPerQuery = await Promise.all(queries.map(searchOne));
+        const apiElapsed = Date.now() - apiStart;
 
         // RRF: accumulate score = Σ 1/(k + rank) across all query result lists
         const rrfScores = new Map<string, number>();
@@ -218,7 +212,7 @@ export function createMusicTools(ctx: ToolContext) {
           });
         }
 
-        console.log("[tool:search_music] %d unique results", rrfScores.size);
+        console.log("[tool:search_music] apple-music-api elapsed=%dms queries=%d results=%d", apiElapsed, queries.length, rrfScores.size);
 
         if (!rrfScores.size) {
           return `No results found for: ${queries.join(", ")}`;
@@ -241,7 +235,6 @@ export function createMusicTools(ctx: ToolContext) {
       description: "Get information about the currently playing track.",
       inputSchema: z.object({}),
       execute: async () => {
-        console.log("[tool:get_now_playing] currentTrack=%s isPlaying=%s", ctx.state.currentTrack?.name || "null", ctx.state.isPlaying);
         if (!ctx.state.currentTrack) {
           return "No track is currently playing.";
         }
@@ -259,7 +252,6 @@ export function createMusicTools(ctx: ToolContext) {
       description: "Get the current playlist/queue of tracks.",
       inputSchema: z.object({}),
       execute: async () => {
-        console.log("[tool:get_playlist] playlist length=%d", ctx.state.playlist.length);
         if (!ctx.state.playlist.length) {
           return "The playlist is empty.";
         }
