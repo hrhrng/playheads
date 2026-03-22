@@ -11,8 +11,8 @@ interface FullLyricsProps {
 
 /**
  * Full-screen scrollable lyrics overlay (Spotify-style).
- * Features: album-art blurred background, large text hierarchy,
- * auto-scroll with manual pause, tap-to-seek with press feedback.
+ * Dark immersive background with album-art color bleed,
+ * large text hierarchy, auto-scroll, tap-to-seek.
  */
 export const FullLyrics = ({ lyrics, isOpen, onClose, onSeek, artworkUrl }: FullLyricsProps) => {
   const { status, lines, plainText, currentIndex } = lyrics;
@@ -22,7 +22,7 @@ export const FullLyrics = ({ lyrics, isOpen, onClose, onSeek, artworkUrl }: Full
   const scrollTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [tappedIndex, setTappedIndex] = useState<number | null>(null);
 
-  // Track manual scrolling — pause auto-scroll for 3s after user scrolls
+  // Track manual scrolling — pause auto-scroll for 3s
   const handleScroll = useCallback(() => {
     userScrolling.current = true;
     clearTimeout(scrollTimer.current);
@@ -34,12 +34,11 @@ export const FullLyrics = ({ lyrics, isOpen, onClose, onSeek, artworkUrl }: Full
   // Auto-scroll to active line
   useEffect(() => {
     if (!isOpen || userScrolling.current || currentIndex < 0) return;
-
     const el = lineRefs.current.get(currentIndex);
     el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, [isOpen, currentIndex]);
 
-  // Reset scroll state when opening
+  // Reset scroll on open
   useEffect(() => {
     if (isOpen) {
       userScrolling.current = false;
@@ -50,7 +49,7 @@ export const FullLyrics = ({ lyrics, isOpen, onClose, onSeek, artworkUrl }: Full
     }
   }, [isOpen, currentIndex]);
 
-  // Keyboard: Escape to close
+  // Escape to close
   useEffect(() => {
     if (!isOpen) return;
     const onKey = (e: KeyboardEvent) => {
@@ -65,47 +64,64 @@ export const FullLyrics = ({ lyrics, isOpen, onClose, onSeek, artworkUrl }: Full
     else lineRefs.current.delete(index);
   }, []);
 
+  const tapTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
   const handleLineTap = useCallback((index: number, time: number) => {
     setTappedIndex(index);
     onSeek(time);
-    setTimeout(() => setTappedIndex(null), 250);
+    clearTimeout(tapTimer.current);
+    tapTimer.current = setTimeout(() => setTappedIndex(null), 250);
   }, [onSeek]);
 
-  const hasContent = status === 'synced' || status === 'plain';
+  // Cleanup timers on unmount
+  useEffect(() => {
+    return () => {
+      clearTimeout(scrollTimer.current);
+      clearTimeout(tapTimer.current);
+      lineRefs.current.clear();
+    };
+  }, []);
 
-  // Resolve artwork URL for background
+  const hasContent = status === 'synced' || status === 'plain';
   const bgUrl = artworkUrl?.replace('{w}', '600').replace('{h}', '600');
 
   return (
     <div
-      className={`absolute inset-0 z-20 flex flex-col transition-transform duration-300 ease-out ${
-        isOpen ? 'translate-y-0' : 'translate-y-full'
+      role="dialog"
+      aria-label="Full lyrics view"
+      aria-hidden={!isOpen}
+      className={`absolute inset-0 z-20 flex flex-col transition-all duration-300 ease-out origin-bottom ${
+        isOpen
+          ? 'opacity-100 scale-100 pointer-events-auto'
+          : 'opacity-0 scale-95 pointer-events-none'
       }`}
     >
-      {/* Album art blurred background */}
-      {bgUrl && (
-        <div className="absolute inset-0 overflow-hidden">
+      {/* Background layers */}
+      <div className="absolute inset-0 bg-[#1a1a2e]">
+        {bgUrl && (
           <img
             src={bgUrl}
             alt=""
-            className="absolute inset-0 w-full h-full object-cover scale-150 blur-[80px] opacity-40"
+            aria-hidden="true"
+            className="absolute inset-0 w-full h-full object-cover scale-125 blur-[100px] opacity-50"
+            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
           />
-        </div>
-      )}
-      {/* White overlay for readability */}
-      <div className="absolute inset-0 bg-white/70" />
+        )}
+        <div className="absolute inset-0 bg-black/30" />
+      </div>
 
       {/* Header */}
       <div className="relative z-10 flex items-center justify-between px-6 pt-6 pb-2">
-        <h3 className="text-[10px] font-medium text-gray-400 uppercase tracking-[0.2em]">
+        <h3 className="text-[10px] font-medium text-white/50 uppercase tracking-[0.2em]">
           Lyrics
         </h3>
         <button
           onClick={onClose}
-          className="w-7 h-7 rounded-full border border-gray-200/80 bg-white/60 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:border-gray-300 transition-colors backdrop-blur-sm"
+          aria-label="Close lyrics"
+          className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-white/60 hover:text-white hover:bg-white/20 transition-colors"
         >
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
       </div>
@@ -117,13 +133,13 @@ export const FullLyrics = ({ lyrics, isOpen, onClose, onSeek, artworkUrl }: Full
         className="relative z-10 flex-1 overflow-y-auto no-scrollbar lyrics-mask"
       >
         {!hasContent && (
-          <p className="text-center text-sm text-gray-400 mt-20">
+          <p className="text-center text-sm text-white/40 mt-20">
             No lyrics available for this track
           </p>
         )}
 
         {status === 'plain' && plainText && (
-          <div className="whitespace-pre-wrap text-lg text-gray-600 leading-relaxed text-center px-8 py-20">
+          <div className="whitespace-pre-wrap text-lg text-white/70 leading-relaxed text-center px-8 py-20">
             {plainText}
           </div>
         )}
@@ -140,14 +156,16 @@ export const FullLyrics = ({ lyrics, isOpen, onClose, onSeek, artworkUrl }: Full
                   key={i}
                   ref={(el) => setLineRef(i, el)}
                   onClick={() => handleLineTap(i, line.time)}
+                  aria-label={line.text ? `Jump to: ${line.text}` : 'Jump to instrumental'}
+                  aria-current={isCurrent ? 'true' : undefined}
                   className={`w-full text-center py-3 px-4 rounded-xl cursor-pointer transition-all duration-500 ease-out active:scale-[0.97] ${
                     isTapped ? 'animate-lyric-tap' : ''
                   } ${
                     isCurrent
-                      ? 'text-2xl md:text-3xl font-bold text-gray-900'
+                      ? 'text-2xl md:text-3xl font-bold text-white'
                       : isPast
-                        ? 'text-lg md:text-xl text-gray-900/25'
-                        : 'text-lg md:text-xl text-gray-900/40'
+                        ? 'text-lg md:text-xl text-white/25'
+                        : 'text-lg md:text-xl text-white/45'
                   }`}
                 >
                   {line.text || '\u266A'}
