@@ -390,13 +390,11 @@ export function createLLMModel(config: CreateLLMModelConfig): LLMModelResult {
   const baseURL = `https://gateway.ai.cloudflare.com/v1/${accountId}/${gatewayId}/${gwSegment}`;
 
   // 2. Auth headers
-  // Native providers (anthropic, xai, openai): CF_AIG_TOKEN as apiKey, no extra headers
-  // Custom providers (custom-*): CF_AIG_TOKEN as apiKey + cf-aig-authorization header
-  // Own key mode: provider key as apiKey + cf-aig-authorization for gateway auth
-  const isCustomProvider = gwSegment.startsWith("custom-");
+  // All providers: CF_AIG_TOKEN as Authorization (gateway auth / BYOK)
+  // Only when user provides own API key: provider key as Authorization + cf-aig-authorization for gateway
   const apiKey = providerKey || cfAigToken;
   const extraHeaders: Record<string, string> = {};
-  if (providerKey || isCustomProvider) {
+  if (providerKey) {
     extraHeaders["cf-aig-authorization"] = `Bearer ${cfAigToken}`;
   }
 
