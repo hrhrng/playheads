@@ -57,19 +57,24 @@ export function useLyrics(
       return;
     }
 
-    // Fetch from LRCLIB
+    // Fetch lyrics via agent worker proxy
     const ac = new AbortController();
     abortRef.current = ac;
     setStatus('loading');
     setLines([]);
     setPlainText(null);
 
-    const params = new URLSearchParams({
-      artist_name: currentTrack.artist || '',
-      track_name: currentTrack.name || '',
-      album_name: currentTrack.album || '',
-      duration: String(Math.round(currentTrack.durationSeconds || 0)),
-    });
+    // Add timeout to prevent hanging requests
+    const timeout = setTimeout(() => ac.abort(), 10000);
+
+    const params = new URLSearchParams();
+    if (currentTrack.artist) params.set('artist_name', currentTrack.artist);
+    if (currentTrack.name) params.set('track_name', currentTrack.name);
+    if (currentTrack.album) params.set('album_name', currentTrack.album);
+    if (currentTrack.durationSeconds) params.set('duration', String(Math.round(currentTrack.durationSeconds)));
+
+    // Capture trackId in closure to avoid race conditions on rapid track changes
+    const fetchTrackId = trackId;
 
     fetch(`${API_BASE}/lyrics?${params}`, {
       signal: ac.signal,
@@ -79,6 +84,9 @@ export function useLyrics(
         return res.json();
       })
       .then((data: { syncedLyrics?: string | null; plainLyrics?: string | null }) => {
+        // Guard: if track changed while fetching, discard result
+        if (prevTrackId.current !== fetchTrackId) return;
+
         let result: CachedLyrics;
 
         if (data.syncedLyrics) {
@@ -90,22 +98,24 @@ export function useLyrics(
           result = { status: 'not-found', lines: [], plainText: null };
         }
 
-        cache.current.set(trackId, result);
+        cache.current.set(fetchTrackId, result);
         setStatus(result.status);
         setLines(result.lines);
         setPlainText(result.plainText);
       })
       .catch((err) => {
         if (err instanceof DOMException && err.name === 'AbortError') return;
+        if (prevTrackId.current !== fetchTrackId) return;
 
         const result: CachedLyrics = { status: 'not-found', lines: [], plainText: null };
-        cache.current.set(trackId, result);
+        cache.current.set(fetchTrackId, result);
         setStatus('not-found');
         setLines([]);
         setPlainText(null);
-      });
+      })
+      .finally(() => clearTimeout(timeout));
 
-    return () => ac.abort();
+    return () => { clearTimeout(timeout); ac.abort(); };
   }, [currentTrack]);
 
   // Compute current line index from playback time
