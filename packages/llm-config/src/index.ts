@@ -212,10 +212,9 @@ export const MODEL_REGISTRY: Record<string, ModelCard> = {
       params: { reasoningEffort: "high" },
     },
     paramsSchema: [
-      { key: "reasoningEffort", label: "Reasoning Effort", type: "select", options: ["low", "medium", "high"], defaultValue: "high" },
+      { key: "reasoningEffort", label: "Reasoning Effort", type: "select", options: ["low", "high"], defaultValue: "high" },
     ],
     maxOutputTokens: 16384,
-    maxOutputTokensWithThinking: 131072,
   },
   "xai/grok-4-1-fast-reasoning": {
     id: "xai/grok-4-1-fast-reasoning",
@@ -231,10 +230,9 @@ export const MODEL_REGISTRY: Record<string, ModelCard> = {
       params: { reasoningEffort: "high" },
     },
     paramsSchema: [
-      { key: "reasoningEffort", label: "Reasoning Effort", type: "select", options: ["low", "medium", "high"], defaultValue: "high" },
+      { key: "reasoningEffort", label: "Reasoning Effort", type: "select", options: ["low", "high"], defaultValue: "high" },
     ],
     maxOutputTokens: 16384,
-    maxOutputTokensWithThinking: 131072,
   },
   "xai/grok-4-1-fast": {
     id: "xai/grok-4-1-fast",
@@ -421,12 +419,12 @@ export function createLLMModel(config: CreateLLMModelConfig): LLMModelResult {
     providerOptions = { [card.thinking.providerOptionsKey]: params };
   }
 
-  // 5. Resolve maxOutputTokens
+  // 5. Resolve maxOutputTokens (0 = let the SDK/model use its default)
   const thinkingEnabled = params !== null;
   const maxOutputTokens =
     thinkingEnabled && card.maxOutputTokensWithThinking
       ? card.maxOutputTokensWithThinking
-      : card.maxOutputTokens || 4096;
+      : card.maxOutputTokens || 0;
 
   return { model, providerOptions, maxOutputTokens, anthropicInstance };
 }

@@ -242,7 +242,7 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
 
     const result = streamText({
       model: model as Parameters<typeof streamText>[0]["model"],
-      maxOutputTokens,
+      ...(maxOutputTokens ? { maxOutputTokens } : {}),
       providerOptions: providerOptions as Parameters<typeof streamText>[0]["providerOptions"],
       system: buildSystemPrompt(globalState),
       messages: await convertToModelMessages(this.messages),
