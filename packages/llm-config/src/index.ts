@@ -207,13 +207,7 @@ export const MODEL_REGISTRY: Record<string, ModelCard> = {
     modelId: "grok-4.20-0309-reasoning",
     defaultBaseUrl: "https://api.x.ai/v1",
     gatewayPathSegment: "xai",
-    thinking: {
-      providerOptionsKey: "xai",
-      params: { reasoning_effort: "high" },
-    },
-    paramsSchema: [
-      { key: "reasoning_effort", label: "Reasoning Effort", type: "select", options: ["low", "high"], defaultValue: "high" },
-    ],
+    thinking: false, // Grok 4 has built-in reasoning, no external params
     maxOutputTokens: 16384,
   },
   "xai/grok-4-1-fast-reasoning": {
@@ -225,13 +219,7 @@ export const MODEL_REGISTRY: Record<string, ModelCard> = {
     modelId: "grok-4-1-fast-reasoning",
     defaultBaseUrl: "https://api.x.ai/v1",
     gatewayPathSegment: "xai",
-    thinking: {
-      providerOptionsKey: "xai",
-      params: { reasoning_effort: "high" },
-    },
-    paramsSchema: [
-      { key: "reasoning_effort", label: "Reasoning Effort", type: "select", options: ["low", "high"], defaultValue: "high" },
-    ],
+    thinking: false, // Grok 4 has built-in reasoning, no external params
     maxOutputTokens: 16384,
   },
   "xai/grok-4-1-fast": {
