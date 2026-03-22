@@ -209,10 +209,10 @@ export const MODEL_REGISTRY: Record<string, ModelCard> = {
     gatewayPathSegment: "xai",
     thinking: {
       providerOptionsKey: "xai",
-      params: { reasoningEffort: "high" },
+      params: { reasoning_effort: "high" },
     },
     paramsSchema: [
-      { key: "reasoningEffort", label: "Reasoning Effort", type: "select", options: ["low", "high"], defaultValue: "high" },
+      { key: "reasoning_effort", label: "Reasoning Effort", type: "select", options: ["low", "high"], defaultValue: "high" },
     ],
     maxOutputTokens: 16384,
   },
@@ -227,10 +227,10 @@ export const MODEL_REGISTRY: Record<string, ModelCard> = {
     gatewayPathSegment: "xai",
     thinking: {
       providerOptionsKey: "xai",
-      params: { reasoningEffort: "high" },
+      params: { reasoning_effort: "high" },
     },
     paramsSchema: [
-      { key: "reasoningEffort", label: "Reasoning Effort", type: "select", options: ["low", "high"], defaultValue: "high" },
+      { key: "reasoning_effort", label: "Reasoning Effort", type: "select", options: ["low", "high"], defaultValue: "high" },
     ],
     maxOutputTokens: 16384,
   },
