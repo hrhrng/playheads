@@ -369,18 +369,12 @@ export const ChatInterface = ({
           showHistory={showHistory}
         />
 
-        {/* Lyrics Overlay */}
-        <FullLyrics
-          lyrics={lyrics}
-          isOpen={showLyrics && !showHistory}
-          onClose={() => setShowLyrics(false)}
-          onSeek={(time) => onSeek?.(time)}
-          artworkUrl={currentTrack?.artworkUrl}
-        />
       </div>
 
-      {/* Command Console - Fixed at Bottom */}
-      <div className="absolute bottom-0 left-0 right-0 px-6 pb-5 pt-10 z-30 bg-gradient-to-t from-white via-white/95 to-transparent">
+      {/* Command Console - Fixed at Bottom, hidden when lyrics are open */}
+      <div className={`absolute bottom-0 left-0 right-0 px-6 pb-5 pt-10 z-30 bg-gradient-to-t from-white via-white/95 to-transparent transition-all duration-300 ${
+        showLyrics && !showHistory ? 'opacity-0 pointer-events-none translate-y-4' : 'opacity-100 pointer-events-auto translate-y-0'
+      }`}>
         {/* Toggle Button + Mobile Playlist Button */}
         <div className="max-w-xl mx-auto mb-2 flex items-center">
           <button
@@ -452,6 +446,15 @@ export const ChatInterface = ({
           Playhead Radio &bull; Live
         </div>
       </div>
+
+      {/* Lyrics Overlay — rendered last to sit on top of everything */}
+      <FullLyrics
+        lyrics={lyrics}
+        isOpen={showLyrics && !showHistory}
+        onClose={() => setShowLyrics(false)}
+        onSeek={(time) => onSeek?.(time)}
+        artworkUrl={currentTrack?.artworkUrl}
+      />
     </div>
   );
 };

@@ -14,7 +14,7 @@ interface FullLyricsProps {
  * Dark immersive background with album-art color bleed,
  * large text hierarchy, auto-scroll, tap-to-seek.
  */
-export const FullLyrics = ({ lyrics, isOpen, onClose, onSeek, artworkUrl }: FullLyricsProps) => {
+export const FullLyrics = ({ lyrics, isOpen, onClose, onSeek }: FullLyricsProps) => {
   const { status, lines, plainText, currentIndex } = lyrics;
   const scrollRef = useRef<HTMLDivElement>(null);
   const lineRefs = useRef<Map<number, HTMLButtonElement>>(new Map());
@@ -83,42 +83,30 @@ export const FullLyrics = ({ lyrics, isOpen, onClose, onSeek, artworkUrl }: Full
   }, []);
 
   const hasContent = status === 'synced' || status === 'plain';
-  const bgUrl = artworkUrl?.replace('{w}', '600').replace('{h}', '600');
 
   return (
     <div
       role="dialog"
       aria-label="Full lyrics view"
       aria-hidden={!isOpen}
-      className={`absolute inset-0 z-20 flex flex-col transition-all duration-300 ease-out origin-bottom ${
+      className={`absolute inset-0 z-40 flex flex-col transition-all duration-300 ease-out origin-bottom ${
         isOpen
           ? 'opacity-100 scale-100 pointer-events-auto'
           : 'opacity-0 scale-95 pointer-events-none'
       }`}
     >
-      {/* Background layers */}
-      <div className="absolute inset-0 bg-[#1a1a2e]">
-        {bgUrl && (
-          <img
-            src={bgUrl}
-            alt=""
-            aria-hidden="true"
-            className="absolute inset-0 w-full h-full object-cover scale-125 blur-[100px] opacity-50"
-            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-          />
-        )}
-        <div className="absolute inset-0 bg-black/30" />
-      </div>
+      {/* Frosted glass background — matches TranscriptOverlay */}
+      <div className="absolute inset-0 bg-white/60 backdrop-blur-xl" />
 
       {/* Header */}
       <div className="relative z-10 flex items-center justify-between px-6 pt-6 pb-2">
-        <h3 className="text-[10px] font-medium text-white/50 uppercase tracking-[0.2em]">
+        <h3 className="text-[10px] font-medium text-gray-400 uppercase tracking-[0.2em]">
           Lyrics
         </h3>
         <button
           onClick={onClose}
           aria-label="Close lyrics"
-          className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-white/60 hover:text-white hover:bg-white/20 transition-colors"
+          className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-200 transition-colors"
         >
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
@@ -133,13 +121,13 @@ export const FullLyrics = ({ lyrics, isOpen, onClose, onSeek, artworkUrl }: Full
         className="relative z-10 flex-1 overflow-y-auto no-scrollbar lyrics-mask"
       >
         {!hasContent && (
-          <p className="text-center text-sm text-white/40 mt-20">
+          <p className="text-center text-sm text-gray-400 mt-20">
             No lyrics available for this track
           </p>
         )}
 
         {status === 'plain' && plainText && (
-          <div className="whitespace-pre-wrap text-lg text-white/70 leading-relaxed text-center px-8 py-20">
+          <div className="whitespace-pre-wrap text-lg text-gray-500 leading-relaxed text-center px-8 py-20">
             {plainText}
           </div>
         )}
@@ -162,10 +150,10 @@ export const FullLyrics = ({ lyrics, isOpen, onClose, onSeek, artworkUrl }: Full
                     isTapped ? 'animate-lyric-tap' : ''
                   } ${
                     isCurrent
-                      ? 'text-2xl md:text-3xl font-bold text-white'
+                      ? 'text-2xl md:text-3xl font-bold text-gray-900'
                       : isPast
-                        ? 'text-lg md:text-xl text-white/25'
-                        : 'text-lg md:text-xl text-white/45'
+                        ? 'text-lg md:text-xl text-gray-900/25'
+                        : 'text-lg md:text-xl text-gray-900/40'
                   }`}
                 >
                   {line.text || '\u266A'}
