@@ -125,6 +125,7 @@ export const MODEL_REGISTRY: Record<string, ModelCard> = {
     sdkName: "doubao",
     modelId: "doubao-seed-2-0-pro-260215",
     defaultBaseUrl: "https://ark.cn-beijing.volces.com/api/v3",
+    gatewayPathSegment: "custom-doubao",
     thinking: {
       providerOptionsKey: "doubao",
       params: { thinking: { type: "auto" } },
@@ -141,6 +142,7 @@ export const MODEL_REGISTRY: Record<string, ModelCard> = {
     sdkName: "doubao",
     modelId: "doubao-seed-2-0-lite-260215",
     defaultBaseUrl: "https://ark.cn-beijing.volces.com/api/v3",
+    gatewayPathSegment: "custom-doubao",
     thinking: {
       providerOptionsKey: "doubao",
       params: { thinking: { type: "auto" } },
@@ -156,6 +158,7 @@ export const MODEL_REGISTRY: Record<string, ModelCard> = {
     sdkName: "doubao",
     modelId: "doubao-1.5-pro-32k",
     defaultBaseUrl: "https://ark.cn-beijing.volces.com/api/v3",
+    gatewayPathSegment: "custom-doubao",
     thinking: false,
     maxOutputTokens: 4096,
     titleModelId: "doubao-seed-2-0-lite-260215",
