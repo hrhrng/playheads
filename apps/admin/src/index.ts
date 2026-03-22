@@ -7,6 +7,9 @@ interface Env {
   DB: D1Database;
   RESEND_API_KEY?: string;
   ADMIN_ENCRYPTION_KEY?: string; // 32-byte hex, used for AES-256-GCM key encryption
+  CF_AIG_TOKEN?: string;
+  CLOUDFLARE_ACCOUNT_ID?: string;
+  AI_GATEWAY_ID?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -70,6 +73,9 @@ export default {
 
     // Model registry endpoint (for frontend)
     if (url.pathname === "/api/model-registry" && request.method === "GET") return handleModelRegistry();
+
+    // Test LLM connection
+    if (url.pathname === "/api/llm-test" && request.method === "POST") return handleLlmTest(request, env);
 
     // Search config endpoints
     if (url.pathname === "/api/search-config" && request.method === "GET") return handleSearchList(env);
@@ -346,8 +352,78 @@ async function handleLlmDelete(id: string, env: Env): Promise<Response> {
   return Response.json({ success: true });
 }
 
-// Note: test endpoint removed — all providers go through CF AI Gateway (BYOK),
-// which is configured in the Cloudflare dashboard, not testable from admin.
+/**
+ * Test an LLM resource by sending a minimal completion request.
+ * Supports both CF AI Gateway (no apiKey) and direct API key modes.
+ */
+async function handleLlmTest(request: Request, env: Env): Promise<Response> {
+  const body = await request.json() as { providerType: string; model: string; apiKey?: string; params?: string };
+  const card = MODEL_REGISTRY[`${body.providerType}/${body.model}`];
+  if (!card) return Response.json({ error: "Unknown model" }, { status: 400 });
+
+  // Resolve API key: provided key > encrypted DB key > CF_AIG_TOKEN
+  let apiKey = "";
+  if (body.apiKey && !body.apiKey.startsWith("***")) {
+    apiKey = body.apiKey;
+  } else if (env.CF_AIG_TOKEN) {
+    apiKey = env.CF_AIG_TOKEN;
+  } else {
+    return Response.json({ error: "No API key or CF_AIG_TOKEN configured" }, { status: 400 });
+  }
+
+  // Build base URL
+  let baseURL: string | undefined;
+  const useGateway = !body.apiKey || body.apiKey.startsWith("***");
+  if (useGateway && env.CLOUDFLARE_ACCOUNT_ID && env.AI_GATEWAY_ID) {
+    const gwSegment = card.gatewayPathSegment || (body.providerType === "anthropic" ? "anthropic" : "openai-compatible");
+    baseURL = `https://gateway.ai.cloudflare.com/v1/${env.CLOUDFLARE_ACCOUNT_ID}/${env.AI_GATEWAY_ID}/${gwSegment}`;
+  } else {
+    baseURL = card.defaultBaseUrl;
+    if (card.sdk === "anthropic") baseURL = undefined;
+  }
+
+  try {
+    if (card.sdk === "anthropic") {
+      // Anthropic Messages API
+      const res = await fetch(baseURL ? `${baseURL}/v1/messages` : "https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: card.modelId,
+          max_tokens: 32,
+          messages: [{ role: "user", content: "Say hi" }],
+        }),
+      });
+      const data = await res.json() as Record<string, unknown>;
+      if (!res.ok) return Response.json({ error: (data as { error?: { message?: string } }).error?.message || `HTTP ${res.status}` }, { status: 400 });
+      return Response.json({ success: true, model: card.modelId, response: data });
+    } else {
+      // OpenAI-compatible chat completions
+      const url = baseURL ? `${baseURL}/chat/completions` : `${card.defaultBaseUrl}/chat/completions`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: card.modelId,
+          max_tokens: 32,
+          messages: [{ role: "user", content: "Say hi" }],
+        }),
+      });
+      const data = await res.json() as Record<string, unknown>;
+      if (!res.ok) return Response.json({ error: (data as { error?: { message?: string } }).error?.message || `HTTP ${res.status}` }, { status: 400 });
+      return Response.json({ success: true, model: card.modelId, response: data });
+    }
+  } catch (e) {
+    return Response.json({ error: `Connection failed: ${e}` }, { status: 500 });
+  }
+}
 
 // ---------------------------------------------------------------------------
 // LLM Caller binding — API handlers
@@ -734,6 +810,7 @@ function renderLlmConfigPage() {
       <td style="font-family:monospace;font-size:12px">\${card?.modelId || p.model}</td>
       <td>\${p.params ? '<span class="badge badge-approved">Configured</span>' : '<span class="badge badge-pending">Default</span>'}</td>
       <td class="actions">
+        <button class="btn btn-ghost" onclick="llmTest('\${p.id}')" id="test-\${p.id}">Test</button>
         <button class="btn btn-ghost" onclick="llmEdit('\${p.id}')">Edit</button>
         <button class="btn btn-red" onclick="llmDelete('\${p.id}')">Delete</button>
       </td>
@@ -1245,6 +1322,30 @@ window.callerAssign = async (callerType, resourceId) => {
   const json = await res.json();
   callerBindings = json.data || [];
   render();
+};
+window.llmTest = async (id) => {
+  const p = llmProviders.find(x => x.id === id);
+  if (!p) return;
+  const btn = document.getElementById('test-' + id);
+  if (btn) { btn.textContent = 'Testing...'; btn.disabled = true; }
+  try {
+    const res = await fetch('/api/llm-test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ providerType: p.providerType, model: p.model, apiKey: p.apiKey || '' }),
+    });
+    const json = await res.json();
+    if (json.success) {
+      if (btn) { btn.textContent = '✓ OK'; btn.style.color = '#15803d'; }
+    } else {
+      if (btn) { btn.textContent = '✗ Failed'; btn.style.color = '#b91c1c'; }
+      alert('Test failed: ' + (json.error || 'Unknown error'));
+    }
+  } catch (e) {
+    if (btn) { btn.textContent = '✗ Error'; btn.style.color = '#b91c1c'; }
+    alert('Test error: ' + e);
+  }
+  setTimeout(() => { if (btn) { btn.textContent = 'Test'; btn.style.color = ''; btn.disabled = false; } }, 3000);
 };
 window.llmDelete = async (id) => {
   if (!confirm('Delete this provider?')) return;
