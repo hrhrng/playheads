@@ -6,6 +6,12 @@
       "runtimeExecutable": "make",
       "runtimeArgs": ["dev-web"],
       "port": 5173
+    },
+    {
+      "name": "admin-dev",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "admin", "dev"],
+      "port": 8788
     }
   ]
 }

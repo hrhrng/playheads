@@ -56,6 +56,12 @@ jobs:
           if [ -n "${{ secrets.RESEND_API_KEY }}" ]; then
             printf '%s' "${{ secrets.RESEND_API_KEY }}" | npx wrangler secret put RESEND_API_KEY --name "$WORKER" && echo "✓ RESEND_API_KEY" || echo "✗ RESEND_API_KEY failed"
           fi
+          if [ -n "${{ secrets.ADMIN_ENCRYPTION_KEY }}" ]; then
+            printf '%s' "${{ secrets.ADMIN_ENCRYPTION_KEY }}" | npx wrangler secret put ADMIN_ENCRYPTION_KEY --name "$WORKER" && echo "✓ ADMIN_ENCRYPTION_KEY" || echo "✗ ADMIN_ENCRYPTION_KEY failed"
+          fi
+          if [ -n "${{ secrets.CF_AIG_TOKEN }}" ]; then
+            printf '%s' "${{ secrets.CF_AIG_TOKEN }}" | npx wrangler secret put CF_AIG_TOKEN --name "$WORKER" && echo "✓ CF_AIG_TOKEN" || echo "✗ CF_AIG_TOKEN failed"
+          fi
 
       - name: Deploy web worker
         working-directory: apps/web
@@ -83,13 +89,6 @@ jobs:
             --route "admin.${{ vars.PRODUCTION_DOMAIN }}/*" \
             --var APP_HOSTNAME:app.${{ vars.PRODUCTION_DOMAIN }} \
             --var ADMIN_HOSTNAME:admin.${{ vars.PRODUCTION_DOMAIN }}
-
-      - name: Deploy backend worker
-        working-directory: apps/backend-worker
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npx wrangler deploy
 
       - name: Sync gateway secrets
         env:
@@ -138,6 +137,7 @@ jobs:
             [APPLE_MUSIC_TEAM_ID]="${{ secrets.APPLE_MUSIC_TEAM_ID }}"
             [APPLE_MUSIC_KEY_ID]="${{ secrets.APPLE_MUSIC_KEY_ID }}"
             [APPLE_MUSIC_PRIVATE_KEY]="${{ secrets.APPLE_MUSIC_PRIVATE_KEY }}"
+            [ADMIN_ENCRYPTION_KEY]="${{ secrets.ADMIN_ENCRYPTION_KEY }}"
           )
           FAILED=0
           for KEY in "${!SECRETS[@]}"; do
@@ -153,34 +153,3 @@ jobs:
           done
           if [ "$FAILED" -eq 1 ]; then exit 1; fi
 
-      - name: Sync secrets and variables to backend worker
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          ALL_SECRETS: ${{ toJSON(secrets) }}
-          ALL_VARS: ${{ toJSON(vars) }}
-        run: |
-          WORKER="playheads-backend"
-          SKIP_KEYS='["GITHUB_TOKEN"]'
-          FAILED=0
-          for KEY in $(echo "$ALL_SECRETS" | jq -r --argjson skip "$SKIP_KEYS" 'keys[] | select(. as $k | $skip | index($k) | not)'); do
-            VAL=$(echo "$ALL_SECRETS" | jq -r --arg k "$KEY" '.[$k]')
-            if [ -z "$VAL" ]; then continue; fi
-            if printf '%s' "$VAL" | npx wrangler secret put "$KEY" --name "$WORKER"; then
-              echo "✓ secret $KEY"
-            else
-              echo "✗ secret $KEY failed"
-              FAILED=1
-            fi
-          done
-          for KEY in $(echo "$ALL_VARS" | jq -r 'keys[]'); do
-            VAL=$(echo "$ALL_VARS" | jq -r --arg k "$KEY" '.[$k]')
-            if [ -z "$VAL" ]; then continue; fi
-            if printf '%s' "$VAL" | npx wrangler secret put "$KEY" --name "$WORKER"; then
-              echo "✓ var $KEY"
-            else
-              echo "✗ var $KEY failed"
-              FAILED=1
-            fi
-          done
-          if [ "$FAILED" -eq 1 ]; then exit 1; fi

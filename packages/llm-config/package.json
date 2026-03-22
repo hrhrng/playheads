@@ -1,0 +1,13 @@
+{
+  "name": "@playheads/llm-config",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.58",
+    "@ai-sdk/openai-compatible": "^2.0.0",
+    "ai": "^6.0.0"
+  }
+}

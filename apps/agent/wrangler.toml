@@ -25,14 +25,15 @@ invocation_logs = true
 head_sampling_rate = 1
 
 [vars]
-# LLM provider: "anthropic" (default) or "doubao"
+# LLM provider fallback (used when no DB caller binding exists): "anthropic" | "doubao" | etc.
 LLM_PROVIDER = "anthropic"
 
-# Anthropic settings (used when LLM_PROVIDER=anthropic)
+# Anthropic model fallback (used when no DB config)
 ANTHROPIC_MODEL = "claude-sonnet-4-6"
-ANTHROPIC_THINKING_BUDGET = "5000"
+# Note: ANTHROPIC_THINKING_BUDGET removed — thinking is now controlled by
+# the thinkingEnabled flag in llm_provider_config (set via admin panel).
 
-# Doubao (ByteDance Volcano Engine Ark) settings (used when LLM_PROVIDER=doubao)
+# Doubao model fallback (used when LLM_PROVIDER=doubao and no DB config)
 # Secret: set via `wrangler secret put DOUBAO_API_KEY`
 DOUBAO_MODEL = "doubao-1.5-pro-32k"
 

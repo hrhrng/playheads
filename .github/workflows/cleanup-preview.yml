@@ -19,7 +19,7 @@ jobs:
           echo "Cutoff: $CUTOFF (older than ${MAX_AGE_DAYS} days)"
 
           # Production worker names — never delete these
-          PROD_NAMES='["playheads-gateway","playheads-web","playheads-landing","playheads-backend","playheads-admin","playheads-agent","playheads-gateway-preview"]'
+          PROD_NAMES='["playheads-gateway","playheads-web","playheads-landing","playheads-admin","playheads-agent","playheads-gateway-preview"]'
 
           # Fetch all workers
           WORKERS=$(curl -s \
@@ -39,25 +39,5 @@ jobs:
               "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER" \
               | jq -r '"  → success: \(.success)"'
           done
-
-          # Cleanup stale container applications
-          CONTAINERS=$(curl -s \
-            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/containers/applications" \
-            | jq -c '.result[]? // empty')
-
-          if [ -n "$CONTAINERS" ]; then
-            echo "$CONTAINERS" | jq -r --arg cutoff "$CUTOFF" 'select(
-              (.name | startswith("playheads-"))
-              and (.name | IN("playheads-backend-backendcontainer") | not)
-              and ((.modified_on // .created_on // "9999") < $cutoff)
-            ) | .name' | while read -r APP; do
-              echo "Deleting container app: $APP"
-              curl -s -X DELETE \
-                -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-                "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/containers/applications/$APP" \
-                | jq -r '"  → success: \(.success)"'
-            done
-          fi
 
           echo "Done."

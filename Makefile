@@ -1,14 +1,12 @@
-.PHONY: dev dev-web dev-backend dev-landing install install-web install-backend \
-       install-landing clean help test test-backend test-web lint lint-web \
+.PHONY: dev dev-web dev-landing install install-web install-landing \
+       clean help test test-web lint lint-web \
        type-check ci build-landing deploy-landing \
        deploy deploy-preview deploy-production build-web \
        deploy-preview-web deploy-preview-gateway \
        deploy-preview-landing deploy-production-landing \
        deploy-preview-admin deploy-production-admin \
-       deploy-preview-backend deploy-production-backend \
        deploy-preview-agent deploy-production-agent \
        deploy-production-web deploy-production-gateway \
-       deploy-secrets-preview deploy-secrets-production \
        deploy-secrets-agent-preview
 
 # =============================================================================
@@ -16,16 +14,12 @@
 # =============================================================================
 
 dev:
-	@echo "Starting frontend and backend..."
-	@make -j2 dev-web dev-backend
+	@echo "Starting frontend..."
+	@make dev-web
 
 dev-web:
 	@echo "Starting web frontend..."
 	rm -rf apps/web/node_modules/.vite && pnpm --filter web dev
-
-dev-backend:
-	@echo "Starting backend..."
-	uv run --package backend uvicorn apps.backend.main:app --port 8001 --reload
 
 dev-landing:
 	@echo "Starting landing page..."
@@ -35,7 +29,7 @@ dev-landing:
 # Install
 # =============================================================================
 
-install: install-web install-landing install-backend
+install: install-web install-landing
 	@echo "All dependencies installed!"
 
 install-web:
@@ -46,18 +40,11 @@ install-landing:
 	@echo "Installing landing dependencies..."
 	pnpm install --filter landing
 
-install-backend:
-	@echo "Installing backend dependencies..."
-	uv sync --project apps/backend --extra dev
-
 # =============================================================================
 # Test
 # =============================================================================
 
-test: test-backend test-web test-auth
-
-test-backend:
-	uv run --project apps/backend pytest apps/backend/ -v
+test: test-web test-auth
 
 test-web:
 	pnpm --filter web test
@@ -98,7 +85,6 @@ clean:
 	@echo "Cleaning caches..."
 	rm -rf apps/web/node_modules/.vite
 	rm -rf apps/web/.next
-	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	@echo "Cleaned!"
 
 # =============================================================================
@@ -107,9 +93,9 @@ clean:
 
 deploy: deploy-preview
 
-deploy-preview: build-web build-landing deploy-preview-landing deploy-preview-admin deploy-preview-web deploy-preview-backend deploy-preview-agent deploy-preview-gateway
+deploy-preview: build-web build-landing deploy-preview-landing deploy-preview-admin deploy-preview-web deploy-preview-agent deploy-preview-gateway
 
-deploy-production: build-web build-landing deploy-production-landing deploy-production-admin deploy-production-web deploy-production-backend deploy-production-agent deploy-production-gateway
+deploy-production: build-web build-landing deploy-production-landing deploy-production-admin deploy-production-web deploy-production-agent deploy-production-gateway
 
 build-web:
 	@echo "Building web frontend..."
@@ -126,10 +112,6 @@ deploy-preview-admin:
 deploy-preview-web:
 	@echo "Deploying web worker (preview)..."
 	cd apps/web && npx wrangler deploy --config wrangler.preview.toml
-
-deploy-preview-backend:
-	@echo "Deploying backend worker (preview)..."
-	cd apps/backend-worker && npx wrangler deploy
 
 deploy-preview-agent:
 	@echo "Deploying agent worker (preview)..."
@@ -151,10 +133,6 @@ deploy-production-web:
 	@echo "Deploying web worker (production)..."
 	cd apps/web && npx wrangler deploy --config wrangler.production.toml
 
-deploy-production-backend:
-	@echo "Deploying backend worker (production)..."
-	cd apps/backend-worker && npx wrangler deploy
-
 deploy-production-agent:
 	@echo "Deploying agent worker (production)..."
 	cd apps/agent && npx wrangler deploy
@@ -172,27 +150,21 @@ deploy-secrets-agent-preview:
 	cd apps/agent && npx wrangler secret put APPLE_MUSIC_KEY_ID
 	cd apps/agent && npx wrangler secret put APPLE_MUSIC_PRIVATE_KEY
 
-deploy-secrets-preview:
-	@echo "Setting Cloudflare secrets for preview backend worker..."
-	cd apps/backend-worker && npx wrangler secret put DATABASE_URL
-	cd apps/backend-worker && npx wrangler secret put ANTHROPIC_API_KEY
-	cd apps/backend-worker && npx wrangler secret put OPENAI_API_KEY
-	cd apps/backend-worker && npx wrangler secret put OPENAI_BASE_URL
-	cd apps/backend-worker && npx wrangler secret put APPLE_MUSIC_TEAM_ID
-	cd apps/backend-worker && npx wrangler secret put APPLE_MUSIC_KEY_ID
-	cd apps/backend-worker && npx wrangler secret put APPLE_MUSIC_PRIVATE_KEY
-	cd apps/backend-worker && npx wrangler secret put MINIMAX_API_KEY
-
-deploy-secrets-production:
-	@echo "Setting Cloudflare secrets for production backend worker..."
-	cd apps/backend-worker && npx wrangler secret put DATABASE_URL
-	cd apps/backend-worker && npx wrangler secret put ANTHROPIC_API_KEY
-	cd apps/backend-worker && npx wrangler secret put OPENAI_API_KEY
-	cd apps/backend-worker && npx wrangler secret put OPENAI_BASE_URL
-	cd apps/backend-worker && npx wrangler secret put APPLE_MUSIC_TEAM_ID
-	cd apps/backend-worker && npx wrangler secret put APPLE_MUSIC_KEY_ID
-	cd apps/backend-worker && npx wrangler secret put APPLE_MUSIC_PRIVATE_KEY
-	cd apps/backend-worker && npx wrangler secret put MINIMAX_API_KEY
+# LLM config secrets (shared between admin + agent workers)
+# ADMIN_ENCRYPTION_KEY: generate with `openssl rand -hex 32`, must be same value in both workers
+# TAVILY_API_KEY: get from https://tavily.com (free 1000/mo)
+secret-llm-config:
+	@echo "=== LLM Config Secrets Setup ==="
+	@echo ""
+	@printf "ADMIN_ENCRYPTION_KEY (tip: openssl rand -hex 32): "; \
+	read KEY; \
+	echo "$$KEY" | (cd apps/admin && npx wrangler secret put ADMIN_ENCRYPTION_KEY); \
+	echo "$$KEY" | (cd apps/agent && npx wrangler secret put ADMIN_ENCRYPTION_KEY)
+	@echo ""
+	@echo "TAVILY_API_KEY (from https://tavily.com, free 1000/mo):"
+	@(cd apps/agent && npx wrangler secret put TAVILY_API_KEY)
+	@echo ""
+	@echo "Done. Both workers share the same encryption key."
 
 # LLM config secrets (shared between admin + agent workers)
 # ADMIN_ENCRYPTION_KEY: generate with `openssl rand -hex 32`, must be same value in both workers
@@ -215,20 +187,17 @@ help:
 	@echo "Available commands:"
 	@echo ""
 	@echo "  Development:"
-	@echo "    make dev            - Start both frontend and backend"
+	@echo "    make dev            - Start frontend"
 	@echo "    make dev-web        - Start frontend only"
-	@echo "    make dev-backend    - Start backend only"
 	@echo "    make dev-landing    - Start landing page only"
 	@echo ""
 	@echo "  Install:"
 	@echo "    make install        - Install all dependencies"
 	@echo "    make install-web    - Install frontend dependencies"
 	@echo "    make install-landing - Install landing dependencies"
-	@echo "    make install-backend - Install backend dependencies"
 	@echo ""
 	@echo "  Test:"
-	@echo "    make test           - Run all tests (backend + frontend)"
-	@echo "    make test-backend   - Run backend tests only"
+	@echo "    make test           - Run all tests"
 	@echo "    make test-web       - Run frontend tests only"
 	@echo ""
 	@echo "  Quality:"
