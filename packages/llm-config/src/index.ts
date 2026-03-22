@@ -426,5 +426,19 @@ export function createLLMModel(config: CreateLLMModelConfig): LLMModelResult {
       ? card.maxOutputTokensWithThinking
       : card.maxOutputTokens || 0;
 
+  // Log what we're actually sending
+  console.log(JSON.stringify({
+    event: "createLLMModel",
+    cardId: card.id,
+    modelId: card.modelId,
+    sdk: card.sdk,
+    sdkName: card.sdkName,
+    baseURL,
+    hasProviderKey: !!providerKey,
+    params,
+    providerOptions,
+    maxOutputTokens,
+  }));
+
   return { model, providerOptions, maxOutputTokens, anthropicInstance };
 }
