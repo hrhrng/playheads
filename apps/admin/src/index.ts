@@ -17,7 +17,7 @@ interface LlmProviderRow {
   name: string;
   providerType: string;
   model: string;
-  thinkingEnabled: number;  // 0 | 1
+  params: string | null;  // JSON string of provider-specific params (null = defaults/off)
   createdAt: number;
   updatedAt: number;
 }
@@ -252,23 +252,23 @@ async function syncWaitlistApproval(db: ReturnType<typeof drizzle>, email: strin
 // ---------------------------------------------------------------------------
 
 async function ensureLlmTable(env: Env): Promise<void> {
-  // All providers go through CF AI Gateway (BYOK) — no API keys or gateway
-  // config stored in DB. Only model selection + thinking toggle.
+  // All providers go through CF AI Gateway (BYOK) — no API keys stored.
+  // `params` stores provider-specific JSON (thinking/reasoning config, etc.)
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS llm_provider_config (
-    id               TEXT PRIMARY KEY,
-    name             TEXT NOT NULL,
-    providerType     TEXT NOT NULL,
-    model            TEXT NOT NULL,
-    thinkingEnabled  INTEGER NOT NULL DEFAULT 0,
-    createdAt        INTEGER NOT NULL,
-    updatedAt        INTEGER NOT NULL
+    id           TEXT PRIMARY KEY,
+    name         TEXT NOT NULL,
+    providerType TEXT NOT NULL,
+    model        TEXT NOT NULL,
+    params       TEXT,
+    createdAt    INTEGER NOT NULL,
+    updatedAt    INTEGER NOT NULL
   )`).run();
 
-  // Migration: add thinkingEnabled column if missing (existing installs)
+  // Migration: add params column if missing (existing installs)
   try {
-    await env.DB.prepare("SELECT thinkingEnabled FROM llm_provider_config LIMIT 1").first();
+    await env.DB.prepare("SELECT params FROM llm_provider_config LIMIT 1").first();
   } catch {
-    await env.DB.prepare("ALTER TABLE llm_provider_config ADD COLUMN thinkingEnabled INTEGER NOT NULL DEFAULT 0").run();
+    await env.DB.prepare("ALTER TABLE llm_provider_config ADD COLUMN params TEXT").run();
   }
 
   // Caller → Resource binding table
@@ -299,10 +299,10 @@ async function handleLlmCreate(request: Request, env: Env): Promise<Response> {
   const now = Date.now();
   const id = crypto.randomUUID();
   await env.DB.prepare(
-    `INSERT INTO llm_provider_config (id,name,providerType,model,thinkingEnabled,createdAt,updatedAt)
+    `INSERT INTO llm_provider_config (id,name,providerType,model,params,createdAt,updatedAt)
      VALUES (?,?,?,?,?,?,?)`
   ).bind(id, body.name || body.providerType, body.providerType, body.model,
-    body.thinkingEnabled ? 1 : 0, now, now).run();
+    body.params || null, now, now).run();
   return Response.json({ success: true, id });
 }
 
@@ -315,7 +315,7 @@ async function handleLlmUpdate(id: string, request: Request, env: Env): Promise<
   if (body.name !== undefined) { updates.push("name = ?"); vals.push(body.name); }
   if (body.providerType !== undefined) { updates.push("providerType = ?"); vals.push(body.providerType); }
   if (body.model !== undefined) { updates.push("model = ?"); vals.push(body.model); }
-  if (body.thinkingEnabled !== undefined) { updates.push("thinkingEnabled = ?"); vals.push(body.thinkingEnabled ? 1 : 0); }
+  if (body.params !== undefined) { updates.push("params = ?"); vals.push(body.params || null); }
 
   vals.push(id);
   await env.DB.prepare(`UPDATE llm_provider_config SET ${updates.join(", ")} WHERE id = ?`).bind(...vals).run();
@@ -367,8 +367,8 @@ function handleModelRegistry(): Response {
         sdk: card.sdk,
         providerType: id.split("/")[0],
         modelId: card.modelId,
-        hasThinking: !!card.thinking,
-        defaultBaseUrl: card.defaultBaseUrl || null,
+        // Default params for the JSON editor (null if model doesn't support thinking)
+        defaultParams: card.thinking ? card.thinking.params : null,
       },
     ])
   );
@@ -691,7 +691,7 @@ function renderLlmConfigPage() {
           \${llmProviders.map(p => \`<option value="\${p.id}" \${resId===p.id?'selected':''}>\${p.name} (\${p.model})</option>\`).join('')}
         </select>
       </td>
-      <td style="font-size:12px;color:#9ca3af">\${res ? (res.thinkingEnabled ? 'Thinking ON' : 'Thinking OFF') : '—'}</td>
+      <td style="font-size:12px;color:#9ca3af">\${res ? (res.params ? 'Custom params' : 'Defaults') : '—'}</td>
     </tr>\`;
   }).join('');
 
@@ -717,7 +717,7 @@ function renderLlmConfigPage() {
         </div>
       </td>
       <td style="font-family:monospace;font-size:12px">\${card?.modelId || p.model}</td>
-      <td>\${p.thinkingEnabled ? '<span class="badge badge-approved">Thinking</span>' : '<span class="badge badge-pending">Off</span>'}</td>
+      <td>\${p.params ? '<span class="badge badge-approved">Configured</span>' : '<span class="badge badge-pending">Default</span>'}</td>
       <td class="actions">
         <button class="btn btn-ghost" onclick="llmEdit('\${p.id}')">Edit</button>
         <button class="btn btn-red" onclick="llmDelete('\${p.id}')">Delete</button>
@@ -736,7 +736,7 @@ function renderLlmConfigPage() {
         llmProviders.length === 0 ? '<p class="empty">No resources configured</p>' : \`
         <table>
           <thead><tr>
-            <th>Resource</th><th>Model ID</th><th>Thinking</th><th style="text-align:right">Actions</th>
+            <th>Resource</th><th>Model ID</th><th>Params</th><th style="text-align:right">Actions</th>
           </tr></thead>
           <tbody>\${rows}</tbody>
         </table>\`}
@@ -761,7 +761,10 @@ function renderLlmModal() {
     ).join('')}</optgroup>\`
   ).join('');
 
-  const showThinking = currentCard?.hasThinking;
+  // Resolve current params: from DB data or card defaults
+  const currentParams = d.params
+    ? (typeof d.params === 'string' ? d.params : JSON.stringify(d.params, null, 2))
+    : (currentCard?.defaultParams ? JSON.stringify(currentCard.defaultParams, null, 2) : '');
 
   return \`<div class="modal-overlay" id="llmModalOverlay">
     <div class="modal" style="max-width:440px">
@@ -780,13 +783,10 @@ function renderLlmModal() {
             \${modelOptions}
           </select>
         </div>
-        \${showThinking ? \`
         <div class="form-group">
-          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
-            <input type="checkbox" id="lm_thinking" \${d.thinkingEnabled ? 'checked' : ''} style="width:auto" />
-            Enable Thinking / Reasoning
-          </label>
-        </div>\` : ''}
+          <label>Params (JSON) <span style="font-weight:400;color:#9ca3af">— empty = no thinking/reasoning</span></label>
+          <textarea id="lm_params" rows="5" style="width:100%;padding:10px 14px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;font-family:'SF Mono',SFMono-Regular,Menlo,monospace;outline:none;resize:vertical">\${currentParams}</textarea>
+        </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-ghost" onclick="llmCloseModal()">Cancel</button>
           <button type="submit" class="btn btn-primary">\${isEdit ? 'Save Changes' : 'Add Resource'}</button>
@@ -1054,12 +1054,16 @@ function bind() {
     const card = MODEL_CARDS[cardId];
     const [providerType, ...modelParts] = cardId.split('/');
     const model = modelParts.join('/');
-    const thinkingEl = document.getElementById('lm_thinking');
+    const paramsRaw = document.getElementById('lm_params')?.value.trim() || '';
+    // Validate JSON if provided
+    if (paramsRaw) {
+      try { JSON.parse(paramsRaw); } catch { llmMsg = 'Invalid JSON in params'; llmMsgType = 'error'; render(); return; }
+    }
     const body = {
       name: document.getElementById('lm_name').value.trim(),
       providerType: providerType || llmModal.data?.providerType || '',
       model: model || llmModal.data?.model || '',
-      thinkingEnabled: thinkingEl ? thinkingEl.checked : false,
+      params: paramsRaw || null,
     };
     if (!body.providerType || !body.model) { llmMsg = 'Please select a model'; llmMsgType = 'error'; render(); return; }
     if (!body.name) body.name = card?.label || body.providerType;
@@ -1137,13 +1141,14 @@ window.llmOnCardChange = () => {
   if (card) {
     const nameEl = document.getElementById('lm_name');
     if (nameEl && !nameEl.value) nameEl.value = card.label;
+    // Pre-fill params with card defaults
+    const paramsEl = document.getElementById('lm_params');
+    if (paramsEl) paramsEl.value = card.defaultParams ? JSON.stringify(card.defaultParams, null, 2) : '';
   }
-  // Update modal data so thinking checkbox re-renders correctly
   if (llmModal) {
     const [pt, ...mp] = cardId.split('/');
     llmModal.data.providerType = pt;
     llmModal.data.model = mp.join('/');
-    render();
   }
 };
 window.callerAssign = async (callerType, resourceId) => {

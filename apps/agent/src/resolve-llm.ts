@@ -12,7 +12,6 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import {
   lookupCard,
-  buildProviderOptions,
   type ModelCard,
   type CallerType,
 } from "@playheads/llm-config";
@@ -27,7 +26,8 @@ interface ResourceRow {
   id: string;
   providerType: string;
   model: string;
-  thinkingEnabled: number;
+  /** JSON string of provider-specific params, e.g. {"thinking":{"type":"enabled","budgetTokens":8192}} */
+  params: string | null;
 }
 
 export interface ResolvedLLM {
@@ -57,7 +57,7 @@ export async function resolveLLM(
 ): Promise<ResolvedLLM> {
   // 1. Query caller → resource from DB
   const resource = await env.DB.prepare(`
-    SELECT r.id, r.providerType, r.model, r.thinkingEnabled
+    SELECT r.id, r.providerType, r.model, r.params
     FROM llm_caller_config c
     JOIN llm_provider_config r ON c.resourceId = r.id
     WHERE c.callerType = ?
@@ -71,7 +71,12 @@ export async function resolveLLM(
     resource?.providerType || env.LLM_PROVIDER || "anthropic";
   const modelName =
     resource?.model || env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
-  const thinkingEnabled = resource?.thinkingEnabled === 1;
+  // Parse params JSON from DB (null/empty = no thinking)
+  let dbParams: Record<string, unknown> | null = null;
+  if (resource?.params) {
+    try { dbParams = JSON.parse(resource.params); } catch { /* ignore bad JSON */ }
+  }
+  const thinkingEnabled = dbParams !== null;
 
   // 3. Look up model card
   const card = lookupCard(providerType, modelName) ?? null;
@@ -102,10 +107,13 @@ export async function resolveLLM(
     model = provider(card?.modelId || modelName);
   }
 
-  // 6. Build providerOptions from card
-  const providerOptions = card
-    ? buildProviderOptions(card, thinkingEnabled)
-    : undefined;
+  // 6. Build providerOptions
+  // DB params is the raw provider-specific params (e.g. {"thinking":{"type":"enabled","budgetTokens":8192}})
+  // Wrap it with the providerOptionsKey from the card
+  let providerOptions: Record<string, unknown> | undefined;
+  if (dbParams && card?.thinking) {
+    providerOptions = { [card.thinking.providerOptionsKey]: dbParams };
+  }
 
   // 7. Resolve maxOutputTokens
   const maxOutputTokens =
