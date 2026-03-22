@@ -9,6 +9,9 @@
   "dependencies": {
     "@playheads/auth": "workspace:*",
     "@playheads/llm-config": "workspace:*",
+    "@ai-sdk/anthropic": "^3.0.58",
+    "@ai-sdk/openai-compatible": "^2.0.0",
+    "ai": "^6.0.0",
     "drizzle-orm": "^0.44.0"
   },
   "devDependencies": {

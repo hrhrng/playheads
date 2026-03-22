@@ -2,6 +2,9 @@ import { drizzle } from "drizzle-orm/d1";
 import { schema } from "@playheads/auth";
 import { eq, inArray, count, asc } from "drizzle-orm";
 import { MODEL_REGISTRY, CALLER_TYPES } from "@playheads/llm-config";
+import { createAnthropic } from "@ai-sdk/anthropic";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { generateText } from "ai";
 
 interface Env {
   DB: D1Database;
@@ -358,70 +361,77 @@ async function handleLlmDelete(id: string, env: Env): Promise<Response> {
  */
 async function handleLlmTest(request: Request, env: Env): Promise<Response> {
   const body = await request.json() as { providerType: string; model: string; apiKey?: string; params?: string };
-  const card = MODEL_REGISTRY[`${body.providerType}/${body.model}`];
-  if (!card) return Response.json({ error: "Unknown model" }, { status: 400 });
+  const cardId = `${body.providerType}/${body.model}`;
+  const card = MODEL_REGISTRY[cardId];
+  if (!card) return Response.json({ error: `Unknown model: ${cardId}` }, { status: 400 });
 
-  // Resolve API key: provided key > encrypted DB key > CF_AIG_TOKEN
-  let apiKey = "";
-  if (body.apiKey && !body.apiKey.startsWith("***")) {
-    apiKey = body.apiKey;
-  } else if (env.CF_AIG_TOKEN) {
-    apiKey = env.CF_AIG_TOKEN;
+  // --- Same logic as agent resolve-llm.ts ---
+
+  // 1. Resolve API key
+  const hasOwnKey = body.apiKey && !body.apiKey.startsWith("***") && body.apiKey.length > 0;
+  const providerKey = hasOwnKey ? body.apiKey! : null;
+  const apiKey = providerKey || env.CF_AIG_TOKEN;
+  if (!apiKey) return Response.json({ error: "No API key or CF_AIG_TOKEN configured" }, { status: 400 });
+
+  // 2. Build gateway URL (always go through gateway)
+  const accountId = env.CLOUDFLARE_ACCOUNT_ID;
+  const gwId = env.AI_GATEWAY_ID;
+  if (!accountId || !gwId) return Response.json({ error: "CLOUDFLARE_ACCOUNT_ID or AI_GATEWAY_ID not set" }, { status: 500 });
+  const gwSegment = card.gatewayPathSegment || (body.providerType === "anthropic" ? "anthropic" : "openai-compatible");
+  const baseURL = `https://gateway.ai.cloudflare.com/v1/${accountId}/${gwId}/${gwSegment}`;
+
+  // 3. Dual-header: own key → Authorization + cf-aig-authorization
+  const extraHeaders: Record<string, string> = providerKey
+    ? { "cf-aig-authorization": `Bearer ${env.CF_AIG_TOKEN}` }
+    : {};
+
+  // 4. Parse params (same as resolve-llm)
+  let dbParams: Record<string, unknown> | null = null;
+  if (body.params) {
+    try { dbParams = JSON.parse(body.params); } catch { /* ignore */ }
+  }
+  let providerOptions: Record<string, unknown> | undefined;
+  if (dbParams && card.thinking) {
+    providerOptions = { [card.thinking.providerOptionsKey]: dbParams };
+  }
+  const thinkingEnabled = dbParams !== null;
+  const maxOutputTokens = thinkingEnabled && card.maxOutputTokensWithThinking
+    ? Math.min(card.maxOutputTokensWithThinking, 1024) // cap for test
+    : Math.min(card.maxOutputTokens || 4096, 128);     // cap for test
+
+  // 5. Create SDK model (same as resolve-llm)
+  let model: Parameters<typeof generateText>[0]["model"];
+  if (card.sdk === "anthropic") {
+    const anthropic = createAnthropic({ apiKey, baseURL, headers: extraHeaders });
+    model = anthropic(card.modelId) as unknown as typeof model;
   } else {
-    return Response.json({ error: "No API key or CF_AIG_TOKEN configured" }, { status: 400 });
+    const provider = createOpenAICompatible({
+      name: card.sdkName || body.providerType,
+      apiKey,
+      baseURL,
+      headers: extraHeaders,
+    });
+    model = provider(card.modelId) as unknown as typeof model;
   }
 
-  // Build base URL
-  let baseURL: string | undefined;
-  const useGateway = !body.apiKey || body.apiKey.startsWith("***");
-  if (useGateway && env.CLOUDFLARE_ACCOUNT_ID && env.AI_GATEWAY_ID) {
-    const gwSegment = card.gatewayPathSegment || (body.providerType === "anthropic" ? "anthropic" : "openai-compatible");
-    baseURL = `https://gateway.ai.cloudflare.com/v1/${env.CLOUDFLARE_ACCOUNT_ID}/${env.AI_GATEWAY_ID}/${gwSegment}`;
-  } else {
-    baseURL = card.defaultBaseUrl;
-    if (card.sdk === "anthropic") baseURL = undefined;
-  }
-
+  // 6. Generate (same SDK path as agent)
   try {
-    if (card.sdk === "anthropic") {
-      // Anthropic Messages API
-      const res = await fetch(baseURL ? `${baseURL}/v1/messages` : "https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-        },
-        body: JSON.stringify({
-          model: card.modelId,
-          max_tokens: 32,
-          messages: [{ role: "user", content: "Say hi" }],
-        }),
-      });
-      const data = await res.json() as Record<string, unknown>;
-      if (!res.ok) return Response.json({ error: (data as { error?: { message?: string } }).error?.message || `HTTP ${res.status}` }, { status: 400 });
-      return Response.json({ success: true, model: card.modelId, response: data });
-    } else {
-      // OpenAI-compatible chat completions
-      const url = baseURL ? `${baseURL}/chat/completions` : `${card.defaultBaseUrl}/chat/completions`;
-      const res = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model: card.modelId,
-          max_tokens: 32,
-          messages: [{ role: "user", content: "Say hi" }],
-        }),
-      });
-      const data = await res.json() as Record<string, unknown>;
-      if (!res.ok) return Response.json({ error: (data as { error?: { message?: string } }).error?.message || `HTTP ${res.status}` }, { status: 400 });
-      return Response.json({ success: true, model: card.modelId, response: data });
-    }
+    const result = await generateText({
+      model,
+      maxTokens: maxOutputTokens,
+      providerOptions,
+      messages: [{ role: "user", content: "Say hi in one word." }],
+    });
+    return Response.json({
+      success: true,
+      model: card.modelId,
+      text: result.text,
+      usage: result.usage,
+      authMode: providerKey ? "own_key+gateway" : "cf_byok",
+    });
   } catch (e) {
-    return Response.json({ error: `Connection failed: ${e}` }, { status: 500 });
+    const msg = e instanceof Error ? e.message : String(e);
+    return Response.json({ error: msg }, { status: 400 });
   }
 }
 
