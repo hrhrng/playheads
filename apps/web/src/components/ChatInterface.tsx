@@ -375,6 +375,7 @@ export const ChatInterface = ({
           isOpen={showLyrics && !showHistory}
           onClose={() => setShowLyrics(false)}
           onSeek={(time) => onSeek?.(time)}
+          artworkUrl={currentTrack?.artworkUrl}
         />
       </div>
 

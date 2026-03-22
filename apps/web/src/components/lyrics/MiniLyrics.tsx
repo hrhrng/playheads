@@ -32,7 +32,10 @@ export const MiniLyrics = ({ lyrics, onClick }: MiniLyricsProps) => {
         onClick={onClick}
         className="mt-5 max-w-sm mx-auto block text-center cursor-pointer group"
       >
-        <span className="text-xs text-gray-400 group-hover:text-gray-600 transition-colors">
+        <span className="text-xs text-gray-400 group-hover:text-gray-600 transition-colors flex items-center justify-center gap-1.5">
+          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19V6l12-3v13M9 10l12-3" />
+          </svg>
           Lyrics available &middot; tap to view
         </span>
       </button>
@@ -51,25 +54,29 @@ export const MiniLyrics = ({ lyrics, onClick }: MiniLyricsProps) => {
       onClick={onClick}
       className="mt-5 max-w-sm mx-auto block text-center cursor-pointer group w-full"
     >
-      <div className="space-y-1.5 overflow-hidden">
-        {/* Current line */}
+      <div className="space-y-1 overflow-hidden">
+        {/* Current line — slides in on change */}
         <p
           key={`cur-${currentIndex}`}
-          className="text-sm font-medium text-gray-700 leading-snug line-clamp-1 animate-fade-in"
+          className="text-base font-semibold text-gray-800 leading-snug line-clamp-1 animate-lyric-slide-in"
         >
           {currentLine?.text || '\u00A0'}
         </p>
         {/* Next line */}
         <p
           key={`next-${currentIndex}`}
-          className="text-xs text-gray-400 leading-snug line-clamp-1 animate-fade-in"
+          className="text-sm text-gray-400 leading-snug line-clamp-1 animate-lyric-slide-in"
+          style={{ animationDelay: '60ms' }}
         >
           {nextLine?.text || '\u00A0'}
         </p>
       </div>
-      {/* Expand hint on hover */}
-      <span className="text-[10px] text-gray-300 mt-2 block opacity-0 group-hover:opacity-100 transition-opacity">
-        tap to expand
+      {/* Expand hint */}
+      <span className="text-[10px] text-gray-300 mt-2 block opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
+        <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 15l7-7 7 7" />
+        </svg>
+        expand
       </span>
     </button>
   );

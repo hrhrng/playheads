@@ -77,6 +77,43 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+
+  /* Lyrics scroll container — fade edges */
+  .lyrics-mask {
+    mask-image: linear-gradient(
+      to bottom,
+      transparent 0%,
+      black 12%,
+      black 88%,
+      transparent 100%
+    );
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      transparent 0%,
+      black 12%,
+      black 88%,
+      transparent 100%
+    );
+  }
+}
+
+/* Lyric line slide-in animation */
+@keyframes lyric-slide-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-lyric-slide-in {
+  animation: lyric-slide-in 0.35s ease-out forwards;
+}
+
+/* Lyric line tap feedback */
+@keyframes lyric-tap {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(0.97); }
+  100% { transform: scale(1); }
+}
+.animate-lyric-tap {
+  animation: lyric-tap 0.2s ease-out;
 }
 
 body {
