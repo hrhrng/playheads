@@ -377,11 +377,14 @@ export function createLLMModel(config: CreateLLMModelConfig): LLMModelResult {
   const gwSegment = card.gatewayPathSegment || "openai-compatible";
   const baseURL = `https://gateway.ai.cloudflare.com/v1/${accountId}/${gatewayId}/${gwSegment}`;
 
-  // 2. Auth: SDK apiKey + optional dual-header
+  // 2. Auth headers
+  // - Own key mode: Authorization = provider key, cf-aig-authorization = gateway token
+  // - BYOK mode: cf-aig-authorization = gateway token (gateway injects provider key)
+  //   SDK requires apiKey so we pass the gateway token; gateway strips it
   const apiKey = providerKey || cfAigToken;
-  const extraHeaders: Record<string, string> = providerKey
-    ? { "cf-aig-authorization": `Bearer ${cfAigToken}` }
-    : {};
+  const extraHeaders: Record<string, string> = {
+    "cf-aig-authorization": `Bearer ${cfAigToken}`,
+  };
 
   // 3. Create SDK model
   let model: unknown;
