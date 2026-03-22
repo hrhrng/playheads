@@ -8,6 +8,11 @@ binding = "DB"
 database_name = "playheads-db"
 database_id = "31cba35f-8e23-46eb-880f-19d667c0946b"
 
-# Secrets (set via: wrangler secret put ADMIN_ENCRYPTION_KEY --name playheads-admin)
+[vars]
+CLOUDFLARE_ACCOUNT_ID = "44af79e51582ca20c9003eb926540242"
+AI_GATEWAY_ID = "clash"
+
+# Secrets (set via: wrangler secret put <NAME> --name playheads-admin)
 # ADMIN_ENCRYPTION_KEY: 64-char hex string (32 bytes), used for AES-256-GCM key encryption
-# Generate with: openssl rand -hex 32
+# CF_AIG_TOKEN: Cloudflare AI Gateway token, for LLM test endpoint
+# Generate encryption key with: openssl rand -hex 32

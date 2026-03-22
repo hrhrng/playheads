@@ -9,12 +9,10 @@
  */
 import { AIChatAgent } from "@cloudflare/ai-chat";
 import { streamText, convertToModelMessages, stepCountIs, tool } from "ai";
-import { createAnthropic } from "@ai-sdk/anthropic";
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { z } from "zod";
 import { createMusicTools } from "./tools";
 import { generateAndUpdateTitle } from "./title";
-import { createLogger } from "./logger";
+import { resolveLLM } from "./resolve-llm";
 import type { Env, PlaybackState } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -143,6 +141,18 @@ function buildSystemPrompt(state: PlaybackState): string {
 }
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Extract a plain-text preview from a UIMessage (for conversation list). */
+function extractTextPreview(msg: import("ai").UIMessage): string {
+  for (const part of msg.parts) {
+    if (part.type === "text" && part.text) return part.text;
+  }
+  return "...";
+}
+
+// ---------------------------------------------------------------------------
 // MusicChatAgent
 // ---------------------------------------------------------------------------
 
@@ -188,15 +198,7 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
       }
     }
 
-    // ── Structured tracing ──
-    const log = createLogger();
-    const t0 = Date.now();
-    let firstTokenLogged = false;
-    let lastChunkAt = t0;
-    let chunkCount = 0;
-    let lastChunkType = "";
-
-    log.info("request", {
+    console.log("[MusicChatAgent] onChatMessage", {
       sessionId,
       userId,
       storefront,
@@ -207,246 +209,54 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
     });
 
     // ---------------------------------------------------------------------------
-    // Resolve active LLM config: DB first, env vars as fallback.
-    // DB config is set via the admin panel (/api/llm-config).
+    // Resolve LLM via Model Card architecture (DB caller → resource → card)
     // ---------------------------------------------------------------------------
-    const [dbConfig, dbSearchConfig] = await Promise.all([
-      this.env.DB.prepare(
-        "SELECT * FROM llm_provider_config WHERE isActive = 1 LIMIT 1"
-      ).first<{
-        providerType: string; model: string; gateway: string;
-        gatewayAccountId: string | null; gatewayId: string | null;
-        gatewayToken: string | null; apiKey: string; baseUrl: string | null;
-      }>().catch(() => null),
-      this.env.DB.prepare(
-        "SELECT providerType, apiKey FROM search_provider_config WHERE isActive = 1 LIMIT 1"
-      ).first<{ providerType: string; apiKey: string }>().catch(() => null),
-    ]);
+    const { model, card, providerOptions, maxOutputTokens, anthropicInstance } =
+      await resolveLLM(this.env, "chat");
 
-    // Decrypt helper — mirrors apps/admin/src/index.ts decrypt()
-    const decryptKey = async (encoded: string): Promise<string> => {
-      const hex = (this.env as unknown as Record<string, string>)["ADMIN_ENCRYPTION_KEY"];
-      if (!hex || hex.length < 64) return encoded;
-      try {
-        const raw = new Uint8Array(hex.match(/.{2}/g)!.map((b: string) => parseInt(b, 16)));
-        const key = await crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, false, ["decrypt"]);
-        const buf = Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0));
-        const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: buf.slice(0, 12) }, key, buf.slice(12));
-        return new TextDecoder().decode(pt);
-      } catch { return encoded; }
-    };
+    // Resolve search provider: DB config > env vars
+    const dbSearchConfig = await this.env.DB.prepare(
+      "SELECT providerType, apiKey FROM search_provider_config WHERE isActive = 1 LIMIT 1"
+    ).first<{ providerType: string; apiKey: string }>().catch(() => null);
 
-    const resolvedProvider = dbConfig?.providerType || this.env.LLM_PROVIDER || "anthropic";
-    const resolvedApiKey = dbConfig ? await decryptKey(dbConfig.apiKey) : "";
-    const resolvedGwToken = dbConfig?.gatewayToken ? await decryptKey(dbConfig.gatewayToken) : this.env.CF_AIG_TOKEN;
-
-    // Resolve search provider: DB config takes priority over env vars
     const searchDbOverride = dbSearchConfig
-      ? { providerType: dbSearchConfig.providerType, apiKey: dbSearchConfig.apiKey ? await decryptKey(dbSearchConfig.apiKey) : "" }
+      ? { providerType: dbSearchConfig.providerType, apiKey: dbSearchConfig.apiKey || "" }
       : undefined;
 
-    let model: Parameters<typeof streamText>[0]["model"];
-    let tools: Parameters<typeof streamText>[0]["tools"];
-    let maxOutputTokens: number;
-    let providerOptions: Parameters<typeof streamText>[0]["providerOptions"];
+    // Build web search tool: native Anthropic search or external (Brave/Tavily)
+    const effectiveSearchProvider = (searchDbOverride?.providerType || this.env.SEARCH_PROVIDER || (card?.nativeSearch ? "anthropic" : "")).toLowerCase();
 
-    if (resolvedProvider === "anthropic") {
-      // -----------------------------------------------------------------------
-      // Anthropic — via Cloudflare AI Gateway (or direct if no gateway config)
-      // -----------------------------------------------------------------------
-      const useGateway = dbConfig
-        ? dbConfig.gateway === "cf_ai_gateway"
-        : true; // env-based default always uses gateway
+    const musicTools = createMusicTools({ env: this.env, state: globalState, storefront });
+    let tools: Parameters<typeof streamText>[0]["tools"] = musicTools;
 
-      const anthropicApiKey = resolvedApiKey || this.env.CF_AIG_TOKEN;
-      const anthropicBaseURL = useGateway
-        ? `https://gateway.ai.cloudflare.com/v1/${dbConfig?.gatewayAccountId || this.env.CLOUDFLARE_ACCOUNT_ID}/${dbConfig?.gatewayId || this.env.AI_GATEWAY_ID}/anthropic`
-        : undefined;
-
-      const anthropic = createAnthropic({ apiKey: anthropicApiKey, baseURL: anthropicBaseURL });
-
-      model = anthropic(dbConfig?.model || this.env.ANTHROPIC_MODEL || "claude-sonnet-4-6") as unknown as Parameters<typeof streamText>[0]["model"];
-      const effectiveSearchProvider = (searchDbOverride?.providerType || this.env.SEARCH_PROVIDER || "anthropic").toLowerCase();
-      const nativeSearch = effectiveSearchProvider === "anthropic"
-        ? { web_search: anthropic.tools.webSearch_20250305({ maxUses: 5 }) }
-        : (() => { const t = buildWebSearchTool(this.env, searchDbOverride); return t ? { web_search: t } : {}; })();
-      tools = {
-        ...createMusicTools({ env: this.env, state: globalState, storefront }),
-        ...nativeSearch,
-      };
-      const thinkingBudget = parseInt(this.env.ANTHROPIC_THINKING_BUDGET || "0");
-      maxOutputTokens = thinkingBudget > 0 ? 16384 : 4096;
-      providerOptions = thinkingBudget > 0
-        ? { anthropic: { thinking: { type: "enabled" as const, budgetTokens: thinkingBudget } } }
-        : undefined;
+    if (effectiveSearchProvider === "anthropic" && anthropicInstance) {
+      tools = { ...musicTools, web_search: anthropicInstance.tools.webSearch_20250305({ maxUses: 5 }) };
     } else {
-      // -----------------------------------------------------------------------
-      // Any OpenAI-compatible provider (Doubao, OpenAI, custom, etc.)
-      // Uses Tavily for web search — the de-facto standard community search tool
-      // for AI agents (works with any LLM, no provider-specific hacks needed).
-      // -----------------------------------------------------------------------
-      const apiKey = resolvedApiKey || this.env.DOUBAO_API_KEY;
-      const baseURL = dbConfig?.baseUrl ||
-        (resolvedProvider === "doubao" ? "https://ark.cn-beijing.volces.com/api/v3" : undefined);
-
-      // Cloudflare AI Gateway wrapping for OpenAI-compatible providers
-      let finalBaseURL = baseURL;
-      if (dbConfig?.gateway === "cf_ai_gateway" && dbConfig.gatewayAccountId && dbConfig.gatewayId) {
-        const cfBase = `https://gateway.ai.cloudflare.com/v1/${dbConfig.gatewayAccountId}/${dbConfig.gatewayId}`;
-        finalBaseURL = resolvedProvider === "openai"
-          ? `${cfBase}/openai`
-          : `${cfBase}/openai-compatible`;
-      }
-
-      const provider = createOpenAICompatible({
-        name: resolvedProvider,
-        apiKey,
-        baseURL: finalBaseURL || "https://api.openai.com/v1",
-      });
-
-      model = provider(dbConfig?.model || this.env.DOUBAO_MODEL || "doubao-1.5-pro-32k") as unknown as Parameters<typeof streamText>[0]["model"];
-
       const webSearchTool = buildWebSearchTool(this.env, searchDbOverride);
-      tools = {
-        ...createMusicTools({ env: this.env, state: globalState, storefront }),
-        ...(webSearchTool ? { web_search: webSearchTool } : {}),
-      };
-      maxOutputTokens = 4096;
-      providerOptions = undefined;
+      if (webSearchTool) {
+        tools = { ...musicTools, web_search: webSearchTool };
+      }
     }
 
-    const systemPrompt = buildSystemPrompt(globalState);
-    const modelMessages = await convertToModelMessages(this.messages);
-
-    log.info("config", {
-      provider: resolvedProvider,
-      model: dbConfig?.model || "env-default",
-      source: dbConfig ? "db" : "env",
-      search: searchDbOverride?.providerType || this.env.SEARCH_PROVIDER || "anthropic",
-      maxOutputTokens,
-      systemPromptLen: systemPrompt.length,
-      inputMessageCount: modelMessages.length,
-    });
-
-    const llmSpan = log.span("llm-stream");
+    console.log(`[MusicChatAgent] card=${card?.id || "unknown"} thinking=${!!providerOptions} maxOut=${maxOutputTokens} search=${effectiveSearchProvider || "none"}`);
 
     const result = streamText({
-      model,
-      maxOutputTokens,
-      providerOptions,
-      system: systemPrompt,
-      messages: modelMessages,
+      model: model as Parameters<typeof streamText>[0]["model"],
+      ...(maxOutputTokens ? { maxOutputTokens } : {}),
+      providerOptions: providerOptions as Parameters<typeof streamText>[0]["providerOptions"],
+      system: buildSystemPrompt(globalState),
+      messages: await convertToModelMessages(this.messages),
       tools,
       stopWhen: stepCountIs(10), // Allow multi-turn tool calling (replaces LangGraph agentic loop)
       abortSignal: options?.abortSignal,
-
-      // ── Chunk tracking (TTFT + stall detection) ──
-      onChunk: ({ chunk }) => {
-        const now = Date.now();
-        const gap = now - lastChunkAt;
-        chunkCount++;
-
-        // Log first text token
-        if (chunk.type === "text-delta" && !firstTokenLogged) {
-          firstTokenLogged = true;
-          log.info("first-token", { ttftMs: now - t0 });
-        }
-
-        // Log chunk type transitions (text→tool-call, etc.) to see what phase we're in
-        if (chunk.type !== lastChunkType) {
-          log.info("chunk-phase", {
-            from: lastChunkType || "start",
-            to: chunk.type,
-            elapsedMs: now - t0,
-            chunkCount,
-          });
-          lastChunkType = chunk.type;
-        }
-
-        // Log stalls: if >10s between chunks, something is hanging
-        if (gap > 10_000) {
-          log.warn("chunk-stall", {
-            gapMs: gap,
-            chunkType: chunk.type,
-            elapsedMs: now - t0,
-            chunkCount,
-          });
-        }
-
-        lastChunkAt = now;
-      },
-
-      // ── Tool-level tracing ──
-      experimental_onToolCallStart: ({ toolCall, stepNumber }) => {
-        log.info("tool-start", {
-          tool: toolCall.toolName,
-          step: stepNumber,
-          args: truncateArgs(toolCall.input),
-        });
-      },
-      experimental_onToolCallFinish: (event) => {
-        const data: Record<string, unknown> = {
-          tool: event.toolCall.toolName,
-          step: event.stepNumber,
-          durationMs: event.durationMs,
-          success: event.success,
-        };
-        if (!event.success) {
-          data.error = String(event.error).slice(0, 200);
-        }
-        log.info("tool-end", data);
-      },
-
-      // ── Step-level LLM response details ──
-      onStepFinish: (step) => {
-        const now = Date.now();
-        log.info("step-end", {
-          stepNumber: step.stepNumber,
-          finishReason: step.finishReason,
-          elapsedMs: now - t0,
-          sinceLastChunkMs: now - lastChunkAt,
-          chunkCount,
-          inputTokens: step.usage.inputTokens,
-          outputTokens: step.usage.outputTokens,
-          totalTokens: step.usage.totalTokens,
-          responseId: step.response.id,
-          responseModel: step.response.modelId,
-          toolCalls: step.toolCalls.map((tc) => tc.toolName),
-          warnings: step.warnings?.length ? step.warnings.map((w) => String(w)) : undefined,
-          textLen: step.text?.length ?? 0,
-          reasoningLen: step.reasoningText?.length ?? 0,
-        });
-      },
-
-      // ── Error logging ──
-      onError: ({ error }) => {
-        log.error("stream-error", {
-          error: String(error).slice(0, 500),
-          elapsedMs: Date.now() - t0,
-        });
-      },
-
-      // ── Final summary + existing D1/title logic ──
-      onFinish: async ({ text, usage, finishReason, steps, response }) => {
-        const now = Date.now();
-        llmSpan.end({
-          totalSteps: steps.length,
-          finishReason,
-          sinceLastChunkMs: now - lastChunkAt,
-          totalChunks: chunkCount,
-          inputTokens: usage.inputTokens,
-          outputTokens: usage.outputTokens,
-          totalTokens: usage.totalTokens,
-          responseId: response.id,
-          responseModel: response.modelId,
-          textLen: text?.length ?? 0,
-        });
-
+      onFinish: async ({ text }) => {
+        console.log("[MusicChatAgent] onFinish sessionId=%s textLen=%d", sessionId, text?.length || 0);
         if (!sessionId) return;
 
         // streamText's onFinish fires when the LLM is done, BEFORE the SDK
         // persists the assistant message to this.messages. So we use the
         // result `text` directly and add +1 for the assistant message.
+        const now = Date.now();
         const totalMessages = messageCount + 1; // +1 for the assistant reply
         const preview = (text || "...").slice(0, 100);
 
@@ -454,7 +264,7 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
           this.env.DB.prepare(
             'UPDATE "conversation" SET "messageCount" = ?, "lastMessagePreview" = ?, "lastMessageAt" = ?, "updatedAt" = ? WHERE "id" = ?'
           ).bind(totalMessages, preview, now, now, sessionId),
-        ]).catch((e) => log.warn("d1-sync-error", { error: String(e) }));
+        ]).catch((e) => console.warn("D1 metadata sync failed:", e));
 
         // Generate title after first exchange (1 user + 1 assistant = 2)
         if (userId && messageCount <= 2) {
@@ -475,7 +285,7 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
             sessionId,
             simplifiedMessages.slice(0, 5),
             this.env
-          ).catch((e) => log.warn("title-gen-error", { error: String(e) }));
+          ).catch((e) => console.warn("Title generation failed:", e));
         }
       },
     });
@@ -484,14 +294,30 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/** Truncate tool args for logging (avoid dumping huge search results). */
-function truncateArgs(args: unknown): unknown {
-  if (args == null) return args;
-  const str = JSON.stringify(args);
-  if (str.length <= 200) return args;
-  return str.slice(0, 200) + "…";
-}
+// Wrap onChatMessage to send errors back to the client instead of silently failing
+const _orig = MusicChatAgent.prototype.onChatMessage;
+MusicChatAgent.prototype.onChatMessage = async function (this: MusicChatAgent, ...args) {
+  try {
+    return await _orig.apply(this, args);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    // Log full error details for API errors (status, body, headers)
+    const details: Record<string, unknown> = { message: msg };
+    if (e && typeof e === "object") {
+      if ("statusCode" in e) details.statusCode = (e as Record<string, unknown>).statusCode;
+      if ("responseBody" in e) details.responseBody = (e as Record<string, unknown>).responseBody;
+      if ("url" in e) details.url = (e as Record<string, unknown>).url;
+      if ("cause" in e) details.cause = String((e as Record<string, unknown>).cause);
+    }
+    console.error("[MusicChatAgent] onChatMessage error:", JSON.stringify(details));
+    const stream = new ReadableStream({
+      start(c) {
+        c.enqueue(new TextEncoder().encode(`3:"Agent error: ${msg.replace(/"/g, "'")}"\n`));
+        c.close();
+      },
+    });
+    return new Response(stream, {
+      headers: { "Content-Type": "text/event-stream", "X-Vercel-AI-Data-Stream": "v1" },
+    });
+  }
+};
