@@ -59,6 +59,9 @@ jobs:
           if [ -n "${{ secrets.ADMIN_ENCRYPTION_KEY }}" ]; then
             printf '%s' "${{ secrets.ADMIN_ENCRYPTION_KEY }}" | npx wrangler secret put ADMIN_ENCRYPTION_KEY --name "$WORKER" && echo "✓ ADMIN_ENCRYPTION_KEY" || echo "✗ ADMIN_ENCRYPTION_KEY failed"
           fi
+          if [ -n "${{ secrets.CF_AIG_TOKEN }}" ]; then
+            printf '%s' "${{ secrets.CF_AIG_TOKEN }}" | npx wrangler secret put CF_AIG_TOKEN --name "$WORKER" && echo "✓ CF_AIG_TOKEN" || echo "✗ CF_AIG_TOKEN failed"
+          fi
 
       - name: Deploy web worker
         working-directory: apps/web
