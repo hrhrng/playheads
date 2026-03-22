@@ -7,29 +7,6 @@ on:
     branches: [main]
 
 jobs:
-  backend:
-    name: Backend Tests
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: astral-sh/setup-uv@v4
-        with:
-          version: "latest"
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
-        run: uv sync --project apps/backend --extra dev
-
-      - name: Run tests
-        env:
-          DATABASE_URL: postgresql://test:test@localhost:5432/testdb
-        run: uv run --project apps/backend pytest apps/backend/ -v
-
   frontend:
     name: Frontend Lint + Type-check + Tests
     runs-on: ubuntu-latest

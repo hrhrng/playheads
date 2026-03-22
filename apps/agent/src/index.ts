@@ -8,6 +8,7 @@
  */
 import { routeAgentRequest } from "agents";
 import { handleAppleMusic } from "./apple-music";
+import { handleLyrics } from "./lyrics";
 import type { Env } from "./types";
 
 // Must export the Durable Object class for Wrangler
@@ -22,6 +23,13 @@ export default {
     // -----------------------------------------------------------------------
     if (url.pathname.startsWith("/apple-music/")) {
       return handleAppleMusic(request, env);
+    }
+
+    // -----------------------------------------------------------------------
+    // Lyrics API proxy (stateless, no DO needed)
+    // -----------------------------------------------------------------------
+    if (url.pathname === "/lyrics") {
+      return handleLyrics(request);
     }
 
     // -----------------------------------------------------------------------
