@@ -17,13 +17,7 @@ interface LlmProviderRow {
   name: string;
   providerType: string;
   model: string;
-  gateway: string;          // 'direct' | 'cf_ai_gateway'
-  gatewayAccountId: string | null;
-  gatewayId: string | null;
-  apiKey: string;           // encrypted; for CF gateway, store CF_AIG_TOKEN here
-  baseUrl: string | null;
   thinkingEnabled: number;  // 0 | 1
-  isActive: number;
   createdAt: number;
   updatedAt: number;
 }
@@ -68,10 +62,6 @@ export default {
       if (request.method === "PATCH") return handleLlmUpdate(id, request, env);
       if (request.method === "DELETE") return handleLlmDelete(id, env);
     }
-    const llmActivateMatch = url.pathname.match(/^\/api\/llm-config\/([^/]+)\/activate$/);
-    if (llmActivateMatch && request.method === "POST") return handleLlmActivate(llmActivateMatch[1], env);
-    const llmTestMatch = url.pathname.match(/^\/api\/llm-config\/([^/]+)\/test$/);
-    if (llmTestMatch && request.method === "POST") return handleLlmTest(llmTestMatch[1], env);
 
     // LLM caller binding endpoints
     if (url.pathname === "/api/llm-callers" && request.method === "GET") return handleCallerList(env);
@@ -262,18 +252,14 @@ async function syncWaitlistApproval(db: ReturnType<typeof drizzle>, email: strin
 // ---------------------------------------------------------------------------
 
 async function ensureLlmTable(env: Env): Promise<void> {
+  // All providers go through CF AI Gateway (BYOK) — no API keys or gateway
+  // config stored in DB. Only model selection + thinking toggle.
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS llm_provider_config (
     id               TEXT PRIMARY KEY,
     name             TEXT NOT NULL,
     providerType     TEXT NOT NULL,
     model            TEXT NOT NULL,
-    gateway          TEXT NOT NULL DEFAULT 'direct',
-    gatewayAccountId TEXT,
-    gatewayId        TEXT,
-    apiKey           TEXT NOT NULL,
-    baseUrl          TEXT,
     thinkingEnabled  INTEGER NOT NULL DEFAULT 0,
-    isActive         INTEGER NOT NULL DEFAULT 0,
     createdAt        INTEGER NOT NULL,
     updatedAt        INTEGER NOT NULL
   )`).run();
@@ -294,78 +280,29 @@ async function ensureLlmTable(env: Env): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// LLM Config — Encryption (AES-256-GCM via Web Crypto)
-// ---------------------------------------------------------------------------
-
-async function getEncKey(env: Env): Promise<CryptoKey | null> {
-  const hex = env.ADMIN_ENCRYPTION_KEY;
-  if (!hex || hex.length < 64) return null;
-  const raw = new Uint8Array(hex.match(/.{2}/g)!.map((b) => parseInt(b, 16)));
-  return crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
-}
-
-async function encrypt(text: string, env: Env): Promise<string> {
-  const key = await getEncKey(env);
-  if (!key) return text; // no key configured → store plaintext (dev mode)
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(text));
-  const buf = new Uint8Array(12 + ct.byteLength);
-  buf.set(iv, 0);
-  buf.set(new Uint8Array(ct), 12);
-  return btoa(String.fromCharCode(...buf));
-}
-
-async function decrypt(encoded: string, env: Env): Promise<string> {
-  const key = await getEncKey(env);
-  if (!key) return encoded;
-  try {
-    const buf = Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0));
-    const iv = buf.slice(0, 12);
-    const ct = buf.slice(12);
-    const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ct);
-    return new TextDecoder().decode(pt);
-  } catch {
-    return encoded; // not encrypted (legacy plaintext)
-  }
-}
-
-function maskKey(k: string): string {
-  if (k.length <= 4) return "••••";
-  return "••••" + k.slice(-4);
-}
-
-// ---------------------------------------------------------------------------
 // LLM Config — API handlers
 // ---------------------------------------------------------------------------
 
 async function handleLlmList(env: Env): Promise<Response> {
   const rows = await env.DB.prepare(
-    "SELECT * FROM llm_provider_config ORDER BY isActive DESC, createdAt ASC"
+    "SELECT * FROM llm_provider_config ORDER BY createdAt ASC"
   ).all<LlmProviderRow>();
 
-  const data = await Promise.all((rows.results || []).map(async (r) => ({
-    ...r,
-    apiKey: maskKey(await decrypt(r.apiKey, env)),
-  })));
-
-  return Response.json({ data });
+  return Response.json({ data: rows.results || [] });
 }
 
 async function handleLlmCreate(request: Request, env: Env): Promise<Response> {
   const body = await request.json() as Partial<LlmProviderRow>;
-  const requiresApiKey = body.gateway !== "cf_ai_gateway";
-  if (!body.providerType || !body.model || (requiresApiKey && !body.apiKey)) {
-    return Response.json({ error: "providerType, model, apiKey required" }, { status: 400 });
+  if (!body.providerType || !body.model) {
+    return Response.json({ error: "providerType and model required" }, { status: 400 });
   }
   const now = Date.now();
   const id = crypto.randomUUID();
-  const encKey = await encrypt(body.apiKey || "", env);
   await env.DB.prepare(
-    `INSERT INTO llm_provider_config (id,name,providerType,model,gateway,gatewayAccountId,gatewayId,apiKey,baseUrl,thinkingEnabled,isActive,createdAt,updatedAt)
-     VALUES (?,?,?,?,?,?,?,?,?,?,0,?,?)`
+    `INSERT INTO llm_provider_config (id,name,providerType,model,thinkingEnabled,createdAt,updatedAt)
+     VALUES (?,?,?,?,?,?,?)`
   ).bind(id, body.name || body.providerType, body.providerType, body.model,
-    body.gateway || "direct", body.gatewayAccountId || null, body.gatewayId || null,
-    encKey, body.baseUrl || null, body.thinkingEnabled ? 1 : 0, now, now).run();
+    body.thinkingEnabled ? 1 : 0, now, now).run();
   return Response.json({ success: true, id });
 }
 
@@ -378,13 +315,6 @@ async function handleLlmUpdate(id: string, request: Request, env: Env): Promise<
   if (body.name !== undefined) { updates.push("name = ?"); vals.push(body.name); }
   if (body.providerType !== undefined) { updates.push("providerType = ?"); vals.push(body.providerType); }
   if (body.model !== undefined) { updates.push("model = ?"); vals.push(body.model); }
-  if (body.gateway !== undefined) { updates.push("gateway = ?"); vals.push(body.gateway); }
-  if (body.gatewayAccountId !== undefined) { updates.push("gatewayAccountId = ?"); vals.push(body.gatewayAccountId || null); }
-  if (body.gatewayId !== undefined) { updates.push("gatewayId = ?"); vals.push(body.gatewayId || null); }
-  if (body.apiKey !== undefined && body.apiKey && !body.apiKey.startsWith("••••")) {
-    updates.push("apiKey = ?"); vals.push(await encrypt(body.apiKey, env));
-  }
-  if (body.baseUrl !== undefined) { updates.push("baseUrl = ?"); vals.push(body.baseUrl || null); }
   if (body.thinkingEnabled !== undefined) { updates.push("thinkingEnabled = ?"); vals.push(body.thinkingEnabled ? 1 : 0); }
 
   vals.push(id);
@@ -400,82 +330,8 @@ async function handleLlmDelete(id: string, env: Env): Promise<Response> {
   return Response.json({ success: true });
 }
 
-async function handleLlmActivate(id: string, env: Env): Promise<Response> {
-  await env.DB.batch([
-    env.DB.prepare("UPDATE llm_provider_config SET isActive = 0, updatedAt = ?").bind(Date.now()),
-    env.DB.prepare("UPDATE llm_provider_config SET isActive = 1, updatedAt = ? WHERE id = ?").bind(Date.now(), id),
-  ]);
-  return Response.json({ success: true });
-}
-
-async function handleLlmTest(id: string, env: Env): Promise<Response> {
-  const row = await env.DB.prepare(
-    "SELECT * FROM llm_provider_config WHERE id = ?"
-  ).bind(id).first<LlmProviderRow>();
-  if (!row) return Response.json({ error: "Not found" }, { status: 404 });
-
-  const apiKey = await decrypt(row.apiKey, env);
-  const isGateway = row.gateway === "cf_ai_gateway";
-
-  if (!apiKey) {
-    return Response.json({
-      success: false,
-      error: "No API key stored — when using CF AI Gateway without an explicit key, the agent uses its CF_AIG_TOKEN env var (not testable from admin)",
-    });
-  }
-
-  try {
-    if (row.providerType === "anthropic") {
-      // Mirror agent: use gatewayAccountId/gatewayId from row (same as DB config path)
-      const baseURL = (isGateway && row.gatewayAccountId && row.gatewayId)
-        ? `https://gateway.ai.cloudflare.com/v1/${row.gatewayAccountId}/${row.gatewayId}/anthropic`
-        : "https://api.anthropic.com";
-      const res = await fetch(`${baseURL}/v1/messages`, {
-        method: "POST",
-        headers: {
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          model: row.model,
-          max_tokens: 8,
-          messages: [{ role: "user", content: "hi" }],
-        }),
-      });
-      const body = await res.json() as Record<string, unknown>;
-      if (res.ok) return Response.json({ success: true, model: body["model"] });
-      return Response.json({ success: false, error: (body["error"] as Record<string,unknown>)?.["message"] || res.statusText });
-    } else {
-      // OpenAI-compatible — mirror agent URL logic
-      const baseURL = row.baseUrl ||
-        (row.providerType === "doubao" ? "https://ark.cn-beijing.volces.com/api/v3" : "https://api.openai.com/v1");
-      let finalBaseURL = baseURL;
-      if (isGateway && row.gatewayAccountId && row.gatewayId) {
-        const cfBase = `https://gateway.ai.cloudflare.com/v1/${row.gatewayAccountId}/${row.gatewayId}`;
-        finalBaseURL = row.providerType === "openai" ? `${cfBase}/openai` : `${cfBase}/openai-compatible`;
-      }
-      const res = await fetch(`${finalBaseURL}/chat/completions`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${apiKey}`,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          model: row.model,
-          max_tokens: 8,
-          messages: [{ role: "user", content: "hi" }],
-        }),
-      });
-      const body = await res.json() as Record<string, unknown>;
-      if (res.ok) return Response.json({ success: true, model: (body["model"] as string) || row.model });
-      const err = body["error"] as Record<string, unknown> | undefined;
-      return Response.json({ success: false, error: (err?.["message"] as string) || res.statusText });
-    }
-  } catch (e) {
-    return Response.json({ success: false, error: e instanceof Error ? e.message : String(e) });
-  }
-}
+// Note: test endpoint removed — all providers go through CF AI Gateway (BYOK),
+// which is configured in the Cloudflare dashboard, not testable from admin.
 
 // ---------------------------------------------------------------------------
 // LLM Caller binding — API handlers
@@ -517,6 +373,43 @@ function handleModelRegistry(): Response {
     ])
   );
   return Response.json({ data: cards });
+}
+
+// ---------------------------------------------------------------------------
+// Encryption (AES-256-GCM via Web Crypto) — used by Search Config
+// ---------------------------------------------------------------------------
+
+async function getEncKey(env: Env): Promise<CryptoKey | null> {
+  const hex = env.ADMIN_ENCRYPTION_KEY;
+  if (!hex || hex.length < 64) return null;
+  const raw = new Uint8Array(hex.match(/.{2}/g)!.map((b) => parseInt(b, 16)));
+  return crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+}
+
+async function encrypt(text: string, env: Env): Promise<string> {
+  const key = await getEncKey(env);
+  if (!key) return text;
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(text));
+  const buf = new Uint8Array(12 + ct.byteLength);
+  buf.set(iv, 0);
+  buf.set(new Uint8Array(ct), 12);
+  return btoa(String.fromCharCode(...buf));
+}
+
+async function decrypt(encoded: string, env: Env): Promise<string> {
+  const key = await getEncKey(env);
+  if (!key) return encoded;
+  try {
+    const buf = Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0));
+    const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: buf.slice(0, 12) }, key, buf.slice(12));
+    return new TextDecoder().decode(pt);
+  } catch { return encoded; }
+}
+
+function maskKey(k: string): string {
+  if (k.length <= 4) return "****";
+  return "****" + k.slice(-4);
 }
 
 // ---------------------------------------------------------------------------
@@ -712,7 +605,6 @@ let llmLoading = false;
 let llmModal = null; // null | { mode: 'add'|'edit', data: {} }
 let llmMsg = '';
 let llmMsgType = '';
-let llmKeyVisible = false;
 
 // Search Config state
 let searchProviders = [];
@@ -824,12 +716,9 @@ function renderLlmConfigPage() {
           <div style="font-size:11px;color:#9ca3af">\${card?.group || p.providerType} · \${card?.label || p.model}</div>
         </div>
       </td>
-      <td style="font-family:monospace;font-size:12px">\${p.model}</td>
-      <td><span class="badge \${p.gateway === 'cf_ai_gateway' ? 'badge-approved' : 'badge-pending'}">\${p.gateway === 'cf_ai_gateway' ? 'CF Gateway' : 'Direct'}</span></td>
-      <td>\${p.thinkingEnabled ? '<span class="badge badge-approved">Thinking</span>' : ''}</td>
-      <td style="font-family:monospace;font-size:12px;color:#9ca3af">\${p.apiKey}</td>
+      <td style="font-family:monospace;font-size:12px">\${card?.modelId || p.model}</td>
+      <td>\${p.thinkingEnabled ? '<span class="badge badge-approved">Thinking</span>' : '<span class="badge badge-pending">Off</span>'}</td>
       <td class="actions">
-        <button class="btn btn-ghost" onclick="llmTest('\${p.id}', this)">Test</button>
         <button class="btn btn-ghost" onclick="llmEdit('\${p.id}')">Edit</button>
         <button class="btn btn-red" onclick="llmDelete('\${p.id}')">Delete</button>
       </td>
@@ -847,7 +736,7 @@ function renderLlmConfigPage() {
         llmProviders.length === 0 ? '<p class="empty">No resources configured</p>' : \`
         <table>
           <thead><tr>
-            <th>Resource</th><th>Model</th><th>Gateway</th><th>Thinking</th><th>API Key</th><th style="text-align:right">Actions</th>
+            <th>Resource</th><th>Model ID</th><th>Thinking</th><th style="text-align:right">Actions</th>
           </tr></thead>
           <tbody>\${rows}</tbody>
         </table>\`}
@@ -859,7 +748,6 @@ function renderLlmModal() {
   const isEdit = llmModal.mode === 'edit';
   const currentCardId = d.providerType && d.model ? d.providerType + '/' + d.model : '';
   const currentCard = MODEL_CARDS[currentCardId];
-  const isCfGateway = (d.gateway || 'direct') === 'cf_ai_gateway';
 
   // Group cards by group for optgroup
   const groups = {};
@@ -873,25 +761,12 @@ function renderLlmModal() {
     ).join('')}</optgroup>\`
   ).join('');
 
-  const gwFields = isCfGateway ? \`
-    <div class="form-group">
-      <label>CF Account ID</label>
-      <input id="lm_gatewayAccountId" value="\${d.gatewayAccountId || ''}" placeholder="44af79e51582..." />
-    </div>
-    <div class="form-group">
-      <label>CF Gateway ID</label>
-      <input id="lm_gatewayId" value="\${d.gatewayId || ''}" placeholder="clash" />
-    </div>\` : '';
-
-  const apiKeyLabel = isCfGateway ? 'CF Gateway Token' : 'API Key';
-  const apiKeyPlaceholder = isCfGateway ? 'CF AI Gateway token' : 'sk-...';
-
   const showThinking = currentCard?.hasThinking;
 
   return \`<div class="modal-overlay" id="llmModalOverlay">
-    <div class="modal" style="max-width:480px;max-height:90vh;overflow-y:auto">
+    <div class="modal" style="max-width:440px">
       <h3>\${isEdit ? 'Edit Resource' : 'Add LLM Resource'}</h3>
-      <p>Configure an LLM resource. API keys are encrypted at rest (AES-256-GCM).</p>
+      <p>Select a model. All providers route through CF AI Gateway (BYOK).</p>
       \${llmMsg ? \`<div class="msg \${llmMsgType === 'error' ? 'msg-err' : 'msg-ok'}">\${llmMsg}</div>\` : ''}
       <form id="llmForm">
         <div class="form-group">
@@ -912,25 +787,6 @@ function renderLlmModal() {
             Enable Thinking / Reasoning
           </label>
         </div>\` : ''}
-        <div class="form-group">
-          <label>Gateway</label>
-          <select id="lm_gateway" onchange="llmOnGatewayChange()" style="width:100%;height:42px;padding:0 14px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;outline:none;background:#fff">
-            <option value="direct" \${!isCfGateway?'selected':''}>Direct</option>
-            <option value="cf_ai_gateway" \${isCfGateway?'selected':''}>Cloudflare AI Gateway</option>
-          </select>
-        </div>
-        \${gwFields}
-        <div class="form-group">
-          <label>\${apiKeyLabel}\${isEdit ? ' (leave masked to keep existing)' : ''}</label>
-          <div style="position:relative">
-            <input id="lm_apiKey" type="\${llmKeyVisible ? 'text' : 'password'}" value="\${d.apiKey || ''}" placeholder="\${apiKeyPlaceholder}" style="padding-right:44px" />
-            <button type="button" onclick="llmToggleKey()" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#9ca3af;font-size:16px">\${llmKeyVisible ? '🙈' : '👁'}</button>
-          </div>
-        </div>
-        <div class="form-group">
-          <label>Base URL (optional, auto-filled from model card)</label>
-          <input id="lm_baseUrl" value="\${d.baseUrl || currentCard?.defaultBaseUrl || ''}" placeholder="https://api.example.com/v1" />
-        </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-ghost" onclick="llmCloseModal()">Cancel</button>
           <button type="submit" class="btn btn-primary">\${isEdit ? 'Save Changes' : 'Add Resource'}</button>
@@ -1203,11 +1059,6 @@ function bind() {
       name: document.getElementById('lm_name').value.trim(),
       providerType: providerType || llmModal.data?.providerType || '',
       model: model || llmModal.data?.model || '',
-      gateway: document.getElementById('lm_gateway').value,
-      gatewayAccountId: document.getElementById('lm_gatewayAccountId')?.value.trim() || null,
-      gatewayId: document.getElementById('lm_gatewayId')?.value.trim() || null,
-      apiKey: document.getElementById('lm_apiKey').value,
-      baseUrl: document.getElementById('lm_baseUrl').value.trim() || null,
       thinkingEnabled: thinkingEl ? thinkingEl.checked : false,
     };
     if (!body.providerType || !body.model) { llmMsg = 'Please select a model'; llmMsgType = 'error'; render(); return; }
@@ -1280,13 +1131,10 @@ window.llmEdit = (id) => {
   if (p) { llmModal = { mode: 'edit', data: { ...p } }; llmMsg = ''; llmKeyVisible = false; render(); }
 };
 window.llmCloseModal = () => { llmModal = null; llmMsg = ''; render(); };
-window.llmToggleKey = () => { llmKeyVisible = !llmKeyVisible; render(); };
 window.llmOnCardChange = () => {
   const cardId = document.getElementById('lm_cardId')?.value || '';
   const card = MODEL_CARDS[cardId];
   if (card) {
-    const baseEl = document.getElementById('lm_baseUrl');
-    if (baseEl) baseEl.value = card.defaultBaseUrl || '';
     const nameEl = document.getElementById('lm_name');
     if (nameEl && !nameEl.value) nameEl.value = card.label;
   }
@@ -1308,33 +1156,6 @@ window.callerAssign = async (callerType, resourceId) => {
   const json = await res.json();
   callerBindings = json.data || [];
   render();
-};
-window.llmOnGatewayChange = () => {
-  if (llmModal) { llmModal.data.gateway = document.getElementById('lm_gateway').value; render(); }
-};
-window.llmTest = async (id, btn) => {
-  const orig = btn.textContent;
-  btn.textContent = 'Testing…';
-  btn.disabled = true;
-  try {
-    const res = await fetch(\`/api/llm-config/\${id}/test\`, { method: 'POST' });
-    const data = await res.json();
-    if (data.success) {
-      btn.textContent = '✓ OK';
-      btn.style.background = '#dcfce7';
-      btn.style.color = '#15803d';
-    } else {
-      btn.textContent = '✗ Fail';
-      btn.style.background = '#fef2f2';
-      btn.style.color = '#b91c1c';
-      btn.title = data.error || 'Unknown error';
-    }
-  } catch {
-    btn.textContent = '✗ Error';
-  } finally {
-    btn.disabled = false;
-    setTimeout(() => { btn.textContent = orig; btn.style = ''; btn.title = ''; }, 4000);
-  }
 };
 window.llmDelete = async (id) => {
   if (!confirm('Delete this provider?')) return;

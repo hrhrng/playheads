@@ -174,8 +174,12 @@ export const MODEL_REGISTRY: Record<string, ModelCard> = {
     modelId: "grok-4.20-0309-reasoning",
     defaultBaseUrl: "https://api.x.ai/v1",
     gatewayPathSegment: "xai",
-    thinking: false, // built-in reasoning, no external toggle
+    thinking: {
+      providerOptionsKey: "xai",
+      params: { reasoningEffort: "high" },
+    },
     maxOutputTokens: 16384,
+    maxOutputTokensWithThinking: 131072,
   },
   "xai/grok-4-1-fast-reasoning": {
     id: "xai/grok-4-1-fast-reasoning",
@@ -186,8 +190,12 @@ export const MODEL_REGISTRY: Record<string, ModelCard> = {
     modelId: "grok-4-1-fast-reasoning",
     defaultBaseUrl: "https://api.x.ai/v1",
     gatewayPathSegment: "xai",
-    thinking: false,
+    thinking: {
+      providerOptionsKey: "xai",
+      params: { reasoningEffort: "high" },
+    },
     maxOutputTokens: 16384,
+    maxOutputTokensWithThinking: 131072,
   },
   "xai/grok-4-1-fast": {
     id: "xai/grok-4-1-fast",
