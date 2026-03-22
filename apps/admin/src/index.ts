@@ -1316,7 +1316,7 @@ window.llmTest = async (id) => {
     const res = await fetch('/api/llm-test', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ providerType: p.providerType, model: p.model, apiKey: p.apiKey || '' }),
+      body: JSON.stringify({ providerType: p.providerType, model: p.model, apiKey: p.apiKey || '', params: p.params || null }),
     });
     const json = await res.json();
     if (json.success) {

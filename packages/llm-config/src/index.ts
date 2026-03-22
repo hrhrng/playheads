@@ -155,10 +155,10 @@ export const MODEL_REGISTRY: Record<string, ModelCard> = {
     gatewayPathSegment: "custom-doubao",
     thinking: {
       providerOptionsKey: "doubao",
-      params: { thinking: { type: "auto" } },
+      params: { reasoning_effort: "medium" },
     },
     paramsSchema: [
-      { key: "thinking.type", label: "Thinking", type: "select", options: ["auto", "disabled"], defaultValue: "auto" },
+      { key: "reasoning_effort", label: "Reasoning Effort", type: "select", options: ["minimal", "low", "medium", "high"], defaultValue: "medium" },
     ],
     maxOutputTokens: 4096,
     maxOutputTokensWithThinking: 128000,
@@ -175,10 +175,10 @@ export const MODEL_REGISTRY: Record<string, ModelCard> = {
     gatewayPathSegment: "custom-doubao",
     thinking: {
       providerOptionsKey: "doubao",
-      params: { thinking: { type: "auto" } },
+      params: { reasoning_effort: "medium" },
     },
     paramsSchema: [
-      { key: "thinking.type", label: "Thinking", type: "select", options: ["auto", "disabled"], defaultValue: "auto" },
+      { key: "reasoning_effort", label: "Reasoning Effort", type: "select", options: ["minimal", "low", "medium", "high"], defaultValue: "medium" },
     ],
     maxOutputTokens: 4096,
     maxOutputTokensWithThinking: 128000,
