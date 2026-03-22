@@ -178,6 +178,8 @@ export async function resolveLLM(
       model: card?.modelId || modelName,
       thinkingEnabled,
       maxOutputTokens,
+      baseURL: baseURL || "(default)",
+      gateway: resource?.gateway || "env_fallback",
       source: resource ? "db" : "env_fallback",
     })
   );
