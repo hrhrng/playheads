@@ -238,9 +238,7 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
       }
     }
 
-    console.log("[MusicChatAgent] card=%s thinking=%s maxOut=%d search=%s",
-      card?.id || "unknown", !!providerOptions, maxOutputTokens,
-      effectiveSearchProvider || "none");
+    console.log(`[MusicChatAgent] card=${card?.id || "unknown"} thinking=${!!providerOptions} maxOut=${maxOutputTokens} search=${effectiveSearchProvider || "none"}`);
 
     const result = streamText({
       model: model as Parameters<typeof streamText>[0]["model"],
