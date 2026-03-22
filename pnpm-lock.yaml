@@ -14,12 +14,6 @@ importers:
 
   apps/admin:
     dependencies:
-      '@ai-sdk/anthropic':
-        specifier: ^3.0.58
-        version: 3.0.58(zod@4.3.6)
-      '@ai-sdk/openai-compatible':
-        specifier: ^2.0.0
-        version: 2.0.37(zod@4.3.6)
       '@playheads/auth':
         specifier: workspace:*
         version: link:../../packages/auth
@@ -300,7 +294,17 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(@types/debug@4.1.12)(@types/node@25.3.3)(jsdom@27.4.0(@noble/hashes@2.0.1))
 
-  packages/llm-config: {}
+  packages/llm-config:
+    dependencies:
+      '@ai-sdk/anthropic':
+        specifier: ^3.0.58
+        version: 3.0.58(zod@4.3.6)
+      '@ai-sdk/openai-compatible':
+        specifier: ^2.0.0
+        version: 2.0.37(zod@4.3.6)
+      ai:
+        specifier: ^6.0.0
+        version: 6.0.116(zod@4.3.6)
 
 packages:
 

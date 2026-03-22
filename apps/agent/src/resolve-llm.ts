@@ -1,20 +1,15 @@
 /**
  * Resolves an LLM provider for a given caller type (chat, title).
  *
- * Supports two auth modes:
- * - Direct API key: stored encrypted in DB, decrypted at runtime, calls provider directly or via gateway
- * - CF AI Gateway unified billing: no API key in DB, uses CF_AIG_TOKEN
- *
- * Reads caller → resource binding from `llm_caller_config`, looks up the
- * resource in `llm_provider_config`, matches it to a ModelCard, and returns
- * a ready-to-use model + providerOptions + metadata.
+ * Reads caller → resource binding from DB, looks up the ModelCard,
+ * and delegates to the shared createLLMModel factory.
  */
-import { createAnthropic } from "@ai-sdk/anthropic";
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import {
   lookupCard,
+  createLLMModel,
   type ModelCard,
   type CallerType,
+  type LLMModelResult,
 } from "@playheads/llm-config";
 import type { Env } from "./types";
 
@@ -32,13 +27,8 @@ interface ResourceRow {
   params: string | null;
 }
 
-export interface ResolvedLLM {
-  model: unknown; // LanguageModelV1 — typed as unknown to avoid cross-SDK type issues
+export interface ResolvedLLM extends LLMModelResult {
   card: ModelCard | null;
-  providerOptions: Record<string, unknown> | undefined;
-  maxOutputTokens: number;
-  /** Anthropic provider instance, needed for native webSearch tool. */
-  anthropicInstance?: ReturnType<typeof createAnthropic>;
 }
 
 // ---------------------------------------------------------------------------
@@ -97,65 +87,32 @@ export async function resolveLLM(
   // Parse params JSON from DB (null/empty = no thinking)
   let dbParams: Record<string, unknown> | null = null;
   if (resource?.params) {
-    try { dbParams = JSON.parse(resource.params); } catch { /* ignore bad JSON */ }
+    try { dbParams = JSON.parse(resource.params); } catch { /* ignore */ }
   }
-  const thinkingEnabled = dbParams !== null;
 
   // 3. Look up model card
   const card = lookupCard(providerType, modelName) ?? null;
 
-  // 4. Resolve API key, base URL, and headers
-  // All traffic goes through CF AI Gateway.
-  // - No DB key: CF_AIG_TOKEN as apiKey (BYOK / unified billing)
-  // - Has DB key: provider key as apiKey + cf-aig-authorization header for gateway auth
+  // 4. Resolve provider API key (decrypt if stored in DB)
   const hasDbKey = resource?.apiKey ? resource.apiKey.length > 0 : false;
   const providerKey = hasDbKey
     ? await decryptApiKey(resource!.apiKey, env)
     : null;
 
-  const accountId = env.CLOUDFLARE_ACCOUNT_ID;
-  const gwId = env.AI_GATEWAY_ID;
-  const gwSegment =
-    card?.gatewayPathSegment ||
-    (providerType === "anthropic" ? "anthropic" : "openai-compatible");
-  const baseURL = `https://gateway.ai.cloudflare.com/v1/${accountId}/${gwId}/${gwSegment}`;
-
-  // SDK apiKey = provider key if available, otherwise CF_AIG_TOKEN
-  const apiKey = providerKey || env.CF_AIG_TOKEN;
-  // When using own provider key through gateway, need cf-aig-authorization header
-  const extraHeaders: Record<string, string> = providerKey
-    ? { "cf-aig-authorization": `Bearer ${env.CF_AIG_TOKEN}` }
-    : {};
-
-  // 5. Create provider SDK + model
-  let model: unknown;
-  let anthropicInstance: ReturnType<typeof createAnthropic> | undefined;
-
-  if (card?.sdk === "anthropic" || (!card && providerType === "anthropic")) {
-    const anthropic = createAnthropic({ apiKey, baseURL, headers: extraHeaders });
-    anthropicInstance = anthropic;
-    model = anthropic(card?.modelId || modelName);
-  } else {
-    const provider = createOpenAICompatible({
-      name: card?.sdkName || providerType,
-      apiKey,
-      baseURL,
-      headers: extraHeaders,
-    });
-    model = provider(card?.modelId || modelName);
+  // 5. Create model via shared factory
+  if (!card) {
+    // Unknown model — can't route without a card
+    throw new Error(`Unknown model: ${providerType}/${modelName}`);
   }
 
-  // 6. Build providerOptions from DB params
-  let providerOptions: Record<string, unknown> | undefined;
-  if (dbParams && card?.thinking) {
-    providerOptions = { [card.thinking.providerOptionsKey]: dbParams };
-  }
-
-  // 7. Resolve maxOutputTokens
-  const maxOutputTokens =
-    thinkingEnabled && card?.maxOutputTokensWithThinking
-      ? card.maxOutputTokensWithThinking
-      : card?.maxOutputTokens || 4096;
+  const result = createLLMModel({
+    card,
+    providerKey,
+    cfAigToken: env.CF_AIG_TOKEN,
+    accountId: env.CLOUDFLARE_ACCOUNT_ID,
+    gatewayId: env.AI_GATEWAY_ID,
+    params: dbParams,
+  });
 
   // Log resolved model
   console.log(
@@ -163,19 +120,13 @@ export async function resolveLLM(
       event: "resolveLLM",
       callerType,
       provider: providerType,
-      model: card?.modelId || modelName,
-      thinkingEnabled,
-      maxOutputTokens,
+      model: card.modelId,
+      thinkingEnabled: dbParams !== null,
+      maxOutputTokens: result.maxOutputTokens,
       authMode: providerKey ? "own_key+gateway" : "cf_byok",
       source: resource ? "db" : "env_fallback",
     })
   );
 
-  return {
-    model,
-    card,
-    providerOptions,
-    maxOutputTokens,
-    anthropicInstance,
-  };
+  return { ...result, card };
 }

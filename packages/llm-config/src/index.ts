@@ -315,6 +315,10 @@ export const MODEL_REGISTRY: Record<string, ModelCard> = {
 // Helpers
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
 /**
  * Build `providerOptions` for streamText / generateText based on a model card.
  * Returns `undefined` when thinking is disabled or unsupported.
@@ -341,3 +345,88 @@ export function lookupCard(
 /** All known caller types. */
 export const CALLER_TYPES = ["chat", "title"] as const;
 export type CallerType = (typeof CALLER_TYPES)[number];
+
+// ---------------------------------------------------------------------------
+// Shared LLM model factory — used by agent (resolve-llm) and admin (test)
+// ---------------------------------------------------------------------------
+
+import { createAnthropic } from "@ai-sdk/anthropic";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+
+/** Input config for creating an LLM model instance. */
+export interface CreateLLMModelConfig {
+  card: ModelCard;
+  /** Decrypted provider API key, or null if using CF AI Gateway BYOK. */
+  providerKey: string | null;
+  /** CF AI Gateway token. */
+  cfAigToken: string;
+  /** Cloudflare account ID for gateway URL. */
+  accountId: string;
+  /** AI Gateway ID. */
+  gatewayId: string;
+  /** Parsed params JSON from DB (null = no thinking/reasoning). */
+  params: Record<string, unknown> | null;
+}
+
+/** Output from createLLMModel. */
+export interface LLMModelResult {
+  model: unknown; // LanguageModelV1
+  providerOptions: Record<string, unknown> | undefined;
+  maxOutputTokens: number;
+  /** Anthropic provider instance, needed for native webSearch tool. */
+  anthropicInstance?: ReturnType<typeof createAnthropic>;
+}
+
+/**
+ * Create an LLM model instance with proper gateway routing and auth.
+ *
+ * All traffic goes through CF AI Gateway:
+ * - No provider key: CF_AIG_TOKEN as apiKey (BYOK mode)
+ * - Has provider key: provider key as apiKey + cf-aig-authorization header
+ */
+export function createLLMModel(config: CreateLLMModelConfig): LLMModelResult {
+  const { card, providerKey, cfAigToken, accountId, gatewayId, params } = config;
+
+  // 1. Gateway URL
+  const gwSegment = card.gatewayPathSegment || "openai-compatible";
+  const baseURL = `https://gateway.ai.cloudflare.com/v1/${accountId}/${gatewayId}/${gwSegment}`;
+
+  // 2. Auth: SDK apiKey + optional dual-header
+  const apiKey = providerKey || cfAigToken;
+  const extraHeaders: Record<string, string> = providerKey
+    ? { "cf-aig-authorization": `Bearer ${cfAigToken}` }
+    : {};
+
+  // 3. Create SDK model
+  let model: unknown;
+  let anthropicInstance: ReturnType<typeof createAnthropic> | undefined;
+
+  if (card.sdk === "anthropic") {
+    const anthropic = createAnthropic({ apiKey, baseURL, headers: extraHeaders });
+    anthropicInstance = anthropic;
+    model = anthropic(card.modelId);
+  } else {
+    const provider = createOpenAICompatible({
+      name: card.sdkName || "openai",
+      apiKey,
+      baseURL,
+      headers: extraHeaders,
+    });
+    model = provider(card.modelId);
+  }
+
+  // 4. Build providerOptions from DB params
+  let providerOptions: Record<string, unknown> | undefined;
+  if (params && card.thinking) {
+    providerOptions = { [card.thinking.providerOptionsKey]: params };
+  }
+
+  // 5. Resolve maxOutputTokens
+  const thinkingEnabled = params !== null;
+  const maxOutputTokens =
+    thinkingEnabled && card.maxOutputTokensWithThinking
+      ? card.maxOutputTokensWithThinking
+      : card.maxOutputTokens || 4096;
+
+  return { model, providerOptions, maxOutputTokens, anthropicInstance };
+}

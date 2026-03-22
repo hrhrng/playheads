@@ -1,9 +1,7 @@
 import { drizzle } from "drizzle-orm/d1";
 import { schema } from "@playheads/auth";
 import { eq, inArray, count, asc } from "drizzle-orm";
-import { MODEL_REGISTRY, CALLER_TYPES } from "@playheads/llm-config";
-import { createAnthropic } from "@ai-sdk/anthropic";
-import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { MODEL_REGISTRY, CALLER_TYPES, createLLMModel } from "@playheads/llm-config";
 import { generateText } from "ai";
 
 interface Env {
@@ -365,60 +363,36 @@ async function handleLlmTest(request: Request, env: Env): Promise<Response> {
   const card = MODEL_REGISTRY[cardId];
   if (!card) return Response.json({ error: `Unknown model: ${cardId}` }, { status: 400 });
 
-  // --- Same logic as agent resolve-llm.ts ---
+  if (!env.CF_AIG_TOKEN) return Response.json({ error: "CF_AIG_TOKEN not configured" }, { status: 500 });
+  if (!env.CLOUDFLARE_ACCOUNT_ID || !env.AI_GATEWAY_ID) return Response.json({ error: "Gateway not configured" }, { status: 500 });
 
-  // 1. Resolve API key
+  // Resolve provider key (front-end may pass a raw key for testing)
   const hasOwnKey = body.apiKey && !body.apiKey.startsWith("***") && body.apiKey.length > 0;
   const providerKey = hasOwnKey ? body.apiKey! : null;
-  const apiKey = providerKey || env.CF_AIG_TOKEN;
-  if (!apiKey) return Response.json({ error: "No API key or CF_AIG_TOKEN configured" }, { status: 400 });
 
-  // 2. Build gateway URL (always go through gateway)
-  const accountId = env.CLOUDFLARE_ACCOUNT_ID;
-  const gwId = env.AI_GATEWAY_ID;
-  if (!accountId || !gwId) return Response.json({ error: "CLOUDFLARE_ACCOUNT_ID or AI_GATEWAY_ID not set" }, { status: 500 });
-  const gwSegment = card.gatewayPathSegment || (body.providerType === "anthropic" ? "anthropic" : "openai-compatible");
-  const baseURL = `https://gateway.ai.cloudflare.com/v1/${accountId}/${gwId}/${gwSegment}`;
-
-  // 3. Dual-header: own key → Authorization + cf-aig-authorization
-  const extraHeaders: Record<string, string> = providerKey
-    ? { "cf-aig-authorization": `Bearer ${env.CF_AIG_TOKEN}` }
-    : {};
-
-  // 4. Parse params (same as resolve-llm)
-  let dbParams: Record<string, unknown> | null = null;
+  // Parse params
+  let params: Record<string, unknown> | null = null;
   if (body.params) {
-    try { dbParams = JSON.parse(body.params); } catch { /* ignore */ }
-  }
-  let providerOptions: Record<string, unknown> | undefined;
-  if (dbParams && card.thinking) {
-    providerOptions = { [card.thinking.providerOptionsKey]: dbParams };
-  }
-  const thinkingEnabled = dbParams !== null;
-  const maxOutputTokens = thinkingEnabled && card.maxOutputTokensWithThinking
-    ? Math.min(card.maxOutputTokensWithThinking, 1024) // cap for test
-    : Math.min(card.maxOutputTokens || 4096, 128);     // cap for test
-
-  // 5. Create SDK model (same as resolve-llm)
-  let model: Parameters<typeof generateText>[0]["model"];
-  if (card.sdk === "anthropic") {
-    const anthropic = createAnthropic({ apiKey, baseURL, headers: extraHeaders });
-    model = anthropic(card.modelId) as unknown as typeof model;
-  } else {
-    const provider = createOpenAICompatible({
-      name: card.sdkName || body.providerType,
-      apiKey,
-      baseURL,
-      headers: extraHeaders,
-    });
-    model = provider(card.modelId) as unknown as typeof model;
+    try { params = JSON.parse(body.params); } catch { /* ignore */ }
   }
 
-  // 6. Generate (same SDK path as agent)
+  // Use shared factory (same path as agent resolve-llm)
+  const { model, providerOptions, maxOutputTokens } = createLLMModel({
+    card,
+    providerKey,
+    cfAigToken: env.CF_AIG_TOKEN,
+    accountId: env.CLOUDFLARE_ACCOUNT_ID,
+    gatewayId: env.AI_GATEWAY_ID,
+    params,
+  });
+
+  // Cap output for test to save tokens
+  const testMaxTokens = Math.min(maxOutputTokens, 128);
+
   try {
     const result = await generateText({
-      model,
-      maxTokens: maxOutputTokens,
+      model: model as Parameters<typeof generateText>[0]["model"],
+      maxTokens: testMaxTokens,
       providerOptions,
       messages: [{ role: "user", content: "Say hi in one word." }],
     });
