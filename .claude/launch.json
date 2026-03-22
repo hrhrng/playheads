@@ -11,7 +11,7 @@
       "name": "admin-dev",
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "admin", "dev"],
-      "port": 8789
+      "port": 8788
     }
   ]
 }

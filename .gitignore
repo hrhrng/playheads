@@ -27,4 +27,4 @@ DerivedData/
 *.xcodeproj/project.xcworkspace/
 *.xcworkspace/xcuserdata/
 
-*.p8
+*.p8apps/admin/.wrangler/
