@@ -14,6 +14,7 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { z } from "zod";
 import { createMusicTools } from "./tools";
 import { generateAndUpdateTitle } from "./title";
+import { createLogger } from "./logger";
 import type { Env, PlaybackState } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -142,18 +143,6 @@ function buildSystemPrompt(state: PlaybackState): string {
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/** Extract a plain-text preview from a UIMessage (for conversation list). */
-function extractTextPreview(msg: import("ai").UIMessage): string {
-  for (const part of msg.parts) {
-    if (part.type === "text" && part.text) return part.text;
-  }
-  return "...";
-}
-
-// ---------------------------------------------------------------------------
 // MusicChatAgent
 // ---------------------------------------------------------------------------
 
@@ -199,7 +188,15 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
       }
     }
 
-    console.log("[MusicChatAgent] onChatMessage", {
+    // ── Structured tracing ──
+    const log = createLogger();
+    const t0 = Date.now();
+    let firstTokenLogged = false;
+    let lastChunkAt = t0;
+    let chunkCount = 0;
+    let lastChunkType = "";
+
+    log.info("request", {
       sessionId,
       userId,
       storefront,
@@ -243,24 +240,6 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
     const resolvedApiKey = dbConfig ? await decryptKey(dbConfig.apiKey) : "";
     const resolvedGwToken = dbConfig?.gatewayToken ? await decryptKey(dbConfig.gatewayToken) : this.env.CF_AIG_TOKEN;
 
-    console.log("[llm-config] dbConfig:", dbConfig ? {
-      providerType: dbConfig.providerType, model: dbConfig.model,
-      gateway: dbConfig.gateway, gatewayAccountId: dbConfig.gatewayAccountId,
-      gatewayId: dbConfig.gatewayId,
-      hasApiKey: !!dbConfig.apiKey, apiKeyLen: dbConfig.apiKey?.length,
-      hasGatewayToken: !!dbConfig.gatewayToken,
-      baseUrl: dbConfig.baseUrl,
-    } : "null (using env vars)");
-    console.log("[llm-config] resolvedProvider:", resolvedProvider,
-      "| resolvedApiKey len:", resolvedApiKey.length,
-      "| resolvedApiKey prefix:", resolvedApiKey.slice(0, 8) + "...",
-      "| CF_AIG_TOKEN present:", !!this.env.CF_AIG_TOKEN,
-      "| CF_AIG_TOKEN len:", this.env.CF_AIG_TOKEN?.length);
-    console.log("[llm-config] dbSearchConfig:", dbSearchConfig ? {
-      providerType: dbSearchConfig.providerType,
-      hasApiKey: !!dbSearchConfig.apiKey,
-    } : "null");
-
     // Resolve search provider: DB config takes priority over env vars
     const searchDbOverride = dbSearchConfig
       ? { providerType: dbSearchConfig.providerType, apiKey: dbSearchConfig.apiKey ? await decryptKey(dbSearchConfig.apiKey) : "" }
@@ -283,12 +262,6 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
       const anthropicBaseURL = useGateway
         ? `https://gateway.ai.cloudflare.com/v1/${dbConfig?.gatewayAccountId || this.env.CLOUDFLARE_ACCOUNT_ID}/${dbConfig?.gatewayId || this.env.AI_GATEWAY_ID}/anthropic`
         : undefined;
-
-      console.log("[anthropic] useGateway:", useGateway,
-        "| apiKey prefix:", anthropicApiKey?.slice(0, 8) + "...",
-        "| apiKey len:", anthropicApiKey?.length,
-        "| baseURL:", anthropicBaseURL,
-        "| model:", dbConfig?.model || this.env.ANTHROPIC_MODEL || "claude-sonnet-4-6");
 
       const anthropic = createAnthropic({ apiKey: anthropicApiKey, baseURL: anthropicBaseURL });
 
@@ -342,27 +315,138 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
       providerOptions = undefined;
     }
 
-    console.log("[MusicChatAgent] provider=%s model=%s source=%s search=%s", resolvedProvider,
-      dbConfig?.model || "env", dbConfig ? "db" : "env",
-      searchDbOverride?.providerType || this.env.SEARCH_PROVIDER || "anthropic");
+    const systemPrompt = buildSystemPrompt(globalState);
+    const modelMessages = await convertToModelMessages(this.messages);
+
+    log.info("config", {
+      provider: resolvedProvider,
+      model: dbConfig?.model || "env-default",
+      source: dbConfig ? "db" : "env",
+      search: searchDbOverride?.providerType || this.env.SEARCH_PROVIDER || "anthropic",
+      maxOutputTokens,
+      systemPromptLen: systemPrompt.length,
+      inputMessageCount: modelMessages.length,
+    });
+
+    const llmSpan = log.span("llm-stream");
 
     const result = streamText({
       model,
       maxOutputTokens,
       providerOptions,
-      system: buildSystemPrompt(globalState),
-      messages: await convertToModelMessages(this.messages),
+      system: systemPrompt,
+      messages: modelMessages,
       tools,
       stopWhen: stepCountIs(10), // Allow multi-turn tool calling (replaces LangGraph agentic loop)
       abortSignal: options?.abortSignal,
-      onFinish: async ({ text }) => {
-        console.log("[MusicChatAgent] onFinish sessionId=%s textLen=%d", sessionId, text?.length || 0);
+
+      // ── Chunk tracking (TTFT + stall detection) ──
+      onChunk: ({ chunk }) => {
+        const now = Date.now();
+        const gap = now - lastChunkAt;
+        chunkCount++;
+
+        // Log first text token
+        if (chunk.type === "text-delta" && !firstTokenLogged) {
+          firstTokenLogged = true;
+          log.info("first-token", { ttftMs: now - t0 });
+        }
+
+        // Log chunk type transitions (text→tool-call, etc.) to see what phase we're in
+        if (chunk.type !== lastChunkType) {
+          log.info("chunk-phase", {
+            from: lastChunkType || "start",
+            to: chunk.type,
+            elapsedMs: now - t0,
+            chunkCount,
+          });
+          lastChunkType = chunk.type;
+        }
+
+        // Log stalls: if >10s between chunks, something is hanging
+        if (gap > 10_000) {
+          log.warn("chunk-stall", {
+            gapMs: gap,
+            chunkType: chunk.type,
+            elapsedMs: now - t0,
+            chunkCount,
+          });
+        }
+
+        lastChunkAt = now;
+      },
+
+      // ── Tool-level tracing ──
+      experimental_onToolCallStart: ({ toolCall, stepNumber }) => {
+        log.info("tool-start", {
+          tool: toolCall.toolName,
+          step: stepNumber,
+          args: truncateArgs(toolCall.input),
+        });
+      },
+      experimental_onToolCallFinish: (event) => {
+        const data: Record<string, unknown> = {
+          tool: event.toolCall.toolName,
+          step: event.stepNumber,
+          durationMs: event.durationMs,
+          success: event.success,
+        };
+        if (!event.success) {
+          data.error = String(event.error).slice(0, 200);
+        }
+        log.info("tool-end", data);
+      },
+
+      // ── Step-level LLM response details ──
+      onStepFinish: (step) => {
+        const now = Date.now();
+        log.info("step-end", {
+          stepNumber: step.stepNumber,
+          finishReason: step.finishReason,
+          elapsedMs: now - t0,
+          sinceLastChunkMs: now - lastChunkAt,
+          chunkCount,
+          inputTokens: step.usage.inputTokens,
+          outputTokens: step.usage.outputTokens,
+          totalTokens: step.usage.totalTokens,
+          responseId: step.response.id,
+          responseModel: step.response.modelId,
+          toolCalls: step.toolCalls.map((tc) => tc.toolName),
+          warnings: step.warnings?.length ? step.warnings.map((w) => String(w)) : undefined,
+          textLen: step.text?.length ?? 0,
+          reasoningLen: step.reasoningText?.length ?? 0,
+        });
+      },
+
+      // ── Error logging ──
+      onError: ({ error }) => {
+        log.error("stream-error", {
+          error: String(error).slice(0, 500),
+          elapsedMs: Date.now() - t0,
+        });
+      },
+
+      // ── Final summary + existing D1/title logic ──
+      onFinish: async ({ text, usage, finishReason, steps, response }) => {
+        const now = Date.now();
+        llmSpan.end({
+          totalSteps: steps.length,
+          finishReason,
+          sinceLastChunkMs: now - lastChunkAt,
+          totalChunks: chunkCount,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          totalTokens: usage.totalTokens,
+          responseId: response.id,
+          responseModel: response.modelId,
+          textLen: text?.length ?? 0,
+        });
+
         if (!sessionId) return;
 
         // streamText's onFinish fires when the LLM is done, BEFORE the SDK
         // persists the assistant message to this.messages. So we use the
         // result `text` directly and add +1 for the assistant message.
-        const now = Date.now();
         const totalMessages = messageCount + 1; // +1 for the assistant reply
         const preview = (text || "...").slice(0, 100);
 
@@ -370,7 +454,7 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
           this.env.DB.prepare(
             'UPDATE "conversation" SET "messageCount" = ?, "lastMessagePreview" = ?, "lastMessageAt" = ?, "updatedAt" = ? WHERE "id" = ?'
           ).bind(totalMessages, preview, now, now, sessionId),
-        ]).catch((e) => console.warn("D1 metadata sync failed:", e));
+        ]).catch((e) => log.warn("d1-sync-error", { error: String(e) }));
 
         // Generate title after first exchange (1 user + 1 assistant = 2)
         if (userId && messageCount <= 2) {
@@ -391,11 +475,23 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
             sessionId,
             simplifiedMessages.slice(0, 5),
             this.env
-          ).catch((e) => console.warn("Title generation failed:", e));
+          ).catch((e) => log.warn("title-gen-error", { error: String(e) }));
         }
       },
     });
 
     return result.toUIMessageStreamResponse();
   }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Truncate tool args for logging (avoid dumping huge search results). */
+function truncateArgs(args: unknown): unknown {
+  if (args == null) return args;
+  const str = JSON.stringify(args);
+  if (str.length <= 200) return args;
+  return str.slice(0, 200) + "…";
 }
