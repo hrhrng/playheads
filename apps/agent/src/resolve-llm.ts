@@ -169,6 +169,19 @@ export async function resolveLLM(
       ? card.maxOutputTokensWithThinking
       : card?.maxOutputTokens || 4096;
 
+  // Log which model this call resolved to
+  console.log(
+    JSON.stringify({
+      event: "resolveLLM",
+      callerType,
+      provider: providerType,
+      model: card?.modelId || modelName,
+      thinkingEnabled,
+      maxOutputTokens,
+      source: resource ? "db" : "env_fallback",
+    })
+  );
+
   return {
     model,
     card,
