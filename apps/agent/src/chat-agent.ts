@@ -301,7 +301,15 @@ MusicChatAgent.prototype.onChatMessage = async function (this: MusicChatAgent, .
     return await _orig.apply(this, args);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    console.error("[MusicChatAgent] onChatMessage error:", msg);
+    // Log full error details for API errors (status, body, headers)
+    const details: Record<string, unknown> = { message: msg };
+    if (e && typeof e === "object") {
+      if ("statusCode" in e) details.statusCode = (e as Record<string, unknown>).statusCode;
+      if ("responseBody" in e) details.responseBody = (e as Record<string, unknown>).responseBody;
+      if ("url" in e) details.url = (e as Record<string, unknown>).url;
+      if ("cause" in e) details.cause = String((e as Record<string, unknown>).cause);
+    }
+    console.error("[MusicChatAgent] onChatMessage error:", JSON.stringify(details));
     const stream = new ReadableStream({
       start(c) {
         c.enqueue(new TextEncoder().encode(`3:"Agent error: ${msg.replace(/"/g, "'")}"\n`));
