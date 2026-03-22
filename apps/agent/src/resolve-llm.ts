@@ -104,43 +104,43 @@ export async function resolveLLM(
   // 3. Look up model card
   const card = lookupCard(providerType, modelName) ?? null;
 
-  // 4. Resolve API key and base URL
-  // If DB has an encrypted API key → decrypt and use directly (or via gateway)
-  // If no API key → use CF_AIG_TOKEN with CF AI Gateway
+  // 4. Resolve API key, base URL, and headers
+  // All traffic goes through CF AI Gateway.
+  // - No DB key: CF_AIG_TOKEN as apiKey (BYOK / unified billing)
+  // - Has DB key: provider key as apiKey + cf-aig-authorization header for gateway auth
   const hasDbKey = resource?.apiKey ? resource.apiKey.length > 0 : false;
-  const apiKey = hasDbKey
+  const providerKey = hasDbKey
     ? await decryptApiKey(resource!.apiKey, env)
-    : env.CF_AIG_TOKEN;
+    : null;
 
-  let baseURL: string | undefined;
-  if (!hasDbKey) {
-    // CF AI Gateway unified billing
-    const accountId = env.CLOUDFLARE_ACCOUNT_ID;
-    const gwId = env.AI_GATEWAY_ID;
-    const gwSegment =
-      card?.gatewayPathSegment ||
-      (providerType === "anthropic" ? "anthropic" : "openai-compatible");
-    baseURL = `https://gateway.ai.cloudflare.com/v1/${accountId}/${gwId}/${gwSegment}`;
-  } else {
-    // Direct API key — use provider's default base URL
-    baseURL = card?.defaultBaseUrl;
-    // Anthropic SDK doesn't need explicit baseURL when using direct key
-    if (card?.sdk === "anthropic") baseURL = undefined;
-  }
+  const accountId = env.CLOUDFLARE_ACCOUNT_ID;
+  const gwId = env.AI_GATEWAY_ID;
+  const gwSegment =
+    card?.gatewayPathSegment ||
+    (providerType === "anthropic" ? "anthropic" : "openai-compatible");
+  const baseURL = `https://gateway.ai.cloudflare.com/v1/${accountId}/${gwId}/${gwSegment}`;
+
+  // SDK apiKey = provider key if available, otherwise CF_AIG_TOKEN
+  const apiKey = providerKey || env.CF_AIG_TOKEN;
+  // When using own provider key through gateway, need cf-aig-authorization header
+  const extraHeaders: Record<string, string> = providerKey
+    ? { "cf-aig-authorization": `Bearer ${env.CF_AIG_TOKEN}` }
+    : {};
 
   // 5. Create provider SDK + model
   let model: unknown;
   let anthropicInstance: ReturnType<typeof createAnthropic> | undefined;
 
   if (card?.sdk === "anthropic" || (!card && providerType === "anthropic")) {
-    const anthropic = createAnthropic({ apiKey, baseURL });
+    const anthropic = createAnthropic({ apiKey, baseURL, headers: extraHeaders });
     anthropicInstance = anthropic;
     model = anthropic(card?.modelId || modelName);
   } else {
     const provider = createOpenAICompatible({
       name: card?.sdkName || providerType,
       apiKey,
-      baseURL: baseURL || "https://api.openai.com/v1",
+      baseURL,
+      headers: extraHeaders,
     });
     model = provider(card?.modelId || modelName);
   }
@@ -166,7 +166,7 @@ export async function resolveLLM(
       model: card?.modelId || modelName,
       thinkingEnabled,
       maxOutputTokens,
-      authMode: hasDbKey ? "direct_key" : "cf_gateway",
+      authMode: providerKey ? "own_key+gateway" : "cf_byok",
       source: resource ? "db" : "env_fallback",
     })
   );
