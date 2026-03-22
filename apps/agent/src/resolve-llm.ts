@@ -122,13 +122,12 @@ export async function resolveLLM(
     const accountId =
       resource?.gatewayAccountId || env.CLOUDFLARE_ACCOUNT_ID;
     const gwId = resource?.gatewayId || env.AI_GATEWAY_ID;
-    if (card?.sdk === "anthropic" || providerType === "anthropic") {
-      baseURL = `https://gateway.ai.cloudflare.com/v1/${accountId}/${gwId}/anthropic`;
-    } else if (providerType === "openai") {
-      baseURL = `https://gateway.ai.cloudflare.com/v1/${accountId}/${gwId}/openai`;
-    } else {
-      baseURL = `https://gateway.ai.cloudflare.com/v1/${accountId}/${gwId}/openai-compatible`;
-    }
+    // Use card's gatewayPathSegment (e.g. "anthropic", "xai", "openai")
+    // or fall back to providerType-based heuristic
+    const gwSegment =
+      card?.gatewayPathSegment ||
+      (providerType === "anthropic" ? "anthropic" : providerType === "openai" ? "openai" : "openai-compatible");
+    baseURL = `https://gateway.ai.cloudflare.com/v1/${accountId}/${gwId}/${gwSegment}`;
   } else {
     baseURL =
       resource?.baseUrl ||

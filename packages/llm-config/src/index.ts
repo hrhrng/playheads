@@ -47,6 +47,10 @@ export interface ModelCard {
   maxOutputTokens: number;
   maxOutputTokensWithThinking?: number;
 
+  // -- CF AI Gateway ----------------------------------------------------------
+  /** Path segment for CF AI Gateway URL, e.g. "anthropic", "openai", "xai" */
+  gatewayPathSegment?: string;
+
   // -- Misc ------------------------------------------------------------------
   /** Cheap model for title generation (same provider SDK) */
   titleModelId?: string;
@@ -66,6 +70,7 @@ export const MODEL_REGISTRY: Record<string, ModelCard> = {
     group: "Anthropic",
     sdk: "anthropic",
     modelId: "claude-opus-4-6",
+    gatewayPathSegment: "anthropic",
     thinking: {
       providerOptionsKey: "anthropic",
       params: { thinking: { type: "enabled" } },
@@ -82,6 +87,7 @@ export const MODEL_REGISTRY: Record<string, ModelCard> = {
     group: "Anthropic",
     sdk: "anthropic",
     modelId: "claude-sonnet-4-6",
+    gatewayPathSegment: "anthropic",
     thinking: {
       providerOptionsKey: "anthropic",
       params: { thinking: { type: "enabled" } },
@@ -98,6 +104,7 @@ export const MODEL_REGISTRY: Record<string, ModelCard> = {
     group: "Anthropic",
     sdk: "anthropic",
     modelId: "claude-haiku-4-5-20251001",
+    gatewayPathSegment: "anthropic",
     thinking: {
       providerOptionsKey: "anthropic",
       params: { thinking: { type: "enabled" } },
@@ -163,6 +170,7 @@ export const MODEL_REGISTRY: Record<string, ModelCard> = {
     sdkName: "xai",
     modelId: "grok-4.20-0309-reasoning",
     defaultBaseUrl: "https://api.x.ai/v1",
+    gatewayPathSegment: "xai",
     thinking: false, // built-in reasoning, no external toggle
     maxOutputTokens: 16384,
   },
@@ -174,6 +182,7 @@ export const MODEL_REGISTRY: Record<string, ModelCard> = {
     sdkName: "xai",
     modelId: "grok-4-1-fast-reasoning",
     defaultBaseUrl: "https://api.x.ai/v1",
+    gatewayPathSegment: "xai",
     thinking: false,
     maxOutputTokens: 16384,
   },
@@ -185,6 +194,7 @@ export const MODEL_REGISTRY: Record<string, ModelCard> = {
     sdkName: "xai",
     modelId: "grok-4-1-fast-non-reasoning",
     defaultBaseUrl: "https://api.x.ai/v1",
+    gatewayPathSegment: "xai",
     thinking: false,
     maxOutputTokens: 16384,
   },
@@ -197,6 +207,7 @@ export const MODEL_REGISTRY: Record<string, ModelCard> = {
     sdk: "openai-compatible",
     sdkName: "openai",
     modelId: "gpt-5.4",
+    gatewayPathSegment: "openai",
     thinking: {
       providerOptionsKey: "openai",
       params: { reasoning: { effort: "medium", summary: "auto" } },
@@ -212,6 +223,7 @@ export const MODEL_REGISTRY: Record<string, ModelCard> = {
     sdk: "openai-compatible",
     sdkName: "openai",
     modelId: "gpt-5.4-mini",
+    gatewayPathSegment: "openai",
     thinking: {
       providerOptionsKey: "openai",
       params: { reasoning: { effort: "medium", summary: "auto" } },
@@ -227,6 +239,7 @@ export const MODEL_REGISTRY: Record<string, ModelCard> = {
     sdk: "openai-compatible",
     sdkName: "openai",
     modelId: "gpt-5.4-nano",
+    gatewayPathSegment: "openai",
     thinking: {
       providerOptionsKey: "openai",
       params: { reasoning: { effort: "low", summary: "auto" } },
