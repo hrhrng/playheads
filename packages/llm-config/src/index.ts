@@ -116,7 +116,7 @@ export const MODEL_REGISTRY: Record<string, ModelCard> = {
     group: "Doubao",
     sdk: "openai-compatible",
     sdkName: "doubao",
-    modelId: "doubao-seed-2.0-pro-260215",
+    modelId: "doubao-seed-2-0-pro-260215",
     defaultBaseUrl: "https://ark.cn-beijing.volces.com/api/v3",
     thinking: {
       providerOptionsKey: "doubao",
@@ -124,7 +124,7 @@ export const MODEL_REGISTRY: Record<string, ModelCard> = {
     },
     maxOutputTokens: 4096,
     maxOutputTokensWithThinking: 128000,
-    titleModelId: "doubao-seed-2.0-lite-260215",
+    titleModelId: "doubao-seed-2-0-lite-260215",
   },
   "doubao/doubao-seed-2.0-lite": {
     id: "doubao/doubao-seed-2.0-lite",
@@ -132,7 +132,7 @@ export const MODEL_REGISTRY: Record<string, ModelCard> = {
     group: "Doubao",
     sdk: "openai-compatible",
     sdkName: "doubao",
-    modelId: "doubao-seed-2.0-lite-260215",
+    modelId: "doubao-seed-2-0-lite-260215",
     defaultBaseUrl: "https://ark.cn-beijing.volces.com/api/v3",
     thinking: {
       providerOptionsKey: "doubao",
@@ -151,7 +151,7 @@ export const MODEL_REGISTRY: Record<string, ModelCard> = {
     defaultBaseUrl: "https://ark.cn-beijing.volces.com/api/v3",
     thinking: false,
     maxOutputTokens: 4096,
-    titleModelId: "doubao-seed-2.0-lite-260215",
+    titleModelId: "doubao-seed-2-0-lite-260215",
   },
 
   // ── x.ai (Grok) ───────────────────────────────────────
