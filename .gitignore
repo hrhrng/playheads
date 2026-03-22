@@ -28,3 +28,4 @@ DerivedData/
 *.xcworkspace/xcuserdata/
 
 *.p8apps/admin/.wrangler/
+apps/admin/.wrangler/

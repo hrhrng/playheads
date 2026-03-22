@@ -390,13 +390,15 @@ export function createLLMModel(config: CreateLLMModelConfig): LLMModelResult {
   const baseURL = `https://gateway.ai.cloudflare.com/v1/${accountId}/${gatewayId}/${gwSegment}`;
 
   // 2. Auth headers
-  // - Own key mode: Authorization = provider key, cf-aig-authorization = gateway token
-  // - BYOK mode: cf-aig-authorization = gateway token (gateway injects provider key)
-  //   SDK requires apiKey so we pass the gateway token; gateway strips it
+  // Native providers (anthropic, xai, openai): CF_AIG_TOKEN as apiKey, no extra headers
+  // Custom providers (custom-*): CF_AIG_TOKEN as apiKey + cf-aig-authorization header
+  // Own key mode: provider key as apiKey + cf-aig-authorization for gateway auth
+  const isCustomProvider = gwSegment.startsWith("custom-");
   const apiKey = providerKey || cfAigToken;
-  const extraHeaders: Record<string, string> = {
-    "cf-aig-authorization": `Bearer ${cfAigToken}`,
-  };
+  const extraHeaders: Record<string, string> = {};
+  if (providerKey || isCustomProvider) {
+    extraHeaders["cf-aig-authorization"] = `Bearer ${cfAigToken}`;
+  }
 
   // 3. Create SDK model
   let model: unknown;
