@@ -204,7 +204,7 @@ export const MODEL_REGISTRY: Record<string, ModelCard> = {
     group: "x.ai",
     sdk: "openai-compatible",
     sdkName: "xai",
-    modelId: "grok-4.20-reasoning-latest",
+    modelId: "grok-4.20-reasoning",
     defaultBaseUrl: "https://api.x.ai/v1",
     gatewayPathSegment: "xai",
     thinking: false,
