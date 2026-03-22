@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import { parseLRC } from '../lib/lrcParser';
+import { API_BASE } from '../config/api';
 import type { UnifiedTrack } from '../providers/types';
 import type { LyricLine, LyricsState, LyricsStatus } from '../types/lyrics';
 
@@ -70,9 +71,8 @@ export function useLyrics(
       duration: String(Math.round(currentTrack.durationSeconds || 0)),
     });
 
-    fetch(`https://lrclib.net/api/get?${params}`, {
+    fetch(`${API_BASE}/lyrics?${params}`, {
       signal: ac.signal,
-      headers: { 'User-Agent': 'Playheads/1.0' },
     })
       .then((res) => {
         if (!res.ok) throw new Error(`${res.status}`);
