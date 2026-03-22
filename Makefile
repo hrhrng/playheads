@@ -166,6 +166,19 @@ secret-llm-config:
 	@echo ""
 	@echo "Done. Both workers share the same encryption key."
 
+# LLM config secrets (shared between admin + agent workers)
+# ADMIN_ENCRYPTION_KEY: generate with `openssl rand -hex 32`, must be same value in both workers
+# TAVILY_API_KEY: get from https://tavily.com (free 1000/mo)
+secret-llm-config:
+	@echo "=== LLM Config Secrets Setup ==="
+	@echo ""
+	@printf "ADMIN_ENCRYPTION_KEY (tip: openssl rand -hex 32): "; \
+	read KEY; \
+	echo "$$KEY" | (cd apps/admin && npx wrangler secret put ADMIN_ENCRYPTION_KEY); \
+	echo "$$KEY" | (cd apps/agent && npx wrangler secret put ADMIN_ENCRYPTION_KEY)
+	@echo ""
+	@echo "Done. Both workers share the same encryption key."
+
 # =============================================================================
 # Help
 # =============================================================================
@@ -202,7 +215,9 @@ help:
 	@echo "    make deploy-preview      - Build + deploy to preview"
 	@echo "    make deploy-production   - Build + deploy to production"
 	@echo "    make build-web           - Build frontend"
-	@echo "    make secret-llm-config   - Set ADMIN_ENCRYPTION_KEY + TAVILY_API_KEY"
+	@echo "    make deploy-secrets-preview    - Set secrets for preview"
+	@echo "    make deploy-secrets-production - Set secrets for production"
+	@echo "    make secret-llm-config         - Set ADMIN_ENCRYPTION_KEY + TAVILY_API_KEY"
 	@echo ""
 	@echo "  Other:"
 	@echo "    make clean          - Clean caches"

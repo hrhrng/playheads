@@ -15,8 +15,10 @@ export interface Env {
   // LLM provider selection ("anthropic" | "doubao", default: "anthropic")
   LLM_PROVIDER: string;
 
+
   // Anthropic configuration (env fallback when no DB config)
   ANTHROPIC_MODEL: string;
+
 
   // Cloudflare AI Gateway (used with Anthropic)
   CLOUDFLARE_ACCOUNT_ID: string;
