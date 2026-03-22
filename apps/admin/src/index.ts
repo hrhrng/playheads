@@ -17,7 +17,8 @@ interface LlmProviderRow {
   name: string;
   providerType: string;
   model: string;
-  params: string | null;  // JSON string of provider-specific params (null = defaults/off)
+  apiKey: string;           // encrypted; empty = use CF AI Gateway unified billing
+  params: string | null;    // JSON string of provider-specific params (null = defaults/off)
   createdAt: number;
   updatedAt: number;
 }
@@ -252,13 +253,13 @@ async function syncWaitlistApproval(db: ReturnType<typeof drizzle>, email: strin
 // ---------------------------------------------------------------------------
 
 async function ensureLlmTable(env: Env): Promise<void> {
-  // All providers go through CF AI Gateway (BYOK) — no API keys stored.
-  // `params` stores provider-specific JSON (thinking/reasoning config, etc.)
+  // LLM resource config. apiKey is encrypted (AES-256-GCM), empty = CF AI Gateway unified billing.
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS llm_provider_config (
     id           TEXT PRIMARY KEY,
     name         TEXT NOT NULL,
     providerType TEXT NOT NULL,
     model        TEXT NOT NULL,
+    apiKey       TEXT NOT NULL DEFAULT '',
     params       TEXT,
     createdAt    INTEGER NOT NULL,
     updatedAt    INTEGER NOT NULL
@@ -269,6 +270,12 @@ async function ensureLlmTable(env: Env): Promise<void> {
     await env.DB.prepare("SELECT params FROM llm_provider_config LIMIT 1").first();
   } catch {
     await env.DB.prepare("ALTER TABLE llm_provider_config ADD COLUMN params TEXT").run();
+  }
+  // Migration: add apiKey column if missing
+  try {
+    await env.DB.prepare("SELECT apiKey FROM llm_provider_config LIMIT 1").first();
+  } catch {
+    await env.DB.prepare("ALTER TABLE llm_provider_config ADD COLUMN apiKey TEXT NOT NULL DEFAULT ''").run();
   }
 
   // Caller → Resource binding table
@@ -288,7 +295,12 @@ async function handleLlmList(env: Env): Promise<Response> {
     "SELECT * FROM llm_provider_config ORDER BY createdAt ASC"
   ).all<LlmProviderRow>();
 
-  return Response.json({ data: rows.results || [] });
+  // Mask API keys for frontend display
+  const masked = (rows.results || []).map(r => ({
+    ...r,
+    apiKey: r.apiKey ? "••••" + r.apiKey.slice(-4) : "",
+  }));
+  return Response.json({ data: masked });
 }
 
 async function handleLlmCreate(request: Request, env: Env): Promise<Response> {
@@ -298,11 +310,12 @@ async function handleLlmCreate(request: Request, env: Env): Promise<Response> {
   }
   const now = Date.now();
   const id = crypto.randomUUID();
+  const encryptedKey = body.apiKey ? await encrypt(body.apiKey, env) : '';
   await env.DB.prepare(
-    `INSERT INTO llm_provider_config (id,name,providerType,model,params,createdAt,updatedAt)
-     VALUES (?,?,?,?,?,?,?)`
+    `INSERT INTO llm_provider_config (id,name,providerType,model,apiKey,params,createdAt,updatedAt)
+     VALUES (?,?,?,?,?,?,?,?)`
   ).bind(id, body.name || body.providerType, body.providerType, body.model,
-    body.params || null, now, now).run();
+    encryptedKey, body.params || null, now, now).run();
   return Response.json({ success: true, id });
 }
 
@@ -316,6 +329,9 @@ async function handleLlmUpdate(id: string, request: Request, env: Env): Promise<
   if (body.providerType !== undefined) { updates.push("providerType = ?"); vals.push(body.providerType); }
   if (body.model !== undefined) { updates.push("model = ?"); vals.push(body.model); }
   if (body.params !== undefined) { updates.push("params = ?"); vals.push(body.params || null); }
+  if (body.apiKey !== undefined && body.apiKey && !body.apiKey.startsWith("••••")) {
+    updates.push("apiKey = ?"); vals.push(await encrypt(body.apiKey, env));
+  }
 
   vals.push(id);
   await env.DB.prepare(`UPDATE llm_provider_config SET ${updates.join(", ")} WHERE id = ?`).bind(...vals).run();
@@ -367,8 +383,7 @@ function handleModelRegistry(): Response {
         sdk: card.sdk,
         providerType: id.split("/")[0],
         modelId: card.modelId,
-        // Default params for the JSON editor (null if model doesn't support thinking)
-        defaultParams: card.thinking ? card.thinking.params : null,
+        paramsSchema: card.paramsSchema || [],
       },
     ])
   );
@@ -748,6 +763,7 @@ function renderLlmModal() {
   const isEdit = llmModal.mode === 'edit';
   const currentCardId = d.providerType && d.model ? d.providerType + '/' + d.model : '';
   const currentCard = MODEL_CARDS[currentCardId];
+  const schema = currentCard?.paramsSchema || [];
 
   // Group cards by group for optgroup
   const groups = {};
@@ -761,15 +777,58 @@ function renderLlmModal() {
     ).join('')}</optgroup>\`
   ).join('');
 
-  // Resolve current params: from DB data or card defaults
-  const currentParams = d.params
-    ? (typeof d.params === 'string' ? d.params : JSON.stringify(d.params, null, 2))
-    : (currentCard?.defaultParams ? JSON.stringify(currentCard.defaultParams, null, 2) : '');
+  // Parse existing params from DB to get current field values
+  let savedParams = {};
+  if (d.params) {
+    try { savedParams = typeof d.params === 'string' ? JSON.parse(d.params) : d.params; } catch {}
+  }
+
+  // Helper: get value from nested object by dot-path key
+  const getVal = (obj, key) => {
+    return key.split('.').reduce((o, k) => o && o[k], obj);
+  };
+
+  // Render structured param fields from schema
+  const paramFields = schema.length > 0 ? schema.map(f => {
+    const savedVal = getVal(savedParams, f.key);
+    const val = savedVal !== undefined ? savedVal : f.defaultValue;
+    const fieldId = 'lm_p_' + f.key.replace(/\\./g, '_');
+
+    if (f.type === 'select') {
+      const opts = (f.options || []).map(o =>
+        \`<option value="\${o}" \${val === o ? 'selected' : ''}>\${o}</option>\`
+      ).join('');
+      return \`<div class="form-group">
+        <label>\${f.label}</label>
+        <select id="\${fieldId}" data-param-key="\${f.key}" data-param-type="select" style="width:100%;height:42px;padding:0 14px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;outline:none;background:#fff">
+          \${opts}
+        </select>
+      </div>\`;
+    }
+    if (f.type === 'number') {
+      return \`<div class="form-group">
+        <label>\${f.label}</label>
+        <input id="\${fieldId}" data-param-key="\${f.key}" data-param-type="number" type="number"
+          value="\${val ?? ''}" min="\${f.min ?? ''}" max="\${f.max ?? ''}" step="\${f.step ?? 1}"
+          style="width:100%" />
+      </div>\`;
+    }
+    if (f.type === 'toggle') {
+      return \`<div class="form-group">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+          <input id="\${fieldId}" data-param-key="\${f.key}" data-param-type="toggle" type="checkbox"
+            \${val ? 'checked' : ''} style="width:auto" />
+          \${f.label}
+        </label>
+      </div>\`;
+    }
+    return '';
+  }).join('') : '';
 
   return \`<div class="modal-overlay" id="llmModalOverlay">
     <div class="modal" style="max-width:440px">
       <h3>\${isEdit ? 'Edit Resource' : 'Add LLM Resource'}</h3>
-      <p>Select a model. All providers route through CF AI Gateway (BYOK).</p>
+      <p>Select a model. Leave API Key empty to use CF AI Gateway unified billing.</p>
       \${llmMsg ? \`<div class="msg \${llmMsgType === 'error' ? 'msg-err' : 'msg-ok'}">\${llmMsg}</div>\` : ''}
       <form id="llmForm">
         <div class="form-group">
@@ -784,9 +843,13 @@ function renderLlmModal() {
           </select>
         </div>
         <div class="form-group">
-          <label>Params (JSON) <span style="font-weight:400;color:#9ca3af">— empty = no thinking/reasoning</span></label>
-          <textarea id="lm_params" rows="5" style="width:100%;padding:10px 14px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;font-family:'SF Mono',SFMono-Regular,Menlo,monospace;outline:none;resize:vertical">\${currentParams}</textarea>
+          <label>API Key <span style="font-weight:400;color:#9ca3af">— empty = CF AI Gateway billing</span></label>
+          <input id="lm_apiKey" type="password" value="\${d.apiKey || ''}" placeholder="sk-..." style="font-family:'SF Mono',SFMono-Regular,Menlo,monospace;font-size:13px" />
         </div>
+        \${schema.length > 0 ? \`<div id="lm_params_section" style="border-top:1px solid #f3f4f6;padding-top:12px;margin-top:4px">
+          <div style="font-size:12px;color:#9ca3af;font-weight:500;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Model Parameters</div>
+          \${paramFields}
+        </div>\` : ''}
         <div class="modal-actions">
           <button type="button" class="btn btn-ghost" onclick="llmCloseModal()">Cancel</button>
           <button type="submit" class="btn btn-primary">\${isEdit ? 'Save Changes' : 'Add Resource'}</button>
@@ -1054,16 +1117,12 @@ function bind() {
     const card = MODEL_CARDS[cardId];
     const [providerType, ...modelParts] = cardId.split('/');
     const model = modelParts.join('/');
-    const paramsRaw = document.getElementById('lm_params')?.value.trim() || '';
-    // Validate JSON if provided
-    if (paramsRaw) {
-      try { JSON.parse(paramsRaw); } catch { llmMsg = 'Invalid JSON in params'; llmMsgType = 'error'; render(); return; }
-    }
     const body = {
       name: document.getElementById('lm_name').value.trim(),
       providerType: providerType || llmModal.data?.providerType || '',
       model: model || llmModal.data?.model || '',
-      params: paramsRaw || null,
+      apiKey: document.getElementById('lm_apiKey')?.value || '',
+      params: window.llmCollectParams(),
     };
     if (!body.providerType || !body.model) { llmMsg = 'Please select a model'; llmMsgType = 'error'; render(); return; }
     if (!body.name) body.name = card?.label || body.providerType;
@@ -1138,18 +1197,43 @@ window.llmCloseModal = () => { llmModal = null; llmMsg = ''; render(); };
 window.llmOnCardChange = () => {
   const cardId = document.getElementById('lm_cardId')?.value || '';
   const card = MODEL_CARDS[cardId];
-  if (card) {
-    const nameEl = document.getElementById('lm_name');
-    if (nameEl && !nameEl.value) nameEl.value = card.label;
-    // Pre-fill params with card defaults
-    const paramsEl = document.getElementById('lm_params');
-    if (paramsEl) paramsEl.value = card.defaultParams ? JSON.stringify(card.defaultParams, null, 2) : '';
-  }
   if (llmModal) {
     const [pt, ...mp] = cardId.split('/');
     llmModal.data.providerType = pt;
     llmModal.data.model = mp.join('/');
+    // Clear saved params so defaults from new card are used
+    llmModal.data.params = null;
+    if (card) {
+      const nameEl = document.getElementById('lm_name');
+      if (nameEl && !nameEl.value) nameEl.value = card.label;
+    }
+    render(); // re-render to show new paramsSchema fields
   }
+};
+
+// Assemble params JSON from structured form fields
+window.llmCollectParams = () => {
+  const fields = document.querySelectorAll('[data-param-key]');
+  if (!fields.length) return null;
+  const params = {};
+  fields.forEach(el => {
+    const key = el.dataset.paramKey;
+    const type = el.dataset.paramType;
+    let val;
+    if (type === 'toggle') val = el.checked;
+    else if (type === 'number') val = el.value ? Number(el.value) : undefined;
+    else val = el.value;
+    if (val === undefined || val === '') return;
+    // Set nested key (e.g. "thinking.budgetTokens" → params.thinking.budgetTokens)
+    const parts = key.split('.');
+    let obj = params;
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (!obj[parts[i]]) obj[parts[i]] = {};
+      obj = obj[parts[i]];
+    }
+    obj[parts[parts.length - 1]] = val;
+  });
+  return Object.keys(params).length > 0 ? JSON.stringify(params) : null;
 };
 window.callerAssign = async (callerType, resourceId) => {
   await fetch('/api/llm-callers', {

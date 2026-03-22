@@ -1,8 +1,9 @@
 /**
  * Resolves an LLM provider for a given caller type (chat, title).
  *
- * All providers go through CF AI Gateway. API keys are managed in the
- * Cloudflare dashboard (BYOK) — we only need CF_AIG_TOKEN for gateway auth.
+ * Supports two auth modes:
+ * - Direct API key: stored encrypted in DB, decrypted at runtime, calls provider directly or via gateway
+ * - CF AI Gateway unified billing: no API key in DB, uses CF_AIG_TOKEN
  *
  * Reads caller → resource binding from `llm_caller_config`, looks up the
  * resource in `llm_provider_config`, matches it to a ModelCard, and returns
@@ -26,7 +27,8 @@ interface ResourceRow {
   id: string;
   providerType: string;
   model: string;
-  /** JSON string of provider-specific params, e.g. {"thinking":{"type":"enabled","budgetTokens":8192}} */
+  apiKey: string; // encrypted; empty = CF AI Gateway unified billing
+  /** JSON string of provider-specific params */
   params: string | null;
 }
 
@@ -40,15 +42,35 @@ export interface ResolvedLLM {
 }
 
 // ---------------------------------------------------------------------------
+// Decrypt helper
+// ---------------------------------------------------------------------------
+
+async function decryptApiKey(encoded: string, env: Env): Promise<string> {
+  const hex = (env as unknown as Record<string, string>)["ADMIN_ENCRYPTION_KEY"];
+  if (!hex || hex.length < 64) return encoded;
+  try {
+    const raw = new Uint8Array(
+      hex.match(/.{2}/g)!.map((b: string) => parseInt(b, 16))
+    );
+    const key = await crypto.subtle.importKey(
+      "raw", raw, { name: "AES-GCM" }, false, ["decrypt"]
+    );
+    const buf = Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0));
+    const pt = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: buf.slice(0, 12) }, key, buf.slice(12)
+    );
+    return new TextDecoder().decode(pt);
+  } catch {
+    return encoded;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Main resolver
 // ---------------------------------------------------------------------------
 
 /**
  * Resolve a fully-configured LLM for a given caller type.
- *
- * All traffic routes through CF AI Gateway. The gateway handles upstream
- * authentication via BYOK — we authenticate to the gateway with CF_AIG_TOKEN.
- *
  * Priority: DB caller binding → env var fallback.
  */
 export async function resolveLLM(
@@ -57,7 +79,7 @@ export async function resolveLLM(
 ): Promise<ResolvedLLM> {
   // 1. Query caller → resource from DB
   const resource = await env.DB.prepare(`
-    SELECT r.id, r.providerType, r.model, r.params
+    SELECT r.id, r.providerType, r.model, r.apiKey, r.params
     FROM llm_caller_config c
     JOIN llm_provider_config r ON c.resourceId = r.id
     WHERE c.callerType = ?
@@ -71,6 +93,7 @@ export async function resolveLLM(
     resource?.providerType || env.LLM_PROVIDER || "anthropic";
   const modelName =
     resource?.model || env.ANTHROPIC_MODEL || "claude-sonnet-4-6";
+
   // Parse params JSON from DB (null/empty = no thinking)
   let dbParams: Record<string, unknown> | null = null;
   if (resource?.params) {
@@ -81,18 +104,33 @@ export async function resolveLLM(
   // 3. Look up model card
   const card = lookupCard(providerType, modelName) ?? null;
 
-  // 4. Build CF AI Gateway URL
-  const accountId = env.CLOUDFLARE_ACCOUNT_ID;
-  const gwId = env.AI_GATEWAY_ID;
-  const gwSegment =
-    card?.gatewayPathSegment ||
-    (providerType === "anthropic" ? "anthropic" : "openai-compatible");
-  const baseURL = `https://gateway.ai.cloudflare.com/v1/${accountId}/${gwId}/${gwSegment}`;
+  // 4. Resolve API key and base URL
+  // If DB has an encrypted API key → decrypt and use directly (or via gateway)
+  // If no API key → use CF_AIG_TOKEN with CF AI Gateway
+  const hasDbKey = resource?.apiKey ? resource.apiKey.length > 0 : false;
+  const apiKey = hasDbKey
+    ? await decryptApiKey(resource!.apiKey, env)
+    : env.CF_AIG_TOKEN;
 
-  // 5. Create provider SDK + model (all using CF_AIG_TOKEN)
+  let baseURL: string | undefined;
+  if (!hasDbKey) {
+    // CF AI Gateway unified billing
+    const accountId = env.CLOUDFLARE_ACCOUNT_ID;
+    const gwId = env.AI_GATEWAY_ID;
+    const gwSegment =
+      card?.gatewayPathSegment ||
+      (providerType === "anthropic" ? "anthropic" : "openai-compatible");
+    baseURL = `https://gateway.ai.cloudflare.com/v1/${accountId}/${gwId}/${gwSegment}`;
+  } else {
+    // Direct API key — use provider's default base URL
+    baseURL = card?.defaultBaseUrl;
+    // Anthropic SDK doesn't need explicit baseURL when using direct key
+    if (card?.sdk === "anthropic") baseURL = undefined;
+  }
+
+  // 5. Create provider SDK + model
   let model: unknown;
   let anthropicInstance: ReturnType<typeof createAnthropic> | undefined;
-  const apiKey = env.CF_AIG_TOKEN;
 
   if (card?.sdk === "anthropic" || (!card && providerType === "anthropic")) {
     const anthropic = createAnthropic({ apiKey, baseURL });
@@ -102,14 +140,12 @@ export async function resolveLLM(
     const provider = createOpenAICompatible({
       name: card?.sdkName || providerType,
       apiKey,
-      baseURL,
+      baseURL: baseURL || "https://api.openai.com/v1",
     });
     model = provider(card?.modelId || modelName);
   }
 
-  // 6. Build providerOptions
-  // DB params is the raw provider-specific params (e.g. {"thinking":{"type":"enabled","budgetTokens":8192}})
-  // Wrap it with the providerOptionsKey from the card
+  // 6. Build providerOptions from DB params
   let providerOptions: Record<string, unknown> | undefined;
   if (dbParams && card?.thinking) {
     providerOptions = { [card.thinking.providerOptionsKey]: dbParams };
@@ -130,7 +166,7 @@ export async function resolveLLM(
       model: card?.modelId || modelName,
       thinkingEnabled,
       maxOutputTokens,
-      baseURL,
+      authMode: hasDbKey ? "direct_key" : "cf_gateway",
       source: resource ? "db" : "env_fallback",
     })
   );

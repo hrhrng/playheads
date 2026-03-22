@@ -10,6 +10,24 @@
 // Types
 // ---------------------------------------------------------------------------
 
+/** Describes a single configurable param field for the admin UI. */
+export interface ParamField {
+  /** Dot-path key into the params JSON, e.g. "thinking.budgetTokens" */
+  key: string;
+  /** Human-readable label */
+  label: string;
+  /** Control type */
+  type: "toggle" | "number" | "select";
+  /** For select: available options */
+  options?: string[];
+  /** For number: constraints */
+  min?: number;
+  max?: number;
+  step?: number;
+  /** Default value */
+  defaultValue?: unknown;
+}
+
 export interface ModelCard {
   /** Registry key, e.g. "anthropic/claude-haiku-4-5" */
   id: string;
@@ -37,11 +55,13 @@ export interface ModelCard {
     | {
         /** Key inside providerOptions, e.g. "anthropic", "doubao", "openai" */
         providerOptionsKey: string;
-        /** Provider-specific params merged into providerOptions[key] */
+        /** Provider-specific default params merged into providerOptions[key] */
         params: Record<string, unknown>;
-        /** Anthropic-only: budgetTokens injected into params.thinking */
-        budgetTokens?: number;
       };
+
+  // -- Params schema (for admin UI) -------------------------------------------
+  /** Structured form fields for admin. Empty array = no configurable params. */
+  paramsSchema?: ParamField[];
 
   // -- Output limits ---------------------------------------------------------
   maxOutputTokens: number;
@@ -73,9 +93,11 @@ export const MODEL_REGISTRY: Record<string, ModelCard> = {
     gatewayPathSegment: "anthropic",
     thinking: {
       providerOptionsKey: "anthropic",
-      params: { thinking: { type: "enabled" } },
-      budgetTokens: 16384,
+      params: { thinking: { type: "adaptive" } },
     },
+    paramsSchema: [
+      { key: "thinking.type", label: "Thinking", type: "select", options: ["adaptive", "disabled"], defaultValue: "adaptive" },
+    ],
     maxOutputTokens: 4096,
     maxOutputTokensWithThinking: 128000,
     titleModelId: "claude-haiku-4-5-20251001",
@@ -90,9 +112,11 @@ export const MODEL_REGISTRY: Record<string, ModelCard> = {
     gatewayPathSegment: "anthropic",
     thinking: {
       providerOptionsKey: "anthropic",
-      params: { thinking: { type: "enabled" } },
-      budgetTokens: 8192,
+      params: { thinking: { type: "adaptive" } },
     },
+    paramsSchema: [
+      { key: "thinking.type", label: "Thinking", type: "select", options: ["adaptive", "disabled"], defaultValue: "adaptive" },
+    ],
     maxOutputTokens: 4096,
     maxOutputTokensWithThinking: 64000,
     titleModelId: "claude-haiku-4-5-20251001",
@@ -107,9 +131,12 @@ export const MODEL_REGISTRY: Record<string, ModelCard> = {
     gatewayPathSegment: "anthropic",
     thinking: {
       providerOptionsKey: "anthropic",
-      params: { thinking: { type: "enabled" } },
-      budgetTokens: 4096,
+      params: { thinking: { type: "enabled", budgetTokens: 4096 } },
     },
+    paramsSchema: [
+      { key: "thinking.type", label: "Thinking", type: "select", options: ["enabled", "disabled"], defaultValue: "enabled" },
+      { key: "thinking.budgetTokens", label: "Budget Tokens", type: "number", min: 1024, max: 64000, step: 1024, defaultValue: 4096 },
+    ],
     maxOutputTokens: 4096,
     maxOutputTokensWithThinking: 64000,
     titleModelId: "claude-haiku-4-5-20251001",
@@ -130,6 +157,9 @@ export const MODEL_REGISTRY: Record<string, ModelCard> = {
       providerOptionsKey: "doubao",
       params: { thinking: { type: "auto" } },
     },
+    paramsSchema: [
+      { key: "thinking.type", label: "Thinking", type: "select", options: ["auto", "disabled"], defaultValue: "auto" },
+    ],
     maxOutputTokens: 4096,
     maxOutputTokensWithThinking: 128000,
     titleModelId: "doubao-seed-2-0-lite-260215",
@@ -147,6 +177,9 @@ export const MODEL_REGISTRY: Record<string, ModelCard> = {
       providerOptionsKey: "doubao",
       params: { thinking: { type: "auto" } },
     },
+    paramsSchema: [
+      { key: "thinking.type", label: "Thinking", type: "select", options: ["auto", "disabled"], defaultValue: "auto" },
+    ],
     maxOutputTokens: 4096,
     maxOutputTokensWithThinking: 128000,
   },
@@ -178,6 +211,9 @@ export const MODEL_REGISTRY: Record<string, ModelCard> = {
       providerOptionsKey: "xai",
       params: { reasoningEffort: "high" },
     },
+    paramsSchema: [
+      { key: "reasoningEffort", label: "Reasoning Effort", type: "select", options: ["low", "medium", "high"], defaultValue: "high" },
+    ],
     maxOutputTokens: 16384,
     maxOutputTokensWithThinking: 131072,
   },
@@ -194,6 +230,9 @@ export const MODEL_REGISTRY: Record<string, ModelCard> = {
       providerOptionsKey: "xai",
       params: { reasoningEffort: "high" },
     },
+    paramsSchema: [
+      { key: "reasoningEffort", label: "Reasoning Effort", type: "select", options: ["low", "medium", "high"], defaultValue: "high" },
+    ],
     maxOutputTokens: 16384,
     maxOutputTokensWithThinking: 131072,
   },
@@ -223,6 +262,10 @@ export const MODEL_REGISTRY: Record<string, ModelCard> = {
       providerOptionsKey: "openai",
       params: { reasoning: { effort: "medium", summary: "auto" } },
     },
+    paramsSchema: [
+      { key: "reasoning.effort", label: "Reasoning Effort", type: "select", options: ["low", "medium", "high"], defaultValue: "medium" },
+      { key: "reasoning.summary", label: "Summary", type: "select", options: ["auto", "none"], defaultValue: "auto" },
+    ],
     maxOutputTokens: 16384,
     maxOutputTokensWithThinking: 128000,
     titleModelId: "gpt-5.4-nano",
@@ -239,6 +282,10 @@ export const MODEL_REGISTRY: Record<string, ModelCard> = {
       providerOptionsKey: "openai",
       params: { reasoning: { effort: "medium", summary: "auto" } },
     },
+    paramsSchema: [
+      { key: "reasoning.effort", label: "Reasoning Effort", type: "select", options: ["low", "medium", "high"], defaultValue: "medium" },
+      { key: "reasoning.summary", label: "Summary", type: "select", options: ["auto", "none"], defaultValue: "auto" },
+    ],
     maxOutputTokens: 16384,
     maxOutputTokensWithThinking: 128000,
     titleModelId: "gpt-5.4-nano",
@@ -255,6 +302,10 @@ export const MODEL_REGISTRY: Record<string, ModelCard> = {
       providerOptionsKey: "openai",
       params: { reasoning: { effort: "low", summary: "auto" } },
     },
+    paramsSchema: [
+      { key: "reasoning.effort", label: "Reasoning Effort", type: "select", options: ["low", "medium", "high"], defaultValue: "low" },
+      { key: "reasoning.summary", label: "Summary", type: "select", options: ["auto", "none"], defaultValue: "auto" },
+    ],
     maxOutputTokens: 16384,
     titleModelId: "gpt-5.4-nano",
   },
@@ -273,20 +324,7 @@ export function buildProviderOptions(
   thinkingEnabled: boolean
 ): Record<string, unknown> | undefined {
   if (!thinkingEnabled || !card.thinking) return undefined;
-
-  const opts = structuredClone(card.thinking.params);
-
-  // Anthropic requires budgetTokens injected into the thinking object
-  if (
-    card.thinking.budgetTokens &&
-    typeof opts.thinking === "object" &&
-    opts.thinking !== null
-  ) {
-    (opts.thinking as Record<string, unknown>).budgetTokens =
-      card.thinking.budgetTokens;
-  }
-
-  return { [card.thinking.providerOptionsKey]: opts };
+  return { [card.thinking.providerOptionsKey]: structuredClone(card.thinking.params) };
 }
 
 /**
