@@ -116,7 +116,7 @@ export async function resolveLLM(
   let baseURL: string | undefined;
   const useGateway = resource
     ? resource.gateway === "cf_ai_gateway"
-    : providerType === "anthropic"; // env fallback: Anthropic defaults to CF gateway
+    : !!env.CLOUDFLARE_ACCOUNT_ID; // env fallback: use gateway when account is configured
 
   if (useGateway) {
     const accountId =
@@ -139,8 +139,11 @@ export async function resolveLLM(
   let model: unknown;
   let anthropicInstance: ReturnType<typeof createAnthropic> | undefined;
 
+  // When using CF AI Gateway (unified billing), always use CF_AIG_TOKEN.
+  // Otherwise use the DB-stored key or provider-specific env fallback.
+  const effectiveKey = apiKey || (useGateway ? env.CF_AIG_TOKEN : "") || env.CF_AIG_TOKEN;
+
   if (card?.sdk === "anthropic" || (!card && providerType === "anthropic")) {
-    const effectiveKey = apiKey || env.CF_AIG_TOKEN;
     const anthropic = createAnthropic({
       apiKey: effectiveKey,
       baseURL,
@@ -148,7 +151,6 @@ export async function resolveLLM(
     anthropicInstance = anthropic;
     model = anthropic(card?.modelId || modelName);
   } else {
-    const effectiveKey = apiKey || env.DOUBAO_API_KEY;
     const provider = createOpenAICompatible({
       name: card?.sdkName || providerType,
       apiKey: effectiveKey,
