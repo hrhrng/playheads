@@ -104,9 +104,17 @@ final class ChatViewModel {
         Task {
             switch type {
             case "add_to_queue":
-                if let trackId = data["track_id"] as? String {
-                    await playerViewModel.addToQueue(trackId: trackId)
-                }
+                // Web app adds track directly from action data (no extra MusicKit call)
+                let track = UnifiedTrack(
+                    id: data["track_id"] as? String ?? "",
+                    name: data["name"] as? String ?? "Unknown",
+                    artist: data["artist"] as? String ?? "Unknown Artist",
+                    album: data["album"] as? String ?? "",
+                    artworkUrl: data["artwork_url"] as? String ?? "",
+                    durationSeconds: data["duration"] as? Double ?? 0,
+                    provider: .appleMusic
+                )
+                await playerViewModel.addTrack(track)
             case "play_track":
                 if let index = data["index"] as? Int {
                     await playerViewModel.playAtIndex(index - 1) // 1-indexed from server
@@ -128,6 +136,7 @@ final class ChatViewModel {
     func startNewConversation(sessionId: String, userId: String) {
         disconnect()
         messages = []
+        chatService.resetActionTracking()
         connect(sessionId: sessionId, userId: userId)
     }
 
