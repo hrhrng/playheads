@@ -20,6 +20,7 @@ __pycache__/
 dist/
 build/
 coverage/
+package-lock.json
 
 # Swift
 .build/
@@ -30,3 +31,4 @@ DerivedData/
 *.p8apps/admin/.wrangler/
 apps/admin/.wrangler/
 .claude/worktrees/
+CODE_REVIEW.md

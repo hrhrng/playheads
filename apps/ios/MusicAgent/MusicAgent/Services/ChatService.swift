@@ -213,7 +213,7 @@ final class UIMessageStreamParser {
         guard let output, let data = output.data(using: .utf8),
               let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let action = parsed["_action"] as? [String: Any],
-              action["type"] is String else { return nil }
+              (action["type"] as? String) != nil else { return nil }
         return action
     }
 

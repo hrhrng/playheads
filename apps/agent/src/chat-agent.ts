@@ -184,7 +184,8 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
           'SELECT "queue", "queueIndex" FROM "profile" WHERE "id" = ?'
         ).bind(userId).first<{ queue: string; queueIndex: number }>();
         if (row) {
-          const queueTracks = JSON.parse(row.queue || "[]") as PlaybackState["playlist"];
+          let queueTracks: PlaybackState["playlist"] = [];
+          try { queueTracks = JSON.parse(row.queue || "[]") as PlaybackState["playlist"]; } catch { /* malformed queue data */ }
           const idx = row.queueIndex ?? -1;
           globalState = {
             currentTrack: idx >= 0 && idx < queueTracks.length ? queueTracks[idx] : null,
@@ -230,7 +231,7 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
     let tools: Parameters<typeof streamText>[0]["tools"] = musicTools;
 
     if (effectiveSearchProvider === "anthropic" && anthropicInstance) {
-      tools = { ...musicTools, web_search: anthropicInstance.tools.webSearch_20250305({ maxUses: 5 }) };
+      tools = { ...musicTools, web_search: anthropicInstance.tools.webSearch_20250305({ maxUses: 5 }) } as Parameters<typeof streamText>[0]["tools"];
     } else {
       const webSearchTool = buildWebSearchTool(this.env, searchDbOverride);
       if (webSearchTool) {
