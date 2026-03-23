@@ -7,3 +7,10 @@ extension Color {
     static let honey900 = Color(red: 0.23, green: 0.23, blue: 0.60) // #3B3B98 (Indigo)
     static let honeyText = Color(red: 0.07, green: 0.07, blue: 0.07) // #121212 (Soft Black)
 }
+
+extension Font {
+    static let playheadTitle = Font.system(size: 28, weight: .bold)
+    static let playheadHeadline = Font.system(size: 20, weight: .bold)
+    static let playheadBody = Font.system(size: 16, weight: .regular)
+    static let playheadCaption = Font.system(size: 12, weight: .regular)
+}

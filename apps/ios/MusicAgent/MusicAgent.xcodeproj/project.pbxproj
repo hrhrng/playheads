@@ -1,0 +1,548 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A10001 /* MusicAgentApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10001; };
+		A10002 /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10002; };
+		A10003 /* Conversation.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10003; };
+		A10004 /* Message.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10004; };
+		A10005 /* Profile.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10005; };
+		A10006 /* Track.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10006; };
+		A10007 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10007; };
+		A10008 /* AuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10008; };
+		A10009 /* ChatService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10009; };
+		A10010 /* ConversationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10010; };
+		A10011 /* MusicService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10011; };
+		A10012 /* QueueService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10012; };
+		A10013 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10013; };
+		A10014 /* AuthViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10014; };
+		A10015 /* ChatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10015; };
+		A10016 /* ConversationListViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10016; };
+		A10017 /* PlayerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10017; };
+		A10018 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10018; };
+		A10019 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10019; };
+		A10020 /* WaitlistView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10020; };
+		A10021 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10021; };
+		A10022 /* MessageBubble.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10022; };
+		A10023 /* ChatInputBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10023; };
+		A10024 /* RecordPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10024; };
+		A10025 /* PlaybackControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10025; };
+		A10026 /* NowPlayingBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10026; };
+		A10027 /* LyricsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10027; };
+		A10028 /* QueueView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10028; };
+		A10029 /* ConversationListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10029; };
+		A10030 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10030; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		C10001 /* MusicAgent.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MusicAgent.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B10001 /* MusicAgentApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicAgentApp.swift; sourceTree = "<group>"; };
+		B10002 /* AppConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfig.swift; sourceTree = "<group>"; };
+		B10003 /* Conversation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Conversation.swift; sourceTree = "<group>"; };
+		B10004 /* Message.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Message.swift; sourceTree = "<group>"; };
+		B10005 /* Profile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Profile.swift; sourceTree = "<group>"; };
+		B10006 /* Track.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Track.swift; sourceTree = "<group>"; };
+		B10007 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
+		B10008 /* AuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthService.swift; sourceTree = "<group>"; };
+		B10009 /* ChatService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatService.swift; sourceTree = "<group>"; };
+		B10010 /* ConversationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationService.swift; sourceTree = "<group>"; };
+		B10011 /* MusicService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicService.swift; sourceTree = "<group>"; };
+		B10012 /* QueueService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueService.swift; sourceTree = "<group>"; };
+		B10013 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		B10014 /* AuthViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthViewModel.swift; sourceTree = "<group>"; };
+		B10015 /* ChatViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViewModel.swift; sourceTree = "<group>"; };
+		B10016 /* ConversationListViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationListViewModel.swift; sourceTree = "<group>"; };
+		B10017 /* PlayerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerViewModel.swift; sourceTree = "<group>"; };
+		B10018 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		B10019 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
+		B10020 /* WaitlistView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WaitlistView.swift; sourceTree = "<group>"; };
+		B10021 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
+		B10022 /* MessageBubble.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageBubble.swift; sourceTree = "<group>"; };
+		B10023 /* ChatInputBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatInputBar.swift; sourceTree = "<group>"; };
+		B10024 /* RecordPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecordPlayerView.swift; sourceTree = "<group>"; };
+		B10025 /* PlaybackControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackControls.swift; sourceTree = "<group>"; };
+		B10026 /* NowPlayingBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingBar.swift; sourceTree = "<group>"; };
+		B10027 /* LyricsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LyricsView.swift; sourceTree = "<group>"; };
+		B10028 /* QueueView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QueueView.swift; sourceTree = "<group>"; };
+		B10029 /* ConversationListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConversationListView.swift; sourceTree = "<group>"; };
+		B10030 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		B10031 /* MusicAgent.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MusicAgent.entitlements; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		D10001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		E10001 = {
+			isa = PBXGroup;
+			children = (
+				E10002 /* MusicAgent */,
+				E10020 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		E10020 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				C10001 /* MusicAgent.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		E10002 /* MusicAgent */ = {
+			isa = PBXGroup;
+			children = (
+				B10001 /* MusicAgentApp.swift */,
+				B10031 /* MusicAgent.entitlements */,
+				E10003 /* Config */,
+				E10004 /* Models */,
+				E10005 /* Services */,
+				E10006 /* Theme */,
+				E10007 /* ViewModels */,
+				E10008 /* Views */,
+			);
+			path = MusicAgent;
+			sourceTree = "<group>";
+		};
+		E10003 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				B10002 /* AppConfig.swift */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
+		E10004 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				B10003 /* Conversation.swift */,
+				B10004 /* Message.swift */,
+				B10005 /* Profile.swift */,
+				B10006 /* Track.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		E10005 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				B10007 /* APIClient.swift */,
+				B10008 /* AuthService.swift */,
+				B10009 /* ChatService.swift */,
+				B10010 /* ConversationService.swift */,
+				B10011 /* MusicService.swift */,
+				B10012 /* QueueService.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		E10006 /* Theme */ = {
+			isa = PBXGroup;
+			children = (
+				B10013 /* Theme.swift */,
+			);
+			path = Theme;
+			sourceTree = "<group>";
+		};
+		E10007 /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+				B10014 /* AuthViewModel.swift */,
+				B10015 /* ChatViewModel.swift */,
+				B10016 /* ConversationListViewModel.swift */,
+				B10017 /* PlayerViewModel.swift */,
+			);
+			path = ViewModels;
+			sourceTree = "<group>";
+		};
+		E10008 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				B10018 /* RootView.swift */,
+				E10009 /* Auth */,
+				E10010 /* Chat */,
+				E10011 /* Player */,
+				E10012 /* Queue */,
+				E10013 /* Conversations */,
+				E10014 /* Settings */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		E10009 /* Auth */ = {
+			isa = PBXGroup;
+			children = (
+				B10019 /* LoginView.swift */,
+				B10020 /* WaitlistView.swift */,
+			);
+			path = Auth;
+			sourceTree = "<group>";
+		};
+		E10010 /* Chat */ = {
+			isa = PBXGroup;
+			children = (
+				B10021 /* ChatView.swift */,
+				B10022 /* MessageBubble.swift */,
+				B10023 /* ChatInputBar.swift */,
+			);
+			path = Chat;
+			sourceTree = "<group>";
+		};
+		E10011 /* Player */ = {
+			isa = PBXGroup;
+			children = (
+				B10024 /* RecordPlayerView.swift */,
+				B10025 /* PlaybackControls.swift */,
+				B10026 /* NowPlayingBar.swift */,
+				B10027 /* LyricsView.swift */,
+			);
+			path = Player;
+			sourceTree = "<group>";
+		};
+		E10012 /* Queue */ = {
+			isa = PBXGroup;
+			children = (
+				B10028 /* QueueView.swift */,
+			);
+			path = Queue;
+			sourceTree = "<group>";
+		};
+		E10013 /* Conversations */ = {
+			isa = PBXGroup;
+			children = (
+				B10029 /* ConversationListView.swift */,
+			);
+			path = Conversations;
+			sourceTree = "<group>";
+		};
+		E10014 /* Settings */ = {
+			isa = PBXGroup;
+			children = (
+				B10030 /* SettingsView.swift */,
+			);
+			path = Settings;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		F10001 /* MusicAgent */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = G10003;
+			buildPhases = (
+				F10002 /* Sources */,
+				D10001 /* Frameworks */,
+				F10003 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MusicAgent;
+			productName = MusicAgent;
+			productReference = C10001 /* MusicAgent.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		H10001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1540;
+				LastUpgradeCheck = 1540;
+				TargetAttributes = {
+					F10001 = {
+						CreatedOnToolsVersion = 15.4;
+					};
+				};
+			};
+			buildConfigurationList = G10001;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = E10001;
+			productRefGroup = E10020 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				F10001 /* MusicAgent */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		F10003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		F10002 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10001 /* MusicAgentApp.swift in Sources */,
+				A10002 /* AppConfig.swift in Sources */,
+				A10003 /* Conversation.swift in Sources */,
+				A10004 /* Message.swift in Sources */,
+				A10005 /* Profile.swift in Sources */,
+				A10006 /* Track.swift in Sources */,
+				A10007 /* APIClient.swift in Sources */,
+				A10008 /* AuthService.swift in Sources */,
+				A10009 /* ChatService.swift in Sources */,
+				A10010 /* ConversationService.swift in Sources */,
+				A10011 /* MusicService.swift in Sources */,
+				A10012 /* QueueService.swift in Sources */,
+				A10013 /* Theme.swift in Sources */,
+				A10014 /* AuthViewModel.swift in Sources */,
+				A10015 /* ChatViewModel.swift in Sources */,
+				A10016 /* ConversationListViewModel.swift in Sources */,
+				A10017 /* PlayerViewModel.swift in Sources */,
+				A10018 /* RootView.swift in Sources */,
+				A10019 /* LoginView.swift in Sources */,
+				A10020 /* WaitlistView.swift in Sources */,
+				A10021 /* ChatView.swift in Sources */,
+				A10022 /* MessageBubble.swift in Sources */,
+				A10023 /* ChatInputBar.swift in Sources */,
+				A10024 /* RecordPlayerView.swift in Sources */,
+				A10025 /* PlaybackControls.swift in Sources */,
+				A10026 /* NowPlayingBar.swift in Sources */,
+				A10027 /* LyricsView.swift in Sources */,
+				A10028 /* QueueView.swift in Sources */,
+				A10029 /* ConversationListView.swift in Sources */,
+				A10030 /* SettingsView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		G10004 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		G10005 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		G10006 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = MusicAgent/MusicAgent.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = MusicAgent/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Playheads;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.playheads.MusicAgent;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		G10007 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = MusicAgent/MusicAgent.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = MusicAgent/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Playheads;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.playheads.MusicAgent;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		G10001 /* Build configuration list for PBXProject "MusicAgent" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				G10004 /* Debug */,
+				G10005 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		G10003 /* Build configuration list for PBXNativeTarget "MusicAgent" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				G10006 /* Debug */,
+				G10007 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+	};
+	rootObject = H10001 /* Project object */;
+}
