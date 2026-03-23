@@ -31,4 +31,7 @@ DerivedData/
 *.p8apps/admin/.wrangler/
 apps/admin/.wrangler/
 .claude/worktrees/
+.claude/skills/
+.agents/
+skills-lock.json
 CODE_REVIEW.md
