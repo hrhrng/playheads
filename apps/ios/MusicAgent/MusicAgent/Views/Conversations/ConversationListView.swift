@@ -11,8 +11,6 @@ struct ConversationListView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Color.honey50.ignoresSafeArea()
-
                 if viewModel.conversations.isEmpty && !viewModel.isLoading {
                     VStack(spacing: 12) {
                         Image(systemName: "bubble.left.and.bubble.right")
@@ -21,6 +19,8 @@ struct ConversationListView: View {
                         Text("No conversations yet")
                             .foregroundColor(.honey900.opacity(0.5))
                     }
+                    .padding(24)
+                    .liquidGlass(cornerRadius: 20, opacity: 0.3, bordered: false)
                 } else {
                     List {
                         // Pinned
@@ -28,6 +28,7 @@ struct ConversationListView: View {
                             Section("Pinned") {
                                 ForEach(viewModel.pinnedConversations) { conversation in
                                     conversationRow(conversation)
+                                        .listRowBackground(Color.white.opacity(0.3))
                                 }
                             }
                         }
@@ -36,6 +37,7 @@ struct ConversationListView: View {
                         Section("Recent") {
                             ForEach(viewModel.unpinnedConversations) { conversation in
                                 conversationRow(conversation)
+                                    .listRowBackground(Color.white.opacity(0.2))
                             }
 
                             if viewModel.hasMore {
@@ -43,6 +45,7 @@ struct ConversationListView: View {
                                     Task { await viewModel.loadMore() }
                                 }
                                 .foregroundColor(.honey900)
+                                .listRowBackground(Color.white.opacity(0.2))
                             }
                         }
                     }
@@ -58,6 +61,7 @@ struct ConversationListView: View {
                         .tint(.honey900)
                 }
             }
+            .meshGradientBackground()
             .navigationTitle("Conversations")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

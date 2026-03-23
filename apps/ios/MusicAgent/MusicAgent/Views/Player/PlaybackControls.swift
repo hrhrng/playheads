@@ -40,8 +40,14 @@ struct PlaybackControls: View {
                 Button(action: { Task { await playerViewModel.togglePlay() } }) {
                     Image(systemName: playerViewModel.isPlaying ? "pause.circle.fill" : "play.circle.fill")
                         .font(.system(size: 56))
-                        .foregroundColor(.honey900)
-                        .shadow(color: .honey900.opacity(0.2), radius: 8, x: 0, y: 4)
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [.honey900, .honey900.opacity(0.8)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .shadow(color: .honey900.opacity(0.15), radius: 12, x: 0, y: 6)
                 }
                 .disabled(playerViewModel.nowPlaying == nil)
 
@@ -52,6 +58,9 @@ struct PlaybackControls: View {
                 }
                 .disabled(playerViewModel.upNext.isEmpty)
             }
+            .padding(.vertical, 8)
+            .padding(.horizontal, 24)
+            .liquidGlass(cornerRadius: 28, opacity: 0.3, bordered: false)
         }
     }
 

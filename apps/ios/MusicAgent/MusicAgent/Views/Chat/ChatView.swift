@@ -9,8 +9,6 @@ struct ChatView: View {
 
     var body: some View {
         ZStack {
-            Color.honey50.ignoresSafeArea()
-
             VStack(spacing: 0) {
                 // Header
                 headerBar
@@ -32,6 +30,9 @@ struct ChatView: View {
                                         .font(.caption)
                                         .foregroundColor(.honey900.opacity(0.5))
                                 }
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 10)
+                                .liquidGlass(cornerRadius: 16, opacity: 0.3)
                                 .padding(.horizontal)
                                 .id("streaming")
                             }
@@ -55,6 +56,7 @@ struct ChatView: View {
                 )
             }
         }
+        .meshGradientBackground()
     }
 
     private var headerBar: some View {
@@ -63,6 +65,8 @@ struct ChatView: View {
                 Image(systemName: "line.3.horizontal")
                     .font(.title3)
                     .foregroundColor(.honey900)
+                    .frame(width: 36, height: 36)
+                    .liquidGlass(cornerRadius: 10, opacity: 0.3, bordered: false)
             }
 
             Spacer()
@@ -71,8 +75,8 @@ struct ChatView: View {
                 Circle()
                     .fill(LinearGradient(colors: [.honey400, .honey50], startPoint: .topLeading, endPoint: .bottomTrailing))
                     .frame(width: 28, height: 28)
-                    .overlay(Circle().stroke(Color.honey50, lineWidth: 1.5))
-                    .shadow(color: .honey400.opacity(0.3), radius: 4, x: 0, y: 2)
+                    .overlay(Circle().stroke(Color.glassHighlight, lineWidth: 1.5))
+                    .shadow(color: .honey400.opacity(0.25), radius: 6, x: 0, y: 2)
 
                 Text("Playhead")
                     .font(.system(size: 20, weight: .bold))
@@ -81,7 +85,7 @@ struct ChatView: View {
 
             Spacer()
 
-            HStack(spacing: 16) {
+            HStack(spacing: 12) {
                 Button(action: onNewChat) {
                     Image(systemName: "plus.circle")
                         .font(.title3)
@@ -100,9 +104,15 @@ struct ChatView: View {
                         .foregroundColor(.honey900)
                 }
             }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .liquidGlass(cornerRadius: 14, opacity: 0.3, bordered: false)
         }
         .padding(.horizontal)
-        .padding(.vertical, 12)
-        .background(Color.honey50)
+        .padding(.vertical, 10)
+        .background(
+            Color.white.opacity(0.001) // hit area
+                .background(.ultraThinMaterial.opacity(0.5))
+        )
     }
 }

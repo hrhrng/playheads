@@ -12,11 +12,12 @@ struct NowPlayingBar: View {
                         image.resizable()
                             .aspectRatio(contentMode: .fill)
                     } placeholder: {
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(Color.honey400.opacity(0.3))
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color.honey400.opacity(0.2))
                     }
                     .frame(width: 44, height: 44)
-                    .cornerRadius(6)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .shadow(color: .black.opacity(0.1), radius: 4, x: 0, y: 2)
                 }
 
                 // Track info
@@ -53,11 +54,7 @@ struct NowPlayingBar: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
-            .background(
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(.ultraThinMaterial)
-                    .shadow(color: .honey900.opacity(0.1), radius: 10, x: 0, y: 4)
-            )
+            .liquidGlass(cornerRadius: 22, opacity: 0.5)
         }
     }
 }

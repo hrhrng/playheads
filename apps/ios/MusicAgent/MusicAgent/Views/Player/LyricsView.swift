@@ -9,8 +9,6 @@ struct LyricsView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Color.honey50.ignoresSafeArea()
-
                 if isLoading {
                     ProgressView("Loading lyrics...")
                         .tint(.honey900)
@@ -20,6 +18,8 @@ struct LyricsView: View {
                             .font(.body)
                             .foregroundColor(.honey900)
                             .multilineTextAlignment(.center)
+                            .padding(24)
+                            .liquidGlass(cornerRadius: 20, opacity: 0.35, bordered: false)
                             .padding()
                     }
                 } else {
@@ -30,8 +30,11 @@ struct LyricsView: View {
                         Text("No lyrics available")
                             .foregroundColor(.honey900.opacity(0.5))
                     }
+                    .padding(24)
+                    .liquidGlass(cornerRadius: 20, opacity: 0.3, bordered: false)
                 }
             }
+            .meshGradientBackground()
             .navigationTitle(track?.name ?? "Lyrics")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

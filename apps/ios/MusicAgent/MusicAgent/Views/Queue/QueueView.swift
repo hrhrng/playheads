@@ -7,8 +7,6 @@ struct QueueView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Color.honey50.ignoresSafeArea()
-
                 if playerViewModel.queue.isEmpty {
                     VStack(spacing: 12) {
                         Image(systemName: "music.note.list")
@@ -20,12 +18,15 @@ struct QueueView: View {
                             .font(.caption)
                             .foregroundColor(.honey900.opacity(0.3))
                     }
+                    .padding(24)
+                    .liquidGlass(cornerRadius: 20, opacity: 0.3, bordered: false)
                 } else {
                     List {
                         // Now Playing
                         if let nowPlaying = playerViewModel.nowPlaying {
                             Section("Now Playing") {
                                 trackRow(nowPlaying, isPlaying: true)
+                                    .listRowBackground(Color.white.opacity(0.3))
                             }
                         }
 
@@ -34,6 +35,7 @@ struct QueueView: View {
                             Section("Up Next") {
                                 ForEach(Array(playerViewModel.upNext.enumerated()), id: \.element.id) { offset, track in
                                     trackRow(track, isPlaying: false)
+                                        .listRowBackground(Color.white.opacity(0.2))
                                         .swipeActions(edge: .trailing) {
                                             Button(role: .destructive) {
                                                 let actualIndex = playerViewModel.currentIndex + 1 + offset
@@ -54,6 +56,7 @@ struct QueueView: View {
                     .scrollContentBackground(.hidden)
                 }
             }
+            .meshGradientBackground()
             .navigationTitle("Queue")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -79,11 +82,11 @@ struct QueueView: View {
                     image.resizable()
                         .aspectRatio(contentMode: .fill)
                 } placeholder: {
-                    RoundedRectangle(cornerRadius: 4)
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
                         .fill(Color.honey400.opacity(0.2))
                 }
                 .frame(width: 40, height: 40)
-                .cornerRadius(4)
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
             }
 
             VStack(alignment: .leading, spacing: 2) {

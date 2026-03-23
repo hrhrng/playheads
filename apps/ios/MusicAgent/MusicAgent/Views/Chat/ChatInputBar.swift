@@ -10,10 +10,8 @@ struct ChatInputBar: View {
             TextField("Command the deck...", text: $text)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
-                .background(Color.white)
-                .cornerRadius(24)
-                .shadow(color: .honey900.opacity(0.05), radius: 10, x: 0, y: 4)
                 .foregroundColor(.honey900)
+                .liquidGlass(cornerRadius: 24, opacity: 0.6)
                 .submitLabel(.send)
                 .onSubmit(onSend)
                 .disabled(isStreaming)
@@ -21,16 +19,24 @@ struct ChatInputBar: View {
             Button(action: onSend) {
                 Image(systemName: "arrow.up.circle.fill")
                     .font(.system(size: 40))
-                    .foregroundColor(canSend ? .honey900 : .honey900.opacity(0.3))
-                    .shadow(color: .honey900.opacity(0.2), radius: 8, x: 0, y: 4)
+                    .foregroundStyle(
+                        canSend
+                            ? LinearGradient(colors: [.honey900, .honey900.opacity(0.8)], startPoint: .top, endPoint: .bottom)
+                            : LinearGradient(colors: [.honey900.opacity(0.25), .honey900.opacity(0.2)], startPoint: .top, endPoint: .bottom)
+                    )
+                    .shadow(color: .honey900.opacity(canSend ? 0.2 : 0), radius: 8, x: 0, y: 4)
             }
             .disabled(!canSend)
         }
         .padding(.horizontal)
         .padding(.vertical, 12)
         .background(
-            Color.white.opacity(0.8)
-                .background(.ultraThinMaterial)
+            ZStack {
+                Rectangle()
+                    .fill(.ultraThinMaterial)
+                Rectangle()
+                    .fill(Color.white.opacity(0.3))
+            }
         )
     }
 

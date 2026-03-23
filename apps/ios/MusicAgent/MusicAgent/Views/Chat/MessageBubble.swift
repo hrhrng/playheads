@@ -21,13 +21,27 @@ struct MessageBubble: View {
     private func partView(_ part: MessagePart) -> some View {
         switch part {
         case .text(let textPart):
-            Text(textPart.content)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .background(message.role == .user ? Color.honey900 : Color.white)
-                .foregroundColor(message.role == .user ? .white : .honey900)
-                .cornerRadius(20)
-                .shadow(color: .black.opacity(0.05), radius: 2, x: 0, y: 1)
+            if message.role == .user {
+                Text(textPart.content)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .background(
+                        LinearGradient(
+                            colors: [Color.honey900, Color.honey900.opacity(0.85)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .foregroundColor(.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    .shadow(color: .honey900.opacity(0.15), radius: 8, x: 0, y: 4)
+            } else {
+                Text(textPart.content)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .foregroundColor(.honey900)
+                    .liquidGlass(cornerRadius: 20, opacity: 0.5)
+            }
 
         case .thinking(let thinkingPart):
             DisclosureGroup {
@@ -44,8 +58,7 @@ struct MessageBubble: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
-            .background(Color.honey400.opacity(0.1))
-            .cornerRadius(12)
+            .liquidGlass(cornerRadius: 12, opacity: 0.25)
 
         case .toolCall(let toolPart):
             HStack(spacing: 8) {
@@ -64,8 +77,7 @@ struct MessageBubble: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(Color.honey400.opacity(0.08))
-            .cornerRadius(12)
+            .liquidGlass(cornerRadius: 12, opacity: 0.25)
         }
     }
 

@@ -93,18 +93,24 @@ struct RootView: View {
 struct LoadingView: View {
     var body: some View {
         ZStack {
-            Color.honey50.ignoresSafeArea()
             VStack(spacing: 16) {
                 Circle()
                     .fill(LinearGradient(colors: [.honey400, .honey50], startPoint: .topLeading, endPoint: .bottomTrailing))
                     .frame(width: 64, height: 64)
-                    .shadow(color: .honey400.opacity(0.3), radius: 10, x: 0, y: 4)
+                    .overlay(
+                        Circle()
+                            .stroke(Color.white.opacity(0.6), lineWidth: 1.5)
+                    )
+                    .shadow(color: .honey400.opacity(0.25), radius: 16, x: 0, y: 6)
                 Text("Playheads")
                     .font(.system(size: 28, weight: .bold))
                     .foregroundColor(.honey900)
                 ProgressView()
                     .tint(.honey900)
             }
+            .padding(40)
+            .liquidGlass(cornerRadius: 32, opacity: 0.3, bordered: false)
         }
+        .meshGradientBackground()
     }
 }

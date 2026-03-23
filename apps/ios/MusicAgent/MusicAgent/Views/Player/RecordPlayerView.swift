@@ -10,9 +10,26 @@ struct RecordPlayerView: View {
             ZStack {
                 // Glow effect
                 Circle()
-                    .fill(Color.honey400.opacity(0.1))
-                    .frame(width: 280, height: 280)
+                    .fill(
+                        RadialGradient(
+                            colors: [Color.honey400.opacity(0.15), Color.honey400.opacity(0)],
+                            center: .center,
+                            startRadius: 60,
+                            endRadius: 160
+                        )
+                    )
+                    .frame(width: 300, height: 300)
                     .blur(radius: 20)
+
+                // Glass plate under the record
+                Circle()
+                    .fill(.ultraThinMaterial)
+                    .frame(width: 275, height: 275)
+                    .overlay(
+                        Circle()
+                            .stroke(Color.white.opacity(0.3), lineWidth: 0.5)
+                    )
+                    .shadow(color: .honey900.opacity(0.08), radius: 20, x: 0, y: 10)
 
                 // Record
                 ZStack {
@@ -73,6 +90,9 @@ struct RecordPlayerView: View {
                         .foregroundColor(.honey900.opacity(0.6))
                         .lineLimit(1)
                 }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 10)
+                .liquidGlass(cornerRadius: 16, opacity: 0.3, bordered: false)
             } else {
                 Text("No Track Playing")
                     .font(.title3)
@@ -87,12 +107,20 @@ struct RecordPlayerView: View {
 
     private var centerLabel: some View {
         Circle()
-            .fill(Color.honey400)
+            .fill(
+                RadialGradient(
+                    colors: [Color.honey400, Color.honey400.opacity(0.8)],
+                    center: .center,
+                    startRadius: 5,
+                    endRadius: 45
+                )
+            )
             .frame(width: 90, height: 90)
             .overlay(
                 Circle()
                     .fill(Color.honey50)
                     .frame(width: 20, height: 20)
+                    .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
             )
     }
 

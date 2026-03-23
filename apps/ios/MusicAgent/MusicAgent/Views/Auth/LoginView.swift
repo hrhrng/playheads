@@ -6,8 +6,6 @@ struct LoginView: View {
 
     var body: some View {
         ZStack {
-            Color.honey50.ignoresSafeArea()
-
             VStack(spacing: 32) {
                 Spacer()
 
@@ -16,8 +14,8 @@ struct LoginView: View {
                     Circle()
                         .fill(LinearGradient(colors: [.honey400, .honey50], startPoint: .topLeading, endPoint: .bottomTrailing))
                         .frame(width: 80, height: 80)
-                        .overlay(Circle().stroke(Color.honey50, lineWidth: 3))
-                        .shadow(color: .honey400.opacity(0.3), radius: 15, x: 0, y: 8)
+                        .overlay(Circle().stroke(Color.white.opacity(0.7), lineWidth: 2))
+                        .shadow(color: .honey400.opacity(0.25), radius: 20, x: 0, y: 10)
 
                     Text("Playheads")
                         .font(.system(size: 32, weight: .bold))
@@ -30,7 +28,7 @@ struct LoginView: View {
 
                 Spacer()
 
-                // Login Form
+                // Login Form — Glass Card
                 VStack(spacing: 16) {
                     if viewModel.magicLinkSent {
                         magicLinkSentView
@@ -48,7 +46,7 @@ struct LoginView: View {
                     }
                     .signInWithAppleButtonStyle(.black)
                     .frame(height: 50)
-                    .cornerRadius(25)
+                    .clipShape(RoundedRectangle(cornerRadius: 25, style: .continuous))
 
                     if let error = viewModel.errorMessage {
                         Text(error)
@@ -57,11 +55,14 @@ struct LoginView: View {
                             .multilineTextAlignment(.center)
                     }
                 }
-                .padding(.horizontal, 32)
+                .padding(24)
+                .liquidGlass(cornerRadius: 28, opacity: 0.45)
+                .padding(.horizontal, 24)
 
                 Spacer()
             }
         }
+        .meshGradientBackground()
     }
 
     private var emailLoginView: some View {
@@ -71,9 +72,12 @@ struct LoginView: View {
                 .keyboardType(.emailAddress)
                 .autocapitalization(.none)
                 .padding()
-                .background(Color.white)
-                .cornerRadius(25)
-                .shadow(color: .honey900.opacity(0.05), radius: 10, x: 0, y: 4)
+                .background(Color.white.opacity(0.6))
+                .clipShape(RoundedRectangle(cornerRadius: 25, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 25, style: .continuous)
+                        .stroke(Color.white.opacity(0.5), lineWidth: 0.75)
+                )
 
             Button(action: { Task { await viewModel.sendMagicLink() } }) {
                 HStack {
@@ -86,9 +90,16 @@ struct LoginView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding()
-                .background(Color.honey900)
+                .background(
+                    LinearGradient(
+                        colors: [Color.honey900, Color.honey900.opacity(0.85)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
                 .foregroundColor(.white)
-                .cornerRadius(25)
+                .clipShape(RoundedRectangle(cornerRadius: 25, style: .continuous))
+                .shadow(color: .honey900.opacity(0.2), radius: 10, x: 0, y: 4)
             }
             .disabled(viewModel.isLoggingIn)
         }

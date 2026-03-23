@@ -36,6 +36,7 @@ struct SettingsView: View {
                         }
                     }
                 }
+                .listRowBackground(Color.white.opacity(0.3))
 
                 // Apple Music
                 Section("Apple Music") {
@@ -87,6 +88,7 @@ struct SettingsView: View {
                             .foregroundColor(.secondary)
                     }
                 }
+                .listRowBackground(Color.white.opacity(0.3))
 
                 #if DEBUG
                 // Developer Settings
@@ -112,6 +114,7 @@ struct SettingsView: View {
                             .foregroundColor(.secondary)
                     }
                 }
+                .listRowBackground(Color.white.opacity(0.3))
                 #endif
 
                 // Logout
@@ -123,7 +126,10 @@ struct SettingsView: View {
                         }
                     }
                 }
+                .listRowBackground(Color.white.opacity(0.3))
             }
+            .scrollContentBackground(.hidden)
+            .meshGradientBackground()
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
