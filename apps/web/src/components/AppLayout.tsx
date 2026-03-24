@@ -190,7 +190,7 @@ export const AppLayout = ({
         </div>
       )}
 
-      <div className={`${isMobile || expanded ? 'bg-gemini-hover/50 rounded-3xl mx-2' : ''} py-4 flex flex-col gap-2 overflow-hidden overflow-y-auto max-h-[calc(100vh-300px)]`}>
+      <div className={`${isMobile || expanded ? 'bg-gemini-hover/50 rounded-3xl mx-2' : 'pr-3'} py-4 flex flex-col gap-2 overflow-hidden overflow-y-auto max-h-[calc(100vh-300px)]`}>
         {/* New Chat */}
         <div className={isMobile || expanded ? 'mx-2' : ''}>
           <button
