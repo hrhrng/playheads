@@ -190,9 +190,9 @@ export const AppLayout = ({
         </div>
       )}
 
-      <div className={`bg-gemini-hover/50 rounded-2xl ${isMobile || expanded ? 'mx-2' : 'mx-1'} py-4 flex flex-col gap-2 overflow-hidden overflow-y-auto max-h-[calc(100vh-300px)]`}>
+      <div className={`${isMobile || expanded ? 'bg-gemini-hover/50 rounded-2xl mx-2' : ''} py-4 flex flex-col ${isMobile || expanded ? 'gap-2' : 'gap-1 items-center'} overflow-hidden overflow-y-auto max-h-[calc(100vh-300px)]`}>
         {/* New Chat */}
-        <div className={isMobile || expanded ? 'mx-2' : 'mx-1'}>
+        <div className={isMobile || expanded ? 'mx-2' : ''}>
           <button
             onClick={handleNewChat}
             className={`w-full ${isMobile || expanded ? 'p-3' : 'p-2'} rounded-xl text-gemini-subtext hover:bg-white transition-colors flex items-center ${isMobile || expanded ? '' : 'justify-center'} overflow-hidden whitespace-nowrap`}
@@ -205,7 +205,7 @@ export const AppLayout = ({
         </div>
 
         {/* Divider */}
-        <div className="mx-4 border-t border-gray-300" />
+        {(isMobile || expanded) && <div className="mx-4 border-t border-gray-300" />}
 
         {/* Conversation List */}
         <ConversationList
@@ -223,8 +223,8 @@ export const AppLayout = ({
       </div>
 
       {/* Bottom section: User info with settings popover */}
-      <div className="mt-auto flex flex-col gap-2 mb-2 px-4">
-        <div className="p-3 flex items-center overflow-hidden whitespace-nowrap">
+      <div className={`mt-auto flex flex-col gap-2 mb-2 ${isMobile || expanded ? 'px-4' : 'px-0 items-center'}`}>
+        <div className={`${isMobile || expanded ? 'p-3' : 'p-2'} flex items-center ${isMobile || expanded ? '' : 'justify-center'} overflow-hidden whitespace-nowrap`}>
           <div className="w-6 flex justify-center shrink-0">
             <UserSettingsPopover
               userEmail={userEmail}
