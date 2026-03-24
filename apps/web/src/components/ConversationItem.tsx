@@ -80,6 +80,7 @@ export const ConversationItem = ({
         onClick={() => onSelect?.(conv.id)}
         className={`
           w-full p-3 rounded-xl transition-colors flex items-center overflow-hidden
+          ${!expanded ? 'justify-center' : ''}
           ${isActive ? 'bg-white text-gemini-text font-medium' : 'text-gemini-subtext hover:bg-white'}
         `}
       >
