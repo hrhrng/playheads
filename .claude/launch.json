@@ -12,6 +12,12 @@
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "admin", "dev"],
       "port": 8788
+    },
+    {
+      "name": "landing-dev",
+      "runtimeExecutable": "make",
+      "runtimeArgs": ["dev-landing"],
+      "port": 4321
     }
   ]
 }

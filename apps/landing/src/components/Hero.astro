@@ -1,29 +1,39 @@
 ---
-import MusicBars from './MusicBars.astro';
-import WaitlistForm from './WaitlistForm.tsx';
 ---
 
-<section class="flex flex-col items-center px-6 pt-16 pb-10">
-  <div class="flex flex-col items-center max-w-lg w-full">
-    <!-- Title -->
-    <div class="text-center space-y-3 animate-fade-in">
-      <h1 class="text-3xl font-semibold tracking-tight">The Playheads</h1>
-      <div class="flex items-center justify-center gap-3">
-        <div class="h-px w-10 bg-air-200" />
-        <MusicBars />
-        <div class="h-px w-10 bg-air-200" />
-      </div>
-      <p class="text-xs font-mono text-air-400 uppercase tracking-[0.25em]">Return to Music</p>
-    </div>
+<section class="relative px-6 bg-night-950 overflow-hidden snap-start h-screen">
+  <div class="absolute inset-0 opacity-[0.03] pointer-events-none" style="background-image: url('data:image/svg+xml,%3Csvg viewBox=%220 0 256 256%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noise%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.9%22 numOctaves=%224%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noise)%22/%3E%3C/svg%3E'); background-repeat: repeat;" />
 
-    <!-- Subtitle -->
-    <p class="text-air-500 text-center mt-6 text-sm leading-relaxed max-w-sm animate-fade-in-delay-1">
-      Your AI-powered music companion. Discover, explore, and experience music in a whole new way.
-    </p>
+  <div class="relative z-10 min-h-screen flex flex-col items-center justify-center max-w-2xl mx-auto text-center">
+    <h1 class="reveal-line font-display font-black text-5xl sm:text-6xl md:text-8xl text-night-50 tracking-tight leading-[1.05]" style="transition-delay: 0.1s">
+      Here's to the<br />crazy ones.
+    </h1>
 
-    <!-- Waitlist Form -->
-    <div class="w-full mt-8 animate-fade-in-delay-2">
-      <WaitlistForm client:load />
+    <div class="reveal-line mt-20 animate-scroll-hint" style="transition-delay: 0.6s">
+      <svg class="w-5 h-5 text-night-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 14l-7 7m0 0l-7-7" />
+      </svg>
     </div>
   </div>
 </section>
+
+<script is:inline>
+  requestAnimationFrame(() => {
+    const scrollRoot = document.querySelector('main');
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('visible');
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      { root: scrollRoot, threshold: 0.1 }
+    );
+
+    document.querySelectorAll('.reveal-line').forEach((el) => {
+      observer.observe(el);
+    });
+  });
+</script>

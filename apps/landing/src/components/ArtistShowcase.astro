@@ -1,0 +1,39 @@
+---
+interface Props {
+  name: string;
+  quote: string;
+  image: string;
+  alt: string;
+  imagePosition?: string;
+}
+
+const { name, quote, image, alt, imagePosition = 'center' } = Astro.props;
+---
+
+<section class="h-screen snap-start relative overflow-hidden">
+  <!-- Full-screen dark silhouette -->
+  <div class="absolute inset-0">
+    <img
+      src={image}
+      alt={alt}
+      class="w-full h-full object-cover"
+      style={`filter: grayscale(1) brightness(0.25) contrast(1.5); object-position: ${imagePosition};`}
+      loading="lazy"
+      decoding="async"
+    />
+    <!-- Left fade for text legibility -->
+    <div class="absolute inset-0 bg-gradient-to-r from-night-950/90 via-night-950/50 to-transparent" />
+  </div>
+
+  <!-- Quote — left-aligned, vertically centered -->
+  <div class="relative z-10 h-full flex items-center px-6 md:px-16">
+    <div class="max-w-md md:max-w-lg">
+      <blockquote class="reveal-line font-display text-2xl sm:text-3xl md:text-5xl text-night-100 leading-snug italic tracking-tight">
+        &ldquo;{quote}&rdquo;
+      </blockquote>
+      <p class="reveal-line mt-6 text-night-400 text-sm md:text-base tracking-widest uppercase font-sans">
+        {name}
+      </p>
+    </div>
+  </div>
+</section>

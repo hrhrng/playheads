@@ -3,5 +3,19 @@
 @tailwind utilities;
 
 body {
-  @apply bg-air-50 text-air-900 font-sans antialiased;
+  background-color: #111111;
+  color: #E0E0E0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scroll-triggered line reveal */
+.reveal-line {
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity 0.8s ease, transform 0.8s ease;
+}
+.reveal-line.visible {
+  opacity: 1;
+  transform: translateY(0);
 }
