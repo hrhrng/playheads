@@ -82,7 +82,7 @@ export const ToolCall = ({
       {/* Header — always visible, single compact line */}
       <button
         type="button"
-        className="flex items-center gap-2 w-full text-left py-1 text-xs text-gray-500 hover:text-gray-700 transition-colors"
+        className="flex items-center gap-2 w-full min-w-0 text-left py-1 text-xs text-gray-500 hover:text-gray-700 transition-colors"
         onClick={() => setIsExpanded(!isExpanded)}
       >
         {/* Status dot */}
@@ -93,7 +93,7 @@ export const ToolCall = ({
 
         {/* Inline summary (e.g. search query) */}
         {summary && !isExpanded && (
-          <span className="text-gray-400 truncate">{summary}</span>
+          <span className="text-gray-400 truncate min-w-0">{summary}</span>
         )}
 
         {/* Chevron */}
