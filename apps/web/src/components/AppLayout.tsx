@@ -276,16 +276,18 @@ export const AppLayout = ({
             style={{ width: `${width}px` }}
             className={`relative hidden md:flex flex-col py-6 shrink-0 z-20 ${isResizing ? '' : 'transition-all duration-300 ease-in-out'}`}
           >
-            {/* Resize Handle - positioned on the right edge */}
-            <div
-              onMouseDown={handleResizeStart}
-              className={`
-                absolute -right-px top-10 bottom-0 w-px cursor-ew-resize z-30
-                hover:bg-blue-400 transition-colors
-                ${isResizing ? 'bg-blue-500' : 'bg-transparent'}
-              `}
-              title="Drag to resize"
-            />
+            {/* Resize Handle - positioned on the right edge, hidden when collapsed */}
+            {expanded && (
+              <div
+                onMouseDown={handleResizeStart}
+                className={`
+                  absolute -right-px top-10 bottom-0 w-px cursor-ew-resize z-30
+                  hover:bg-blue-400 transition-colors
+                  ${isResizing ? 'bg-blue-500' : 'bg-transparent'}
+                `}
+                title="Drag to resize"
+              />
+            )}
             {navContent(false)}
           </nav>
 
