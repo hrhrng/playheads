@@ -180,7 +180,7 @@ export const AppLayout = ({
     <>
       {/* Burger Menu / toggle (desktop only) */}
       {!isMobile && (
-        <div className={`mb-8 ${expanded ? 'px-4' : 'px-2 flex justify-center'}`}>
+        <div className="mb-8 px-4">
           <button
             onClick={() => setExpanded(!expanded)}
             className="nav-btn"
@@ -190,12 +190,12 @@ export const AppLayout = ({
         </div>
       )}
 
-      <div className={`${isMobile || expanded ? 'bg-gemini-hover/50 rounded-2xl mx-2' : ''} py-4 flex flex-col ${isMobile || expanded ? 'gap-2' : 'gap-1 items-center'} overflow-hidden overflow-y-auto no-scrollbar max-h-[calc(100vh-300px)]`}>
+      <div className="bg-gemini-hover/50 rounded-3xl mx-2 py-4 flex flex-col gap-2 overflow-hidden overflow-y-auto max-h-[calc(100vh-300px)]">
         {/* New Chat */}
-        <div className={isMobile || expanded ? 'mx-2' : ''}>
+        <div className="mx-2">
           <button
             onClick={handleNewChat}
-            className={`w-full ${isMobile || expanded ? 'p-3' : 'p-2'} rounded-xl text-gemini-subtext hover:bg-white transition-colors flex items-center ${isMobile || expanded ? '' : 'justify-center'} overflow-hidden whitespace-nowrap`}
+            className="w-full p-3 rounded-xl text-gemini-subtext hover:bg-white transition-colors flex items-center overflow-hidden whitespace-nowrap"
           >
             <div className="w-6 flex justify-center shrink-0">
               <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
@@ -205,7 +205,7 @@ export const AppLayout = ({
         </div>
 
         {/* Divider */}
-        {(isMobile || expanded) && <div className="mx-4 border-t border-gray-300" />}
+        <div className="mx-4 border-t border-gray-300" />
 
         {/* Conversation List */}
         <ConversationList
@@ -223,8 +223,8 @@ export const AppLayout = ({
       </div>
 
       {/* Bottom section: User info with settings popover */}
-      <div className={`mt-auto flex flex-col gap-2 mb-2 ${isMobile || expanded ? 'px-4' : 'px-0 items-center'}`}>
-        <div className={`${isMobile || expanded ? 'p-3' : 'p-2'} flex items-center ${isMobile || expanded ? '' : 'justify-center'} overflow-hidden whitespace-nowrap`}>
+      <div className="mt-auto flex flex-col gap-2 mb-2 px-4">
+        <div className="p-3 flex items-center overflow-hidden whitespace-nowrap">
           <div className="w-6 flex justify-center shrink-0">
             <UserSettingsPopover
               userEmail={userEmail}
@@ -276,18 +276,16 @@ export const AppLayout = ({
             style={{ width: `${width}px` }}
             className={`relative hidden md:flex flex-col py-6 shrink-0 z-20 ${isResizing ? '' : 'transition-all duration-300 ease-in-out'}`}
           >
-            {/* Resize Handle - positioned on the right edge, hidden when collapsed */}
-            {expanded && (
-              <div
-                onMouseDown={handleResizeStart}
-                className={`
-                  absolute -right-px top-10 bottom-0 w-px cursor-ew-resize z-30
-                  hover:bg-blue-400 transition-colors
-                  ${isResizing ? 'bg-blue-500' : 'bg-transparent'}
-                `}
-                title="Drag to resize"
-              />
-            )}
+            {/* Resize Handle - positioned on the right edge */}
+            <div
+              onMouseDown={handleResizeStart}
+              className={`
+                absolute right-0 top-10 bottom-0 w-0.5 cursor-ew-resize z-30
+                hover:bg-blue-400 transition-colors
+                ${isResizing ? 'bg-blue-500' : 'bg-transparent'}
+              `}
+              title="Drag to resize"
+            />
             {navContent(false)}
           </nav>
 
