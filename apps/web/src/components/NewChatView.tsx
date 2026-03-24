@@ -16,6 +16,8 @@ interface NewChatViewProps {
   isPlaying?: boolean;
   /** Whether a session is being created */
   isLoading?: boolean;
+  /** Optional initial query to auto-send on mount (e.g. from landing page ?q= param) */
+  initialQuery?: string | null;
 }
 
 /**
@@ -26,10 +28,29 @@ export const NewChatView = ({
   suggestions = [],
   isDJSpeaking = false,
   isPlaying = false,
-  isLoading = false
+  isLoading = false,
+  initialQuery = null,
 }: NewChatViewProps): React.JSX.Element => {
   const [input, setInput] = useState<string>('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Capture ?q= on mount only (ref ensures single read)
+  const initialQueryRef = useRef<string | null>(
+    initialQuery?.trim() || (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('q') : null)
+  );
+  const hasSentInitialRef = useRef(false);
+
+  // Auto-send initial query from landing page ?q= param
+  useEffect(() => {
+    const query = initialQueryRef.current;
+    if (!query || hasSentInitialRef.current || isLoading) return;
+
+    hasSentInitialRef.current = true;
+    // Clear ?q= from URL to prevent re-sending on navigation
+    if (typeof window !== 'undefined' && window.location.search) {
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+    onSend(query);
+  }, [isLoading, onSend]);
 
   const handleSend = () => {
     if (input.trim() && !isLoading) {
