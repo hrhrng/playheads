@@ -442,9 +442,6 @@ export const ChatInterface = ({
           onSend={() => handleSendMessage()}
         />
 
-        <div className="text-center mt-2.5 text-[9px] text-gray-300 tracking-[0.2em] uppercase">
-          Playhead Radio &bull; Live
-        </div>
       </div>
 
       {/* Lyrics Overlay — rendered last to sit on top of everything */}
