@@ -280,7 +280,7 @@ export const AppLayout = ({
             <div
               onMouseDown={handleResizeStart}
               className={`
-                absolute right-0 top-10 bottom-0 w-0.5 cursor-ew-resize z-30
+                absolute -right-px top-10 bottom-0 w-px cursor-ew-resize z-30
                 hover:bg-blue-400 transition-colors
                 ${isResizing ? 'bg-blue-500' : 'bg-transparent'}
               `}
