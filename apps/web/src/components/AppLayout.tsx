@@ -190,37 +190,52 @@ export const AppLayout = ({
         </div>
       )}
 
-      <div className="bg-gemini-hover/50 rounded-3xl mx-2 py-4 flex flex-col gap-2 overflow-hidden overflow-y-auto max-h-[calc(100vh-300px)]">
-        {/* New Chat */}
-        <div className="mx-2">
+      {/* New Chat — standalone when collapsed */}
+      {!isMobile && !expanded && (
+        <div className="flex justify-center mb-4">
           <button
             onClick={handleNewChat}
-            className="w-full p-3 rounded-xl text-gemini-subtext hover:bg-white transition-colors flex items-center overflow-hidden whitespace-nowrap"
+            className="p-3 rounded-xl text-gemini-subtext hover:bg-gemini-hover transition-colors"
           >
-            <div className="w-6 flex justify-center shrink-0">
-              <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
-            </div>
-            <span className={`ml-3 truncate text-sm font-medium text-left transition-all duration-300 ${isMobile || expanded ? 'opacity-100 flex-1' : 'opacity-0 w-0 ml-0 overflow-hidden'}`}>New Chat</span>
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
           </button>
         </div>
+      )}
 
-        {/* Divider */}
-        <div className="mx-4 border-t border-gray-300" />
+      {/* Scrollable conversation container — only when expanded */}
+      {(isMobile || expanded) && (
+        <div className="bg-gemini-hover/50 rounded-3xl mx-2 py-4 flex flex-col gap-2 overflow-hidden overflow-y-auto max-h-[calc(100vh-300px)]">
+          {/* New Chat */}
+          <div className="mx-2">
+            <button
+              onClick={handleNewChat}
+              className="w-full p-3 rounded-xl text-gemini-subtext hover:bg-white transition-colors flex items-center overflow-hidden whitespace-nowrap"
+            >
+              <div className="w-6 flex justify-center shrink-0">
+                <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
+              </div>
+              <span className={`ml-3 truncate text-sm font-medium text-left transition-all duration-300 ${isMobile || expanded ? 'opacity-100 flex-1' : 'opacity-0 w-0 ml-0 overflow-hidden'}`}>New Chat</span>
+            </button>
+          </div>
 
-        {/* Conversation List */}
-        <ConversationList
-          conversations={conversations}
-          expanded={isMobile || expanded}
-          activeConversationId={activeConversationId}
-          onSelectConversation={handleSelectConversation}
-          onPinConversation={onPinConversation}
-          onRenameConversation={onRenameConversation}
-          onDeleteConversation={handleDeleteRequest}
-          onLoadMore={onLoadMoreConversations}
-          hasMore={hasMoreConversations}
-          isLoadingMore={isLoadingMoreConversations}
-        />
-      </div>
+          {/* Divider */}
+          <div className="mx-4 border-t border-gray-300" />
+
+          {/* Conversation List */}
+          <ConversationList
+            conversations={conversations}
+            expanded={isMobile || expanded}
+            activeConversationId={activeConversationId}
+            onSelectConversation={handleSelectConversation}
+            onPinConversation={onPinConversation}
+            onRenameConversation={onRenameConversation}
+            onDeleteConversation={handleDeleteRequest}
+            onLoadMore={onLoadMoreConversations}
+            hasMore={hasMoreConversations}
+            isLoadingMore={isLoadingMoreConversations}
+          />
+        </div>
+      )}
 
       {/* Bottom section: User info with settings popover */}
       <div className="mt-auto flex flex-col gap-2 mb-2 px-4">
