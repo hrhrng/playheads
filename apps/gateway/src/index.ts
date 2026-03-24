@@ -173,8 +173,8 @@ export default {
       return env.WEB.fetch(request);
     }
 
-    // Landing page: root path + landing-specific assets (/_astro/*)
-    if (url.pathname === "/" || url.pathname.startsWith("/_astro/")) {
+    // Landing page: root path + landing-specific assets
+    if (url.pathname === "/" || url.pathname.startsWith("/_astro/") || url.pathname.startsWith("/artists/")) {
       // Logged-in users at root → redirect to app
       if (url.pathname === "/" && hasSessionCookie(request)) {
         if (env.APP_HOSTNAME) {
