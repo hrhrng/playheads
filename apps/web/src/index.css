@@ -78,22 +78,6 @@
     scrollbar-width: none;
   }
 
-  .thin-scrollbar::-webkit-scrollbar {
-    width: 3px;
-  }
-
-  .thin-scrollbar::-webkit-scrollbar-thumb {
-    background: transparent;
-    border-radius: 3px;
-  }
-
-  .thin-scrollbar:hover::-webkit-scrollbar-thumb {
-    background: #D1D5DB;
-  }
-
-  .thin-scrollbar {
-    scrollbar-width: thin;
-  }
 
   /* Lyrics scroll container — fade edges */
   .lyrics-mask {
