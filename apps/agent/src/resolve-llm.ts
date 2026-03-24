@@ -35,7 +35,7 @@ export interface ResolvedLLM extends LLMModelResult {
 // Decrypt helper
 // ---------------------------------------------------------------------------
 
-async function decryptApiKey(encoded: string, env: Env): Promise<string> {
+export async function decryptApiKey(encoded: string, env: Env): Promise<string> {
   const hex = (env as unknown as Record<string, string>)["ADMIN_ENCRYPTION_KEY"];
   if (!hex || hex.length < 64) return encoded;
   try {

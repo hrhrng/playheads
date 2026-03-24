@@ -12,7 +12,7 @@ import { streamText, convertToModelMessages, stepCountIs, tool } from "ai";
 import { z } from "zod";
 import { createMusicTools } from "./tools";
 import { generateAndUpdateTitle } from "./title";
-import { resolveLLM } from "./resolve-llm";
+import { resolveLLM, decryptApiKey } from "./resolve-llm";
 import type { Env, PlaybackState } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -241,7 +241,7 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
     ).first<{ providerType: string; apiKey: string }>().catch(() => null);
 
     const searchDbOverride = dbSearchConfig
-      ? { providerType: dbSearchConfig.providerType, apiKey: dbSearchConfig.apiKey || "" }
+      ? { providerType: dbSearchConfig.providerType, apiKey: dbSearchConfig.apiKey ? await decryptApiKey(dbSearchConfig.apiKey, this.env) : "" }
       : undefined;
 
     // Build web search tool: native Anthropic search or external (Brave/Tavily)
