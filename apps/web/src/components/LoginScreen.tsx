@@ -17,6 +17,10 @@ interface LoginScreenProps {
 
 export function LoginScreen({ email, setEmail, loading, message, onLogin }: LoginScreenProps) {
   const handleSocialLogin = async (provider: 'apple' | 'google') => {
+    // Preserve ?q= query param across auth redirect
+    const q = new URLSearchParams(window.location.search).get('q');
+    if (q) localStorage.setItem('playheads_pending_query', q);
+
     await authClient.signIn.social({
       provider,
       callbackURL: window.location.origin,

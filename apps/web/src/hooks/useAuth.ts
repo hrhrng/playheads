@@ -97,6 +97,10 @@ export function useAuth() {
       // Waitlist check failed — proceed with login anyway
     }
 
+    // Preserve ?q= query param across auth redirect
+    const q = new URLSearchParams(window.location.search).get('q');
+    if (q) localStorage.setItem('playheads_pending_query', q);
+
     // Send magic link
     const { error } = await authClient.signIn.magicLink({
       email,
