@@ -28,10 +28,10 @@ const { name, quote, image, alt, imagePosition = 'center' } = Astro.props;
   <!-- Quote — left-aligned, vertically centered -->
   <div class="relative z-10 h-full flex items-center px-6 md:px-16">
     <div class="max-w-md md:max-w-lg">
-      <blockquote class="reveal-line font-display text-2xl sm:text-3xl md:text-5xl text-night-100 leading-snug italic tracking-tight">
+      <blockquote class="font-display text-2xl sm:text-3xl md:text-5xl text-night-100 leading-snug italic tracking-tight">
         &ldquo;{quote}&rdquo;
       </blockquote>
-      <p class="reveal-line mt-6 text-night-400 text-sm md:text-base tracking-widest uppercase font-sans">
+      <p class="mt-6 text-night-400 text-sm md:text-base tracking-widest uppercase font-sans">
         {name}
       </p>
     </div>

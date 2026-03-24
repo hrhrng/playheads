@@ -18,22 +18,7 @@
 </section>
 
 <script is:inline>
-  requestAnimationFrame(() => {
-    const scrollRoot = document.querySelector('main');
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add('visible');
-            observer.unobserve(entry.target);
-          }
-        });
-      },
-      { root: scrollRoot, threshold: 0.1 }
-    );
-
-    document.querySelectorAll('.reveal-line').forEach((el) => {
-      observer.observe(el);
-    });
+  document.querySelectorAll('.reveal-line').forEach((el) => {
+    el.classList.add('visible');
   });
 </script>
