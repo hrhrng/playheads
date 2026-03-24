@@ -37,8 +37,8 @@ export default function WaitlistForm() {
         <div
           className={`p-3 text-sm rounded-lg text-center ${
             status === 'success'
-              ? 'bg-green-50 text-green-700'
-              : 'bg-red-50 text-red-600'
+              ? 'bg-green-900/30 text-green-400 border border-green-800/50'
+              : 'bg-red-900/30 text-red-400 border border-red-800/50'
           }`}
         >
           {message}
@@ -53,20 +53,16 @@ export default function WaitlistForm() {
           onChange={(e) => setEmail(e.target.value)}
           required
           disabled={status === 'loading'}
-          className="flex-1 h-12 px-4 rounded-lg border border-air-200 bg-white focus:outline-none focus:border-air-900 transition-colors disabled:opacity-50"
+          className="flex-1 h-12 px-4 rounded-xl border border-night-600 bg-night-800 text-night-50 placeholder-night-400 focus:outline-none focus:border-night-300 transition-colors disabled:opacity-50"
         />
         <button
           type="submit"
           disabled={status === 'loading'}
-          className="h-12 px-6 rounded-lg bg-black text-white text-sm font-medium hover:bg-gray-800 transition-colors disabled:opacity-50 whitespace-nowrap"
+          className="h-12 px-6 rounded-xl bg-night-50 text-night-950 text-sm font-medium hover:bg-white transition-colors disabled:opacity-50 whitespace-nowrap"
         >
           {status === 'loading' ? 'Joining...' : 'Join Waitlist'}
         </button>
       </div>
-
-      <p className="text-air-400 text-xs text-center">
-        Early access is limited. We'll notify you when it's your turn.
-      </p>
     </form>
   );
 }

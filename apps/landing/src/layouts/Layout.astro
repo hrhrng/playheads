@@ -1,10 +1,12 @@
 ---
+import '../styles/global.css';
+
 interface Props {
   title: string;
   description?: string;
 }
 
-const { title, description = 'Your AI-powered music companion. Discover, explore, and experience music in a whole new way.' } = Astro.props;
+const { title, description = 'Playheads — Your AI music companion. Chat with an AI DJ that plays music through Apple Music.' } = Astro.props;
 const appUrl = import.meta.env.PUBLIC_APP_URL || '/';
 const siteUrl = 'https://playheads.ai';
 const canonicalUrl = new URL(Astro.url.pathname, siteUrl).href;
@@ -37,6 +39,11 @@ const ogImage = `${siteUrl}/og-image.png`;
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content={ogImage} />
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,900;1,400;1,700&display=swap" rel="stylesheet" />
 
     <!-- Favicon -->
     <link rel="icon" type="image/png" href="/favicon.png" />

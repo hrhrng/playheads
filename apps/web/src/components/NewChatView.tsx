@@ -16,6 +16,8 @@ interface NewChatViewProps {
   isPlaying?: boolean;
   /** Whether a session is being created */
   isLoading?: boolean;
+  /** Optional initial query to auto-send on mount (e.g. from landing page ?q= param) */
+  initialQuery?: string | null;
 }
 
 /**
@@ -26,10 +28,34 @@ export const NewChatView = ({
   suggestions = [],
   isDJSpeaking = false,
   isPlaying = false,
-  isLoading = false
+  isLoading = false,
+  initialQuery = null,
 }: NewChatViewProps): React.JSX.Element => {
   const [input, setInput] = useState<string>('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Capture ?q= on mount only (ref ensures single read)
+  // Also checks localStorage for query persisted across auth redirect
+  const resolvedQuery = initialQuery?.trim()
+    || (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('q') : null)
+    || (typeof window !== 'undefined' ? localStorage.getItem('playheads_pending_query') : null);
+  const initialQueryRef = useRef<string | null>(resolvedQuery);
+  const hasSentInitialRef = useRef(false);
+
+  // Auto-send initial query from landing page ?q= param or localStorage
+  useEffect(() => {
+    const query = initialQueryRef.current;
+    if (!query || hasSentInitialRef.current || isLoading) return;
+
+    hasSentInitialRef.current = true;
+    // Clean up: remove ?q= from URL and pending query from localStorage
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('playheads_pending_query');
+      if (window.location.search) {
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+    }
+    onSend(query);
+  }, [isLoading, onSend]);
 
   const handleSend = () => {
     if (input.trim() && !isLoading) {

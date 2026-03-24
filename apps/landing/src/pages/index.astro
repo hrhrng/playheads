@@ -1,41 +1,60 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import Hero from '../components/Hero.astro';
-import Features from '../components/Features.astro';
-import Footer from '../components/Footer.astro';
+import ArtistShowcase from '../components/ArtistShowcase.astro';
+import ChatDemo from '../components/ChatDemo.tsx';
 
 export const prerender = true;
 
 const appUrl = import.meta.env.PUBLIC_APP_URL || '/';
+
+const artists = [
+  {
+    name: 'John Lennon',
+    quote: 'When I heard it, it was so great I couldn\'t speak.',
+    image: '/artists/lennon.jpg',
+    alt: 'John Lennon performing Give Peace a Chance, 1969',
+  },
+  {
+    name: 'Bob Dylan',
+    quote: 'Hearing him for the first time was like busting out of jail.',
+    image: '/artists/bob-dylan.jpg',
+    alt: 'Bob Dylan performing at Finsbury Park, London, 2011',
+  },
+  {
+    name: 'Michael Jackson',
+    quote: 'Do you feel your music?',
+    image: '/artists/michael-jackson.jpg',
+    alt: 'Michael Jackson performing at Victory Tour, Arrowhead Stadium, 1984',
+    imagePosition: 'right top',
+  },
+];
 ---
 
 <Layout title="The Playheads — AI Music Companion | Discover Music in a New Way">
-  <!-- Nav -->
-  <nav class="sticky top-0 z-50 backdrop-blur-lg bg-air-50/80 border-b border-air-100/60" aria-label="Main navigation">
+  <nav class="fixed top-0 left-0 right-0 z-50 backdrop-blur-lg bg-night-950/80 border-b border-night-700/40" aria-label="Main navigation">
     <div class="flex items-center justify-between px-6 py-3 max-w-5xl mx-auto">
-      <a href="/" class="text-sm font-semibold tracking-tight" aria-label="The Playheads - Home">The Playheads</a>
-      <div class="flex items-center gap-6">
-        <a href="#features" class="text-sm text-air-400 hover:text-air-900 transition-colors hidden sm:block">Features</a>
-        <a
-          id="auth-link"
-          href={appUrl}
-          class="text-sm font-medium px-4 py-1.5 rounded-full border border-air-200 text-air-900 hover:bg-white hover:border-air-300 transition-all"
-        >
-          Sign In
-        </a>
-      </div>
+      <a href="/" class="text-sm font-semibold tracking-tight text-night-50" aria-label="The Playheads - Home">The Playheads</a>
+      <a
+        id="auth-link"
+        href={appUrl}
+        class="text-sm font-medium px-4 py-1.5 rounded-full border border-night-600 text-night-100 hover:bg-night-800 hover:border-night-400 transition-all"
+      >
+        Sign In
+      </a>
     </div>
   </nav>
 
-  <main>
+  <main class="h-screen overflow-y-scroll snap-y snap-mandatory">
     <Hero />
-    <Features />
+    {artists.map((artist) => (
+      <ArtistShowcase {...artist} />
+    ))}
+    <ChatDemo appUrl={appUrl} client:visible />
   </main>
-  <Footer />
 </Layout>
 
 <script define:vars={{ appUrl }}>
-  // Check for better-auth session cookie
   if (document.cookie.includes('better-auth.session_token')) {
     const link = document.getElementById('auth-link');
     if (link) {
