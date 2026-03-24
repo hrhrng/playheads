@@ -91,15 +91,15 @@ export const NewChatView = ({
     <div className="flex flex-col items-center justify-center h-full w-full px-4 animate-fade-in relative">
 
       {/* Center Content */}
-      <div className="flex flex-col items-center w-full max-w-xl space-y-6 z-20">
+      <div className="flex flex-col items-center w-full max-w-2xl space-y-8 z-20">
         {/* Heading */}
-        <h2 className="text-xl font-medium text-gray-700 tracking-tight">
+        <h2 className="text-3xl font-medium text-gray-700 tracking-tight">
           What's Going On?
         </h2>
 
         {/* Input Area - Centered Style */}
         <div className="w-full relative group">
-          <div className="relative bg-white rounded-2xl shadow-sm border border-gray-200 flex items-center p-2 pl-4 pr-2 focus-within:shadow-md focus-within:border-gray-300 transition-all">
+          <div className="relative bg-white rounded-2xl shadow-sm border border-gray-200 flex items-center p-3 pl-5 pr-3 focus-within:shadow-md focus-within:border-gray-300 transition-all">
             <textarea
               ref={textareaRef}
               rows={1}
@@ -112,7 +112,7 @@ export const NewChatView = ({
                 }
               }}
               placeholder={isDJSpeaking ? 'Push to Interrupt...' : 'Start a vibe...'}
-              className="flex-1 bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-gray-800 placeholder-gray-400 text-sm resize-none py-2.5 max-h-32 no-scrollbar"
+              className="flex-1 bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-gray-800 placeholder-gray-400 text-base resize-none py-3 max-h-32 no-scrollbar"
               autoFocus
               disabled={isLoading}
             />
@@ -146,7 +146,7 @@ export const NewChatView = ({
             <button
               key={idx}
               onClick={() => handleSuggestionClick(text)}
-              className="px-3.5 py-1.5 bg-white border border-gray-200 rounded-full text-xs text-gray-400 hover:text-gray-600 hover:border-gray-300 transition-all"
+              className="px-4 py-2 bg-white border border-gray-200 rounded-full text-sm text-gray-400 hover:text-gray-600 hover:border-gray-300 transition-all"
             >
               {text}
             </button>

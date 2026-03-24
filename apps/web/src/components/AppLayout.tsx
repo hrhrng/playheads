@@ -180,7 +180,7 @@ export const AppLayout = ({
     <>
       {/* Burger Menu / toggle (desktop only) */}
       {!isMobile && (
-        <div className="mb-8 px-4">
+        <div className="mb-3 px-4">
           <button
             onClick={() => setExpanded(!expanded)}
             className="nav-btn"
@@ -190,41 +190,41 @@ export const AppLayout = ({
         </div>
       )}
 
-      <div className="bg-gemini-hover/50 rounded-3xl mx-2 py-4 flex flex-col gap-2 overflow-hidden overflow-y-auto max-h-[calc(100vh-300px)]">
-        {/* New Chat */}
-        <div className="mx-2">
-          <button
-            onClick={handleNewChat}
-            className="w-full p-3 rounded-xl text-gemini-subtext hover:bg-white transition-colors flex items-center overflow-hidden whitespace-nowrap"
-          >
-            <div className="w-6 flex justify-center shrink-0">
-              <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
-            </div>
-            <span className={`ml-3 truncate text-sm font-medium text-left transition-all duration-300 ${isMobile || expanded ? 'opacity-100 flex-1' : 'opacity-0 w-0 ml-0 overflow-hidden'}`}>New Chat</span>
-          </button>
-        </div>
-
-        {/* Divider */}
-        <div className="mx-4 border-t border-gray-300" />
-
-        {/* Conversation List */}
-        <ConversationList
-          conversations={conversations}
-          expanded={isMobile || expanded}
-          activeConversationId={activeConversationId}
-          onSelectConversation={handleSelectConversation}
-          onPinConversation={onPinConversation}
-          onRenameConversation={onRenameConversation}
-          onDeleteConversation={handleDeleteRequest}
-          onLoadMore={onLoadMoreConversations}
-          hasMore={hasMoreConversations}
-          isLoadingMore={isLoadingMoreConversations}
-        />
+      {/* New Chat — always at this level, same position expanded or collapsed */}
+      <div className="px-4 mb-2">
+        <button
+          onClick={handleNewChat}
+          className="w-full p-3 rounded-xl text-gemini-subtext hover:bg-gemini-hover transition-colors flex items-center overflow-hidden whitespace-nowrap"
+        >
+          <div className="w-6 flex justify-center shrink-0">
+            <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
+          </div>
+          <span className={`ml-3 truncate text-sm font-medium text-left transition-all duration-300 ${isMobile || expanded ? 'opacity-100 flex-1' : 'opacity-0 w-0 ml-0 overflow-hidden'}`}>New Chat</span>
+        </button>
       </div>
 
+      {/* Scrollable conversation container — only when expanded */}
+      {(isMobile || expanded) && (
+        <div className="bg-gemini-hover/50 rounded-3xl mx-2 py-4 flex flex-col gap-2 overflow-hidden overflow-y-auto max-h-[calc(100vh-300px)]">
+          {/* Conversation List */}
+          <ConversationList
+            conversations={conversations}
+            expanded={isMobile || expanded}
+            activeConversationId={activeConversationId}
+            onSelectConversation={handleSelectConversation}
+            onPinConversation={onPinConversation}
+            onRenameConversation={onRenameConversation}
+            onDeleteConversation={handleDeleteRequest}
+            onLoadMore={onLoadMoreConversations}
+            hasMore={hasMoreConversations}
+            isLoadingMore={isLoadingMoreConversations}
+          />
+        </div>
+      )}
+
       {/* Bottom section: User info with settings popover */}
-      <div className="mt-auto flex flex-col gap-2 mb-2 px-4">
-        <div className="p-3 flex items-center overflow-hidden whitespace-nowrap">
+      <div className="mt-auto mb-2 px-4">
+        <div className="p-2 flex items-center overflow-hidden whitespace-nowrap">
           <div className="w-6 flex justify-center shrink-0">
             <UserSettingsPopover
               userEmail={userEmail}

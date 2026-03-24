@@ -18,7 +18,7 @@ Examples:
 Conversation:
 {conversation}
 
-Title (5 words max):`;
+Title (5 words max, no markdown symbols):`;
 
 export async function generateConversationTitle(
   messages: Array<{ role: string; content?: string }>,

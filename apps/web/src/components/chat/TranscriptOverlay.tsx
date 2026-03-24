@@ -32,11 +32,7 @@ export const TranscriptOverlay = ({
         showHistory ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
       }`}
     >
-      <h3 className="text-[10px] font-medium text-gray-400 uppercase tracking-[0.2em] mb-8">
-        Studio Transcript
-      </h3>
-
-      <div className="w-full px-6 overflow-y-auto no-scrollbar pb-44">
+      <div className="w-full px-6 overflow-y-auto no-scrollbar pb-44 pt-8">
       <div className="max-w-xl mx-auto">
         <MessageList messages={messages} isLoading={isLoading} />
         <div ref={endRef} />

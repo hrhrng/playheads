@@ -12,7 +12,7 @@ import { streamText, convertToModelMessages, stepCountIs, tool } from "ai";
 import { z } from "zod";
 import { createMusicTools } from "./tools";
 import { generateAndUpdateTitle } from "./title";
-import { resolveLLM } from "./resolve-llm";
+import { resolveLLM, decryptApiKey } from "./resolve-llm";
 import type { Env, PlaybackState } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -64,24 +64,33 @@ Be conversational and fun! Keep responses concise.`;
  */
 function buildWebSearchTool(env: Env, dbOverride?: { providerType: string; apiKey: string }) {
   const provider = (dbOverride?.providerType || env.SEARCH_PROVIDER || "").toLowerCase();
+  console.log(`[WebSearch] buildWebSearchTool provider=${provider} dbOverride=${JSON.stringify(dbOverride ? { providerType: dbOverride.providerType, hasApiKey: !!dbOverride.apiKey } : null)} envProvider=${env.SEARCH_PROVIDER || "unset"}`);
 
   if (provider === "brave") {
     const apiKey = dbOverride?.apiKey || env.BRAVE_SEARCH_API_KEY;
-    if (!apiKey) return undefined;
+    if (!apiKey) {
+      console.log("[WebSearch] Brave: no API key, returning undefined");
+      return undefined;
+    }
+    console.log("[WebSearch] Brave: building tool");
     return tool({
       description: "Search the web for music recommendations, artist info, trending songs, or genre exploration.",
       inputSchema: z.object({ query: z.string().describe("Search query") }),
       execute: async ({ query }: { query: string }) => {
+        console.log(`[WebSearch] Brave: executing query="${query}"`);
         try {
-          const res = await fetch(
-            `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5`,
-            { headers: { "X-Subscription-Token": apiKey, Accept: "application/json" } }
-          );
-          const data = await res.json() as { web?: { results?: Array<{ title: string; url: string; description: string }> } };
+          const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5`;
+          const res = await fetch(url, { headers: { "X-Subscription-Token": apiKey, Accept: "application/json" } });
+          console.log(`[WebSearch] Brave: status=${res.status} statusText=${res.statusText}`);
+          const rawText = await res.text();
+          console.log(`[WebSearch] Brave: rawResponse=${rawText.substring(0, 500)}`);
+          const data = JSON.parse(rawText) as { web?: { results?: Array<{ title: string; url: string; description: string }> } };
           const results = data.web?.results || [];
+          console.log(`[WebSearch] Brave: resultCount=${results.length}`);
           if (!results.length) return `No results found for: ${query}`;
           return results.map((r, i) => `${i + 1}. ${r.title}\n${r.url}\n${r.description}`).join("\n\n");
         } catch (e) {
+          console.error(`[WebSearch] Brave: error=`, e);
           return `Web search failed: ${e}`;
         }
       },
@@ -90,26 +99,38 @@ function buildWebSearchTool(env: Env, dbOverride?: { providerType: string; apiKe
 
   if (provider === "tavily") {
     const apiKey = dbOverride?.apiKey || env.TAVILY_API_KEY;
-    if (!apiKey) return undefined;
+    if (!apiKey) {
+      console.log("[WebSearch] Tavily: no API key, returning undefined");
+      return undefined;
+    }
+    console.log("[WebSearch] Tavily: building tool");
     return tool({
       description: "Search the web for music recommendations, artist info, trending songs, or genre exploration.",
       inputSchema: z.object({ query: z.string().describe("Search query") }),
       execute: async ({ query }: { query: string }) => {
+        console.log(`[WebSearch] Tavily: executing query="${query}"`);
         try {
           const res = await fetch("https://api.tavily.com/search", {
             method: "POST",
             headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
             body: JSON.stringify({ query, max_results: 5, search_depth: "basic" }),
           });
-          const data = await res.json() as { results?: Array<{ title: string; url: string; content: string }> };
+          console.log(`[WebSearch] Tavily: status=${res.status} statusText=${res.statusText}`);
+          const rawText = await res.text();
+          console.log(`[WebSearch] Tavily: rawResponse=${rawText.substring(0, 500)}`);
+          const data = JSON.parse(rawText) as { results?: Array<{ title: string; url: string; content: string }> };
+          const resultCount = (data.results || []).length;
+          console.log(`[WebSearch] Tavily: resultCount=${resultCount}`);
           return (data.results || []).map((r, i) => `${i + 1}. ${r.title}\n${r.url}\n${r.content}`).join("\n\n");
         } catch (e) {
+          console.error(`[WebSearch] Tavily: error=`, e);
           return `Web search failed: ${e}`;
         }
       },
     });
   }
 
+  console.log(`[WebSearch] No matching provider for "${provider}", returning undefined`);
   return undefined;
 }
 
@@ -220,21 +241,26 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
     ).first<{ providerType: string; apiKey: string }>().catch(() => null);
 
     const searchDbOverride = dbSearchConfig
-      ? { providerType: dbSearchConfig.providerType, apiKey: dbSearchConfig.apiKey || "" }
+      ? { providerType: dbSearchConfig.providerType, apiKey: dbSearchConfig.apiKey ? await decryptApiKey(dbSearchConfig.apiKey, this.env) : "" }
       : undefined;
 
     // Build web search tool: native Anthropic search or external (Brave/Tavily)
     const effectiveSearchProvider = (searchDbOverride?.providerType || this.env.SEARCH_PROVIDER || (card?.nativeSearch ? "anthropic" : "")).toLowerCase();
+    console.log(`[WebSearch] Resolution: dbOverride=${JSON.stringify(searchDbOverride ? { providerType: searchDbOverride.providerType, hasApiKey: !!searchDbOverride.apiKey } : null)} envProvider=${this.env.SEARCH_PROVIDER || "unset"} nativeSearch=${card?.nativeSearch} effective="${effectiveSearchProvider}" hasAnthropicInstance=${!!anthropicInstance}`);
 
     const musicTools = createMusicTools({ env: this.env, state: globalState, storefront });
     let tools: Parameters<typeof streamText>[0]["tools"] = musicTools;
 
     if (effectiveSearchProvider === "anthropic" && anthropicInstance) {
+      console.log("[WebSearch] Using Anthropic native webSearch_20250305");
       tools = { ...musicTools, web_search: anthropicInstance.tools.webSearch_20250305({ maxUses: 5 }) };
     } else {
       const webSearchTool = buildWebSearchTool(this.env, searchDbOverride);
+      console.log(`[WebSearch] Custom tool built: ${webSearchTool ? "yes" : "no (undefined)"}`);
       if (webSearchTool) {
         tools = { ...musicTools, web_search: webSearchTool };
+      } else {
+        console.log("[WebSearch] WARNING: No web search tool registered!");
       }
     }
 
