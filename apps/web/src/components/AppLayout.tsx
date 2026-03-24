@@ -195,7 +195,7 @@ export const AppLayout = ({
         <div className="mx-2">
           <button
             onClick={handleNewChat}
-            className={`w-full p-2 rounded-xl text-gemini-subtext hover:bg-white transition-colors flex items-center overflow-hidden whitespace-nowrap ${!isMobile && !expanded ? 'justify-center' : ''}`}
+            className="w-full p-3 rounded-xl text-gemini-subtext hover:bg-white transition-colors flex items-center overflow-hidden whitespace-nowrap"
           >
             <div className="w-6 flex justify-center shrink-0">
               <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
