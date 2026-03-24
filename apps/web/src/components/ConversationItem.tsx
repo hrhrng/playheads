@@ -75,11 +75,11 @@ export const ConversationItem = ({
   };
 
   return (
-    <div className="group relative mx-2">
+    <div className={`group relative ${expanded ? 'mx-2' : 'mx-1'}`}>
       <button
         onClick={() => onSelect?.(conv.id)}
         className={`
-          w-full p-3 rounded-xl transition-colors flex items-center overflow-hidden
+          w-full ${expanded ? 'p-3' : 'p-2 justify-center'} rounded-xl transition-colors flex items-center overflow-hidden
           ${isActive ? 'bg-white text-gemini-text font-medium' : 'text-gemini-subtext hover:bg-white'}
         `}
       >

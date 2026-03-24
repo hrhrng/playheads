@@ -8,7 +8,7 @@ const WIDTH_KEY = 'nav-sidebar-width';
 const MIN_WIDTH = 200;
 const MAX_WIDTH = 400;
 const DEFAULT_WIDTH = 256;
-const COLLAPSED_WIDTH = 80;
+const COLLAPSED_WIDTH = 64;
 const AUTO_COLLAPSE_THRESHOLD = 120;
 
 /**

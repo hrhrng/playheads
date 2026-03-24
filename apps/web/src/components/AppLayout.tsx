@@ -180,7 +180,7 @@ export const AppLayout = ({
     <>
       {/* Burger Menu / toggle (desktop only) */}
       {!isMobile && (
-        <div className="mb-8 px-4">
+        <div className={`mb-8 ${expanded ? 'px-4' : 'px-2 flex justify-center'}`}>
           <button
             onClick={() => setExpanded(!expanded)}
             className="nav-btn"
@@ -190,12 +190,12 @@ export const AppLayout = ({
         </div>
       )}
 
-      <div className="bg-gemini-hover/50 rounded-2xl mx-2 py-4 flex flex-col gap-2 overflow-hidden overflow-y-auto max-h-[calc(100vh-300px)]">
+      <div className={`bg-gemini-hover/50 rounded-2xl ${isMobile || expanded ? 'mx-2' : 'mx-1'} py-4 flex flex-col gap-2 overflow-hidden overflow-y-auto max-h-[calc(100vh-300px)]`}>
         {/* New Chat */}
-        <div className="mx-2">
+        <div className={isMobile || expanded ? 'mx-2' : 'mx-1'}>
           <button
             onClick={handleNewChat}
-            className="w-full p-3 rounded-xl text-gemini-subtext hover:bg-white transition-colors flex items-center overflow-hidden whitespace-nowrap"
+            className={`w-full ${isMobile || expanded ? 'p-3' : 'p-2'} rounded-xl text-gemini-subtext hover:bg-white transition-colors flex items-center ${isMobile || expanded ? '' : 'justify-center'} overflow-hidden whitespace-nowrap`}
           >
             <div className="w-6 flex justify-center shrink-0">
               <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
