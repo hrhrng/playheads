@@ -78,7 +78,6 @@
     scrollbar-width: none;
   }
 
-
   /* Lyrics scroll container — fade edges */
   .lyrics-mask {
     mask-image: linear-gradient(
