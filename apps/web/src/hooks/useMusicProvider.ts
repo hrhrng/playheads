@@ -128,6 +128,7 @@ export function useMusicProvider({
   // ── Queue restore from localStorage (no autoplay) ──────────────
   const initialRestoreDone = useRef(false);
   const QUEUE_STORAGE_KEY = 'playheads_queue';
+  const QUEUE_INDEX_KEY = 'playheads_queue_index';
   const PLAYBACK_POS_KEY = 'playheads_playback_pos';
 
   useEffect(() => {
@@ -139,15 +140,22 @@ export function useMusicProvider({
       if (raw) {
         const tracks = JSON.parse(raw);
         if (Array.isArray(tracks) && tracks.length > 0) {
-          console.log('[useMusicProvider] restore:', tracks.length, 'tracks from localStorage');
-          queueHook.setQueue(tracks);
+          // Restore saved index (default to 0)
+          let savedIndex = 0;
+          try {
+            savedIndex = parseInt(localStorage.getItem(QUEUE_INDEX_KEY) || '0', 10) || 0;
+          } catch { /* ignore */ }
+          savedIndex = Math.max(0, Math.min(savedIndex, tracks.length - 1));
+
+          console.log('[useMusicProvider] restore:', tracks.length, 'tracks, index=', savedIndex, 'from localStorage');
+          queueHook.setQueue(tracks, savedIndex);
 
           // Restore playback position for display (visual only — no seek)
           let savedPos = 0;
           try {
             savedPos = parseFloat(localStorage.getItem(PLAYBACK_POS_KEY) || '0') || 0;
           } catch { /* ignore */ }
-          provider.setDisplayTrack(tracks[0], savedPos);
+          provider.setDisplayTrack(tracks[savedIndex], savedPos);
 
           // Prime MusicKit queue and seek to saved position (no play).
           // React state is authoritative; queueItemsDidChange is not subscribed.
@@ -158,13 +166,14 @@ export function useMusicProvider({
     finishRestore();
   }, [provider, isInitializing]);
 
-  // ── Persist queue to localStorage ─────────────────────────────
+  // ── Persist queue + index to localStorage ────────────────────
   useEffect(() => {
     if (!initialRestoreDone.current) return;
     try {
       localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(queueHook.queue));
+      localStorage.setItem(QUEUE_INDEX_KEY, String(queueHook.currentIndex));
     } catch { /* ignore */ }
-  }, [queueHook.queue]);
+  }, [queueHook.queue, queueHook.currentIndex]);
 
   // ── Persist playback position to localStorage ─────────────────
   useEffect(() => {

@@ -55,8 +55,10 @@ interface ChatInterfaceProps {
   onSkipNext?: () => Promise<void>;
   /** Skip to previous track */
   onSkipPrev?: () => Promise<void>;
-  /** Full queue — queue[0] is now playing, queue[1..] is up next */
+  /** Full queue */
   queue?: UnifiedTrack[];
+  /** Index of now-playing track in queue (-1 = none) */
+  queueIndex?: number;
 }
 
 /**
@@ -87,6 +89,7 @@ export const ChatInterface = ({
   onSkipNext,
   onSkipPrev,
   queue: queueTracks = [],
+  queueIndex = -1,
 }: ChatInterfaceProps) => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -142,7 +145,7 @@ export const ChatInterface = ({
   const showHistoryRef = useRef(showHistory);
   showHistoryRef.current = showHistory;
 
-  const nextTrack = queueTracks[1] || null;
+  const nextTrack = (queueIndex >= 0 && queueIndex + 1 < queueTracks.length) ? queueTracks[queueIndex + 1] : null;
 
   // Scroll to middle card (current) on mount
   useEffect(() => {
