@@ -157,9 +157,10 @@ export function useMusicProvider({
           } catch { /* ignore */ }
           provider.setDisplayTrack(tracks[savedIndex], savedPos);
 
-          // Prime MusicKit queue and seek to saved position (no play).
+          // Prime MusicKit queue with upcoming tracks (from current onward).
           // React state is authoritative; queueItemsDidChange is not subscribed.
-          provider.setQueueWithoutPlaying(tracks.map((t: any) => t.id), savedPos);
+          const upcomingIds = tracks.slice(savedIndex).map((t: any) => t.id);
+          provider.setQueueWithoutPlaying(upcomingIds, savedPos);
         }
       }
     } catch { /* ignore corrupt localStorage */ }

@@ -1,14 +1,15 @@
 /**
  * Global play queue hook — single queue for all conversations.
  *
- * Model: queue[] = full track list, currentIndex = now-playing position.
- * Tracks are never discarded on skip — supports bidirectional feed navigation.
+ * Internal model: queue[0] = now playing, queue.slice(1) = up next.
+ * History tracks (sliced off on advance) are kept in a separate array.
+ *
+ * External model: fullQueue = [...history, ...queue], currentIndex = history.length.
+ * This allows bidirectional feed navigation while keeping MusicKit interactions
+ * identical to the original slice-based approach.
  *
  * Uses MusicKit native queue for playback ordering and auto-advance.
- * Syncs from MusicKit's nowPlayingItemDidChange to update currentIndex.
- *
- * Backend sync is driven by a useEffect on queue/index state —
- * any state change triggers a sync, regardless of the source.
+ * Backend sync sends the full queue + currentIndex.
  */
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
@@ -17,7 +18,9 @@ import type { UnifiedTrack } from '../providers/types';
 import type { AppleMusicProvider } from '../providers/AppleMusicProvider';
 
 export interface UsePlayQueueReturn {
+  /** Full track list: [...history, nowPlaying, ...upNext] */
   queue: UnifiedTrack[];
+  /** Index of now-playing track in queue (-1 = none) */
   currentIndex: number;
   nowPlaying: UnifiedTrack | null;
   upNext: UnifiedTrack[];
@@ -36,30 +39,29 @@ interface UsePlayQueueParams {
 }
 
 export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQueueReturn & { finishRestore: () => void } {
-  const [queue, setQueue] = useState<UnifiedTrack[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(-1);
+  // Internal state: queue[0] = now playing (same MusicKit model as before)
+  const [upcoming, setUpcoming] = useState<UnifiedTrack[]>([]);
+  // History: tracks that have been played (sliced off from queue head)
+  const [history, setHistory] = useState<UnifiedTrack[]>([]);
 
-  const queueRef = useRef(queue);
-  queueRef.current = queue;
-  const indexRef = useRef(currentIndex);
-  indexRef.current = currentIndex;
+  const upcomingRef = useRef(upcoming);
+  upcomingRef.current = upcoming;
+  const historyRef = useRef(history);
+  historyRef.current = history;
 
   // Cache metadata for tracks whose MusicKit items may lack full info
   const metadataCache = useRef<Map<string, UnifiedTrack>>(new Map());
 
-  // Derived state
-  const nowPlaying = useMemo(
-    () => (currentIndex >= 0 && currentIndex < queue.length ? queue[currentIndex] : null),
-    [queue, currentIndex],
+  // ── Exposed (external) state ────────────────────────────────────
+  const queue = useMemo(() => [...history, ...upcoming], [history, upcoming]);
+  const currentIndex = useMemo(
+    () => (upcoming.length > 0 ? history.length : -1),
+    [history.length, upcoming.length],
   );
-  const upNext = useMemo(
-    () => (currentIndex >= 0 ? queue.slice(currentIndex + 1) : []),
-    [queue, currentIndex],
-  );
+  const nowPlaying = upcoming.length > 0 ? upcoming[0] : null;
+  const upNext = upcoming.slice(1);
 
   // ── Backend sync: driven by React state changes ─────────────────
-  // Skip the very first render (initial empty state) and restore-driven
-  // setQueue calls (we don't want to sync back what we just fetched).
   const isRestoringRef = useRef(true);
 
   useEffect(() => {
@@ -78,11 +80,11 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
   useEffect(() => {
     if (!userId) return;
     const handler = () => {
-      const body = JSON.stringify({
-        user_id: userId,
-        queue: queueRef.current,
-        currentIndex: indexRef.current,
-      });
+      const h = historyRef.current;
+      const u = upcomingRef.current;
+      const fullQueue = [...h, ...u];
+      const ci = u.length > 0 ? h.length : -1;
+      const body = JSON.stringify({ user_id: userId, queue: fullQueue, currentIndex: ci });
       const blob = new Blob([body], { type: 'application/json' });
       navigator.sendBeacon(`${API_BASE}/queue/sync`, blob);
     };
@@ -91,51 +93,32 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
   }, [userId]);
 
   // ── Sync from MusicKit nowPlayingItemDidChange ──────────────────
-  // When MusicKit auto-advances or changes track, update currentIndex
-  // to point at the new track. No tracks are removed.
+  // When MusicKit auto-advances, slice the upcoming queue (same as original).
+  // Sliced-off tracks are pushed to history.
   useEffect(() => {
     if (!provider) return;
     const unsub = provider.onNowPlayingChange((trackId) => {
       if (!trackId) return;
-      const q = queueRef.current;
+      const q = upcomingRef.current;
       const idx = q.findIndex(t => t.id === trackId);
       console.log('[usePlayQueue] nowPlayingChange: trackId=', trackId, 'idx=', idx, 'queueLen=', q.length);
-      if (idx < 0) return; // not found in our queue
-      if (idx === indexRef.current) return; // already there
-      setCurrentIndex(idx);
+      if (idx <= 0) return; // already at head or not found — SAME guard as original
+      // Move played tracks to history
+      setHistory(prev => [...prev, ...q.slice(0, idx)]);
+      setUpcoming(q.slice(idx));
     });
     return unsub;
   }, [provider]);
 
   // ── queueItemsDidChange: intentionally NOT subscribed ───────────
   // React state is the single source of truth for the queue.
-  // All mutations (addTrack, removeTrack, playAtIndex) update React
-  // state directly. Auto-advance is handled by nowPlayingItemDidChange.
-  // Subscribing to onQueueChange caused queue flicker: MusicKit's
-  // internal queue is often incomplete/stale (e.g. 1 track after restore
-  // when React has 12) and would overwrite React state.
 
   // ── Listen for unresolvable IDs from the provider ───────────────
   useEffect(() => {
     if (!provider) return;
     const unsub = provider.onUnresolvableIds((badIds) => {
-      setQueue(prev => {
-        const next = prev.filter(t => !badIds.has(t.id));
-        // Adjust currentIndex: count how many removed tracks were before current
-        const ci = indexRef.current;
-        if (ci >= 0) {
-          let removedBefore = 0;
-          for (let i = 0; i < ci && i < prev.length; i++) {
-            if (badIds.has(prev[i].id)) removedBefore++;
-          }
-          const wasCurrent = ci < prev.length && badIds.has(prev[ci].id);
-          const newIndex = wasCurrent
-            ? Math.min(ci - removedBefore, next.length - 1)
-            : ci - removedBefore;
-          setCurrentIndex(Math.max(newIndex, next.length > 0 ? 0 : -1));
-        }
-        return next;
-      });
+      setUpcoming(prev => prev.filter(t => !badIds.has(t.id)));
+      setHistory(prev => prev.filter(t => !badIds.has(t.id)));
     });
     return unsub;
   }, [provider]);
@@ -144,11 +127,8 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
 
   const addTrack = useCallback((track: UnifiedTrack) => {
     metadataCache.current.set(track.id, track);
-    setQueue(prev => [...prev, track]);
-    // If nothing is playing yet, point to the new track
-    if (indexRef.current < 0) {
-      setCurrentIndex(0);
-    }
+    // Append to upcoming queue (same as original)
+    setUpcoming(prev => [...prev, track]);
     if (provider) {
       if (!provider.playbackState.currentTrack) {
         provider.setDisplayTrack(track);
@@ -158,62 +138,92 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
   }, [provider]);
 
   const removeTrack = useCallback((index: number) => {
-    const ci = indexRef.current;
-    setQueue(prev => {
-      const next = prev.filter((_, i) => i !== index);
-      if (next.length === 0) {
-        setCurrentIndex(-1);
-      } else if (index < ci) {
-        // Removed before current — shift index back
-        setCurrentIndex(ci - 1);
-      } else if (index === ci) {
-        // Removed the now-playing track — play the next one (or clamp)
-        const newIdx = Math.min(ci, next.length - 1);
-        setCurrentIndex(newIdx);
-        if (provider && next.length > 0) {
-          const songIds = next.slice(newIdx).map(t => t.id);
+    const h = historyRef.current;
+    const q = upcomingRef.current;
+
+    if (index < h.length) {
+      // Removing from history
+      setHistory(prev => prev.filter((_, i) => i !== index));
+    } else {
+      // Removing from upcoming
+      const qIdx = index - h.length;
+      setUpcoming(prev => {
+        const next = prev.filter((_, i) => i !== qIdx);
+        if (qIdx === 0 && provider && next.length > 0) {
+          // Removed now-playing — play the new head (same as original)
+          const songIds = next.map(t => t.id);
           provider.playWithQueue(songIds, 0).catch(console.error);
         }
-      }
-      // index > ci: no index adjustment needed
-      return next;
-    });
+        return next;
+      });
+    }
   }, [provider]);
 
   const playAtIndex = useCallback(async (index: number) => {
-    const q = queueRef.current;
-    if (index < 0 || index >= q.length || !provider) return;
+    const h = historyRef.current;
+    const q = upcomingRef.current;
+    const fullLen = h.length + q.length;
+    if (index < 0 || index >= fullLen || !provider) return;
 
-    setCurrentIndex(index);
-    // Give MusicKit only tracks from index onward — always start at 0.
-    // MusicKit's changeToMediaAtIndex is unreliable for non-zero indices.
-    const songIds = q.slice(index).map(t => t.id);
-    await provider.playWithQueue(songIds, 0);
+    if (index < h.length) {
+      // Playing a track from history — reconstruct queue
+      const newUpcoming = [...h.slice(index), ...q];
+      const newHistory = h.slice(0, index);
+      setHistory(newHistory);
+      setUpcoming(newUpcoming);
+      const songIds = newUpcoming.map(t => t.id);
+      await provider.playWithQueue(songIds, 0);
+    } else {
+      // Playing from upcoming — same as original (slice + playWithQueue)
+      const qIdx = index - h.length;
+      if (qIdx === 0 && q.length > 0) {
+        // Already at head — just replay
+        const songIds = q.map(t => t.id);
+        await provider.playWithQueue(songIds, 0);
+      } else {
+        const slicedOff = q.slice(0, qIdx);
+        const newUpcoming = q.slice(qIdx);
+        setHistory(prev => [...prev, ...slicedOff]);
+        setUpcoming(newUpcoming);
+        const songIds = newUpcoming.map(t => t.id);
+        await provider.playWithQueue(songIds, 0);
+      }
+    }
   }, [provider]);
 
   const skipNext = useCallback(async () => {
     if (!provider) return;
     await provider.skipToNext();
-    // MusicKit's nowPlayingItemDidChange will update currentIndex
+    // MusicKit's nowPlayingItemDidChange will slice upcoming + push to history
   }, [provider]);
 
   const skipPrev = useCallback(async () => {
     if (!provider) return;
-    const ci = indexRef.current;
-    if (ci <= 0) return; // already at start
-    // MusicKit doesn't have previous tracks — rebuild queue from new position
-    const q = queueRef.current;
-    const newIndex = ci - 1;
-    setCurrentIndex(newIndex);
-    const songIds = q.slice(newIndex).map(t => t.id);
+    const h = historyRef.current;
+    if (h.length === 0) return;
+    const q = upcomingRef.current;
+
+    // Move last history track back to head of upcoming
+    const lastTrack = h[h.length - 1];
+    const newHistory = h.slice(0, -1);
+    const newUpcoming = [lastTrack, ...q];
+    setHistory(newHistory);
+    setUpcoming(newUpcoming);
+    const songIds = newUpcoming.map(t => t.id);
     await provider.playWithQueue(songIds, 0);
   }, [provider]);
 
   /** Called by useMusicProvider during restore — sets queue without triggering sync */
   const setQueueFn = useCallback((tracks: UnifiedTrack[], index?: number) => {
     for (const t of tracks) metadataCache.current.set(t.id, t);
-    setQueue(tracks);
-    setCurrentIndex(index ?? (tracks.length > 0 ? 0 : -1));
+    const idx = index ?? 0;
+    if (tracks.length === 0) {
+      setHistory([]);
+      setUpcoming([]);
+    } else {
+      setHistory(tracks.slice(0, idx));
+      setUpcoming(tracks.slice(idx));
+    }
   }, []);
 
   /** Mark restore as complete — subsequent state changes will sync to backend */
@@ -223,8 +233,8 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
   }, []);
 
   const clear = useCallback(() => {
-    setQueue([]);
-    setCurrentIndex(-1);
+    setUpcoming([]);
+    setHistory([]);
   }, []);
 
   return {
