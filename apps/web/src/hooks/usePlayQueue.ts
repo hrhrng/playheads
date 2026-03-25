@@ -142,7 +142,7 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
 
   const playAtIndex = useCallback(async (index: number) => {
     const q = queueRef.current;
-    if (index < 0 || index >= q.length || !provider) return;
+    if (index < 0 || index >= q.length || !provider || provider.playbackState.isTransitioning) return;
 
     // Slice so clicked track becomes queue[0]; save skipped tracks to history
     if (index > 0) setHistory(prev => [...prev, ...q.slice(0, index)]);
@@ -161,7 +161,7 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
   }, [provider]);
 
   const skipPrev = useCallback(async () => {
-    if (!provider) return;
+    if (!provider || provider.playbackState.isTransitioning) return;
     const h = historyRef.current;
     if (h.length === 0) {
       await provider.skipToPrev();
@@ -183,7 +183,7 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
   const playFromHistory = useCallback(async (historyIndex: number) => {
     const h = historyRef.current;
     const q = queueRef.current;
-    if (historyIndex < 0 || historyIndex >= h.length || !provider) return;
+    if (historyIndex < 0 || historyIndex >= h.length || !provider || provider.playbackState.isTransitioning) return;
     // Restore history[historyIndex..] + current queue as the new queue
     const restored = h.slice(historyIndex);
     const newQueue = [...restored, ...q];
