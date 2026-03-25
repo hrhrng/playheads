@@ -148,6 +148,8 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
     if (index > 0) setHistory(prev => [...prev, ...q.slice(0, index)]);
     const newQueue = q.slice(index);
     setQueue(newQueue);
+    // Show new track artwork immediately before MusicKit loads
+    provider.setDisplayTrack(newQueue[0]);
     const songIds = newQueue.map(t => t.id);
     await provider.playWithQueue(songIds, 0);
   }, [provider]);
@@ -172,6 +174,8 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
     const newQueue = [lastTrack, ...q];
     setHistory(newHistory);
     setQueue(newQueue);
+    // Show new track artwork immediately before MusicKit loads
+    provider.setDisplayTrack(lastTrack);
     const songIds = newQueue.map(t => t.id);
     await provider.playWithQueue(songIds, 0);
   }, [provider]);
@@ -186,6 +190,8 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
     const newHistory = h.slice(0, historyIndex);
     setHistory(newHistory);
     setQueue(newQueue);
+    // Show new track artwork immediately before MusicKit loads
+    provider.setDisplayTrack(restored[0]);
     const songIds = newQueue.map(t => t.id);
     await provider.playWithQueue(songIds, 0);
   }, [provider]);
