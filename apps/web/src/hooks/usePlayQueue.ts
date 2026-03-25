@@ -156,6 +156,8 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
 
   const skipNext = useCallback(async () => {
     if (!provider) return;
+    const q = queueRef.current;
+    if (q.length > 1) provider.setDisplayTrack(q[1]);
     await provider.skipToNext();
     // MusicKit's nowPlayingItemDidChange will trigger the queue slice
   }, [provider]);
