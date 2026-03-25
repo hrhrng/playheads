@@ -284,8 +284,8 @@ export const ChatInterface = ({
           <div className="h-full shrink-0 snap-start snap-always" />
 
           {/* Current track card */}
-          <div className="h-full shrink-0 snap-start snap-always flex flex-col items-center justify-center pb-36">
-            <div className="relative z-10 w-full max-w-xl px-8">
+          <div className="h-full shrink-0 snap-start snap-always flex flex-col items-center justify-center pb-20">
+            <div className="relative z-10 w-full max-w-xl px-6">
               <RecordPlayer
                 currentTrack={currentTrack}
                 isPaused={!isPlaying}
