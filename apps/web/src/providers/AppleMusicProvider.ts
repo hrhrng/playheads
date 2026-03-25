@@ -53,6 +53,9 @@ export class AppleMusicProvider implements MusicProvider {
   // Serialize playLater calls so queueItemsDidChange fires with monotonically growing queue
   private mutationChain: Promise<void> = Promise.resolve();
 
+  // Metadata cache: agent/search provides full metadata, MusicKit items often lack it
+  private metadataCache = new Map<string, UnifiedTrack>();
+
   // Seek target stored during restore: seekToTime() requires nowPlayingItem (i.e. after play()).
   // Set by setQueueWithoutPlaying, applied in togglePlay/play, cleared by playbackTimeDidChange.
   private seekTarget: number | null = null;
@@ -233,11 +236,10 @@ export class AppleMusicProvider implements MusicProvider {
       }
     });
 
-    // queueItemsDidChange: not subscribed to by usePlayQueue (React state is authoritative).
-    // Only notify listeners when not in init/idle to avoid stale MusicKit queue data
-    // overwriting React state after restore.
+    // queueItemsDidChange: MusicKit queue is now the single source of truth.
+    // Notify listeners so React re-reads the queue. Gate only during init.
     this.on(mk, 'queueItemsDidChange', () => {
-      if (this.phase === 'init' || this.phase === 'idle') return;
+      if (this.phase === 'init') return;
       for (const cb of this.queueChangeListeners) cb();
     });
 
@@ -258,6 +260,9 @@ export class AppleMusicProvider implements MusicProvider {
   }
 
   formatMusicKitTrack(item: any): UnifiedTrack {
+    // Prefer cached metadata (from agent/search — has full info)
+    const cached = this.metadataCache.get(item.id);
+    if (cached) return cached;
     const attr = item.attributes || item;
     return {
       id: item.id || '',
@@ -268,6 +273,39 @@ export class AppleMusicProvider implements MusicProvider {
       durationSeconds: attr.durationInMillis ? attr.durationInMillis / 1000 : (item.duration || 0),
       provider: 'apple-music' as const,
     };
+  }
+
+  /** Cache full track metadata so formatMusicKitTrack can return rich data. */
+  cacheTrackMetadata(track: UnifiedTrack): void {
+    this.metadataCache.set(track.id, track);
+  }
+
+  /** Read MusicKit queue state: all items + current position. */
+  getQueueSnapshot(): { items: UnifiedTrack[]; position: number } {
+    if (!this.musicKit) return { items: [], position: -1 };
+    const q = this.musicKit.queue;
+    const position = (q as any).position ?? 0;
+    const items = q.items.map((item: any) => this.formatMusicKitTrack(item));
+    return { items, position };
+  }
+
+  /** Jump to a track by absolute index in MusicKit queue (no queue rebuild). */
+  async changeToIndex(index: number): Promise<void> {
+    if (!this.musicKit || this.phase === 'buffering') return;
+    const prevPhase = this.phase;
+    this.setPhase('buffering');
+    this.startTransitionTimeout();
+    try {
+      await this.musicKit.changeToMediaAtIndex(index);
+      if ((this.musicKit as any).playbackState !== 2) {
+        await this.musicKit.play();
+      }
+    } catch (e) {
+      this.setPhase(prevPhase);
+      const classified = classifyError(e);
+      if (classified.category === ErrorCategory.AUTH_EXPIRED) this.handleAuthLost();
+      else showErrorToast(e, 'playback');
+    }
   }
 
   private handleAuthLost() {
