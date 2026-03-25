@@ -16,8 +16,12 @@ interface PlaylistSidebarProps {
   isPlaying: boolean;
   /** Global queue tracks — queue[0] is now playing */
   queue: UnifiedTrack[];
+  /** Previously played tracks */
+  history?: UnifiedTrack[];
   /** Callback when a track is selected to play */
   onPlayTrack?: (index: number) => void;
+  /** Callback when a history track is clicked */
+  onPlayFromHistory?: (historyIndex: number) => void;
   /** Whether the sidebar is collapsed */
   collapsed: boolean;
   /** Toggle collapse state */
@@ -44,13 +48,16 @@ export const PlaylistSidebar = ({
   currentTrack,
   isPlaying,
   queue: queueTracks,
+  history: historyTracks = [],
   onPlayTrack,
+  onPlayFromHistory,
   collapsed,
   toggleCollapse,
   showQueue = true,
   width,
   onWidthChange,
 }: PlaylistSidebarProps): React.JSX.Element => {
+  const [historyExpanded, setHistoryExpanded] = useState(false);
   const { isMobileSheet } = usePlaylistSheet();
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
@@ -111,6 +118,13 @@ export const PlaylistSidebar = ({
 
   // Format queue tracks for display
   const queue: FormattedSidebarTrack[] = queueTracks.map((item): FormattedSidebarTrack => ({
+    id: item.id,
+    title: item.name || 'Unknown Title',
+    artist: item.artist || 'Unknown Artist',
+    cover: formatArtwork(item.artworkUrl)
+  }));
+
+  const formattedHistory: FormattedSidebarTrack[] = historyTracks.map((item): FormattedSidebarTrack => ({
     id: item.id,
     title: item.name || 'Unknown Title',
     artist: item.artist || 'Unknown Artist',
@@ -217,6 +231,41 @@ export const PlaylistSidebar = ({
           <div className="flex-1 min-h-0 flex flex-col min-w-0 opacity-100 transition-opacity duration-300">
             {showQueue && (
               <div className="flex-1 overflow-y-auto px-4 pb-4">
+
+                {/* History (collapsed by default) */}
+                {formattedHistory.length > 0 && (
+                  <div className="mb-4">
+                    <button
+                      onClick={() => setHistoryExpanded(prev => !prev)}
+                      className="flex items-center gap-1 px-2 mb-2 group focus:outline-none"
+                    >
+                      <svg className={`w-3 h-3 text-gemini-subtext transition-transform ${historyExpanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                      </svg>
+                      <h3 className="text-[10px] font-medium text-gemini-subtext uppercase tracking-widest">History</h3>
+                      <span className="text-[10px] text-gemini-subtext">{formattedHistory.length}</span>
+                    </button>
+                    {historyExpanded && (
+                      <div className="space-y-2">
+                        {formattedHistory.map((track, i) => (
+                          <div
+                            key={`${track.id}-history-${i}`}
+                            onClick={() => onPlayFromHistory?.(i)}
+                            className="flex items-center gap-3 p-2 rounded-xl hover:bg-gemini-bg cursor-pointer group transition-colors opacity-50"
+                          >
+                            <div className="w-10 h-10 rounded-lg bg-gray-200 overflow-hidden relative shrink-0">
+                              <img src={track.cover} alt={track.title} className="w-full h-full object-cover" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-[13px] font-medium text-gemini-text truncate leading-snug">{track.title}</div>
+                              <div className="text-[11px] text-gemini-subtext truncate">{track.artist}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Now Playing */}
                 {nowPlaying && (

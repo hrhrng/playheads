@@ -18,9 +18,13 @@ import type { AppleMusicProvider } from '../providers/AppleMusicProvider';
 
 export interface UsePlayQueueReturn {
   queue: UnifiedTrack[];
+  /** Tracks that have been played (sliced off). Most recent at end. */
+  history: UnifiedTrack[];
   addTrack(track: UnifiedTrack): void;
   removeTrack(index: number): void;
   playAtIndex(index: number): Promise<void>;
+  /** Play a track from history by its index. Restores it + everything after to the queue head. */
+  playFromHistory(historyIndex: number): Promise<void>;
   skipNext(): Promise<void>;
   skipPrev(): Promise<void>;
   setQueue(tracks: UnifiedTrack[]): void;
@@ -34,9 +38,12 @@ interface UsePlayQueueParams {
 
 export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQueueReturn {
   const [queue, setQueue] = useState<UnifiedTrack[]>([]);
+  const [history, setHistory] = useState<UnifiedTrack[]>([]);
 
   const queueRef = useRef(queue);
   queueRef.current = queue;
+  const historyRef = useRef(history);
+  historyRef.current = history;
 
   // Cache metadata for tracks whose MusicKit items may lack full info
   const metadataCache = useRef<Map<string, UnifiedTrack>>(new Map());
@@ -84,6 +91,7 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
       const idx = q.findIndex(t => t.id === trackId);
       console.log('[usePlayQueue] nowPlayingChange: trackId=', trackId, 'idx=', idx, 'queueLen=', q.length);
       if (idx <= 0) return; // already at head or not found
+      setHistory(prev => [...prev, ...q.slice(0, idx)]);
       setQueue(q.slice(idx));
     });
     return unsub;
@@ -136,7 +144,8 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
     const q = queueRef.current;
     if (index < 0 || index >= q.length || !provider) return;
 
-    // Slice so clicked track becomes queue[0]
+    // Slice so clicked track becomes queue[0]; save skipped tracks to history
+    if (index > 0) setHistory(prev => [...prev, ...q.slice(0, index)]);
     const newQueue = q.slice(index);
     setQueue(newQueue);
     const songIds = newQueue.map(t => t.id);
@@ -151,7 +160,34 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
 
   const skipPrev = useCallback(async () => {
     if (!provider) return;
-    await provider.skipToPrev();
+    const h = historyRef.current;
+    if (h.length === 0) {
+      await provider.skipToPrev();
+      return;
+    }
+    // Pop last history track, prepend to queue, play
+    const lastTrack = h[h.length - 1];
+    const newHistory = h.slice(0, -1);
+    const q = queueRef.current;
+    const newQueue = [lastTrack, ...q];
+    setHistory(newHistory);
+    setQueue(newQueue);
+    const songIds = newQueue.map(t => t.id);
+    await provider.playWithQueue(songIds, 0);
+  }, [provider]);
+
+  const playFromHistory = useCallback(async (historyIndex: number) => {
+    const h = historyRef.current;
+    const q = queueRef.current;
+    if (historyIndex < 0 || historyIndex >= h.length || !provider) return;
+    // Restore history[historyIndex..] + current queue as the new queue
+    const restored = h.slice(historyIndex);
+    const newQueue = [...restored, ...q];
+    const newHistory = h.slice(0, historyIndex);
+    setHistory(newHistory);
+    setQueue(newQueue);
+    const songIds = newQueue.map(t => t.id);
+    await provider.playWithQueue(songIds, 0);
   }, [provider]);
 
   /** Called by useMusicProvider during restore — sets queue without triggering sync */
@@ -168,13 +204,16 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
 
   const clear = useCallback(() => {
     setQueue([]);
+    setHistory([]);
   }, []);
 
   return {
     queue,
+    history,
     addTrack,
     removeTrack,
     playAtIndex,
+    playFromHistory,
     skipNext,
     skipPrev,
     setQueue: setQueueFn,
