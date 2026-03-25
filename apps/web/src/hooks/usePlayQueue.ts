@@ -171,8 +171,8 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
         const newIdx = Math.min(ci, next.length - 1);
         setCurrentIndex(newIdx);
         if (provider && next.length > 0) {
-          const songIds = next.map(t => t.id);
-          provider.playWithQueue(songIds, newIdx).catch(console.error);
+          const songIds = next.slice(newIdx).map(t => t.id);
+          provider.playWithQueue(songIds, 0).catch(console.error);
         }
       }
       // index > ci: no index adjustment needed
@@ -185,9 +185,10 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
     if (index < 0 || index >= q.length || !provider) return;
 
     setCurrentIndex(index);
-    // Give MusicKit the full queue and start at the clicked index
-    const songIds = q.map(t => t.id);
-    await provider.playWithQueue(songIds, index);
+    // Give MusicKit only tracks from index onward — always start at 0.
+    // MusicKit's changeToMediaAtIndex is unreliable for non-zero indices.
+    const songIds = q.slice(index).map(t => t.id);
+    await provider.playWithQueue(songIds, 0);
   }, [provider]);
 
   const skipNext = useCallback(async () => {
@@ -198,8 +199,14 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
 
   const skipPrev = useCallback(async () => {
     if (!provider) return;
-    await provider.skipToPrev();
-    // MusicKit's nowPlayingItemDidChange will update currentIndex
+    const ci = indexRef.current;
+    if (ci <= 0) return; // already at start
+    // MusicKit doesn't have previous tracks — rebuild queue from new position
+    const q = queueRef.current;
+    const newIndex = ci - 1;
+    setCurrentIndex(newIndex);
+    const songIds = q.slice(newIndex).map(t => t.id);
+    await provider.playWithQueue(songIds, 0);
   }, [provider]);
 
   /** Called by useMusicProvider during restore — sets queue without triggering sync */
