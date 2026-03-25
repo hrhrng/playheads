@@ -297,8 +297,8 @@ export const ChatInterface = ({
               <MiniLyrics lyrics={lyrics} onClick={() => setShowLyrics(true)} />
             </div>
             {/* Seek bar — directly below album art, moves with swipe */}
-            {currentTrack && !showHistory && !isAppleMusicAuthorized && onLinkApple && (
-              <div className="w-full max-w-sm px-8 mt-4 flex justify-center">
+            {currentTrack && !isAppleMusicAuthorized && onLinkApple && (
+              <div className={`w-full max-w-sm px-8 mt-4 flex justify-center transition-opacity duration-200 ${showHistory ? 'opacity-0 pointer-events-none' : ''}`}>
                 <button
                   onClick={onLinkApple}
                   className="text-sm text-pink-500 hover:text-pink-600 transition-colors font-medium flex items-center gap-1.5"
@@ -312,8 +312,8 @@ export const ChatInterface = ({
                 </button>
               </div>
             )}
-            {currentTrack && !showHistory && isAppleMusicAuthorized && (
-              <div className="w-full max-w-sm px-8 mt-4 flex items-center gap-2">
+            {currentTrack && isAppleMusicAuthorized && (
+              <div className={`w-full max-w-sm px-8 mt-4 flex items-center gap-2 transition-opacity duration-200 ${showHistory ? 'opacity-0 pointer-events-none' : ''}`}>
                 <span className="text-xs font-mono text-gray-400 tabular-nums shrink-0">
                   {formatTime(seekDisplayValue)}
                 </span>
