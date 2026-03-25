@@ -55,6 +55,7 @@ export const PlaylistSidebar = ({
   onWidthChange,
 }: PlaylistSidebarProps): React.JSX.Element => {
   const { isMobileSheet } = usePlaylistSheet();
+  const [historyExpanded, setHistoryExpanded] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const startX = useRef(0);
@@ -222,29 +223,40 @@ export const PlaylistSidebar = ({
             {showQueue && (
               <div className="flex-1 overflow-y-auto px-4 pb-4">
 
-                {/* History (played tracks) */}
+                {/* History (played tracks — collapsed by default) */}
                 {history.length > 0 && (
-                  <>
-                    <h3 className="text-[10px] font-medium text-gemini-subtext uppercase tracking-widest mb-2 px-2">History</h3>
-                    <div className="space-y-2 mb-4">
-                      {history.map((track, i) => (
-                        <div
-                          key={`${track.id}-history-${i}`}
-                          onClick={() => handleTrackClick(i)}
-                          className="flex items-center gap-3 p-2 rounded-xl hover:bg-gemini-bg cursor-pointer group transition-colors opacity-50"
-                        >
-                          <div className="w-10 h-10 rounded-lg bg-gray-200 overflow-hidden relative shrink-0">
-                            <img src={track.cover} alt={track.title} className="w-full h-full object-cover" />
-                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+                  <div className="mb-4">
+                    <button
+                      onClick={() => setHistoryExpanded(prev => !prev)}
+                      className="flex items-center gap-1 px-2 mb-2 group focus:outline-none"
+                    >
+                      <svg className={`w-3 h-3 text-gemini-subtext transition-transform ${historyExpanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                      </svg>
+                      <h3 className="text-[10px] font-medium text-gemini-subtext uppercase tracking-widest">History</h3>
+                      <span className="text-[10px] text-gemini-subtext">{history.length}</span>
+                    </button>
+                    {historyExpanded && (
+                      <div className="space-y-2">
+                        {history.map((track, i) => (
+                          <div
+                            key={`${track.id}-history-${i}`}
+                            onClick={() => handleTrackClick(i)}
+                            className="flex items-center gap-3 p-2 rounded-xl hover:bg-gemini-bg cursor-pointer group transition-colors opacity-50"
+                          >
+                            <div className="w-10 h-10 rounded-lg bg-gray-200 overflow-hidden relative shrink-0">
+                              <img src={track.cover} alt={track.title} className="w-full h-full object-cover" />
+                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-[13px] font-medium text-gemini-text truncate leading-snug">{track.title}</div>
+                              <div className="text-[11px] text-gemini-subtext truncate">{track.artist}</div>
+                            </div>
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="text-[13px] font-medium text-gemini-text truncate leading-snug">{track.title}</div>
-                            <div className="text-[11px] text-gemini-subtext truncate">{track.artist}</div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 )}
 
                 {/* Now Playing */}
