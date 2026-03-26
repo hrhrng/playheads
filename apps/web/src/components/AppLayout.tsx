@@ -223,7 +223,7 @@ export const AppLayout = ({
       )}
 
       {/* Bottom section: User info with settings popover */}
-      <div className={`px-4 ${isMobile || expanded ? 'mt-auto mb-2' : 'flex-1 flex items-center'}`}>
+      <div className={`mt-auto mb-2 ${isMobile || expanded ? 'px-4' : 'px-0 flex justify-center'}`}>
         <div className="p-3 flex items-center overflow-hidden whitespace-nowrap">
           <div className="w-6 flex justify-center shrink-0">
             <UserSettingsPopover
