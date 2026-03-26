@@ -205,7 +205,7 @@ export const AppLayout = ({
 
       {/* Scrollable conversation container — only when expanded */}
       {(isMobile || expanded) && (
-        <div className="bg-gemini-hover/50 rounded-3xl mx-2 py-4 flex flex-col gap-2 overflow-hidden overflow-y-auto max-h-[calc(100vh-200px)]">
+        <div className="bg-gemini-hover/50 rounded-3xl mx-2 py-4 flex flex-col gap-2 overflow-hidden overflow-y-auto max-h-[calc(100vh-300px)]">
           {/* Conversation List */}
           <ConversationList
             conversations={conversations}
@@ -223,7 +223,7 @@ export const AppLayout = ({
       )}
 
       {/* Bottom section: User info with settings popover */}
-      <div className="mt-auto mb-auto px-4">
+      <div className="mt-auto mb-2 px-4">
         <div className="p-2 flex items-center overflow-hidden whitespace-nowrap">
           <div className="w-6 flex justify-center shrink-0">
             <UserSettingsPopover
