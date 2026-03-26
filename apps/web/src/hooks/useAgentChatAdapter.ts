@@ -7,7 +7,7 @@
  * containing an `_action` field. This hook watches for new tool results
  * and dispatches queue operations as a side effect.
  */
-import { useMemo, useCallback, useRef, useEffect } from "react";
+import { useMemo, useCallback, useRef } from "react";
 import { useAgent } from "agents/react";
 import { useAgentChat } from "@cloudflare/ai-chat/react";
 import type { UIMessage } from "ai";
@@ -56,21 +56,6 @@ interface UseAgentChatAdapterReturn {
   clearHistory: () => void;
 }
 
-/**
- * Try to extract a `_action` payload from a tool result string.
- */
-function extractAction(output: unknown): MusicAction | null {
-  if (typeof output !== "string") return null;
-  try {
-    const parsed = JSON.parse(output);
-    if (parsed && parsed._action && typeof parsed._action.type === "string") {
-      return parsed._action as MusicAction;
-    }
-  } catch {
-    // Not JSON or no _action field
-  }
-  return null;
-}
 
 /**
  * Map Vercel AI SDK UIMessage[] to our app's Message[] format.
@@ -153,6 +138,13 @@ export function useAgentChatAdapter({
     name: sessionId,
   });
 
+  // ── Refs for dispatching music actions from onData callback ──
+  const musicActionsRef = useRef(musicActions);
+  musicActionsRef.current = musicActions;
+  const queueOpsRef = useRef(queueOps);
+  queueOpsRef.current = queueOps;
+  const processedActionIds = useRef(new Set<string>());
+
   const {
     messages: uiMessages,
     sendMessage: agentSendMessage,
@@ -161,98 +153,50 @@ export function useAgentChatAdapter({
   } = useAgentChat({
     agent,
     body: { session_id: sessionId, user_id: userId, storefront: musicActions?.storefront || 'us' },
+    onData(part: { type: string; data: unknown }) {
+      if (part.type !== "data-music-action") return;
+
+      const payload = part.data as MusicAction & { id?: string };
+      // Dedupe: onData fires on stream resume/reconnect too
+      if (payload.id && processedActionIds.current.has(payload.id)) return;
+      if (payload.id) processedActionIds.current.add(payload.id);
+
+      console.log('[ActionDispatch] Dispatching:', payload.type, payload.data);
+
+      const ops = queueOpsRef.current;
+
+      // Update global queue immediately
+      if (payload.type === "add_to_queue" && payload.data?.track_id && ops) {
+        ops.addTrack({
+          id: payload.data.track_id as string,
+          name: (payload.data.name as string) || "Unknown",
+          artist: (payload.data.artist as string) || "Unknown Artist",
+          album: (payload.data.album as string) || "",
+          artworkUrl: (payload.data.artwork_url as string) || "",
+          durationSeconds: (payload.data.duration as number) || 0,
+          provider: 'apple-music',
+        });
+      } else if (payload.type === "remove_track" && payload.data?.index != null && ops) {
+        ops.removeTrack(payload.data.index as number);
+      }
+
+      // Dispatch playback actions
+      if (ops) {
+        switch (payload.type) {
+          case "play_track":
+            ops.playAtIndex(payload.data.index as number).catch((e) =>
+              console.error("[Agent] play_track error:", e)
+            );
+            break;
+          case "skip_next":
+            ops.skipNext().catch((e) =>
+              console.error("[Agent] skip_next error:", e)
+            );
+            break;
+        }
+      }
+    },
   });
-
-  // ── Side-effect: dispatch queue actions from tool results ──
-  const musicActionsRef = useRef(musicActions);
-  musicActionsRef.current = musicActions;
-  const queueOpsRef = useRef(queueOps);
-  queueOpsRef.current = queueOps;
-  const processedActionIds = useRef<Set<string> | null>(null);
-
-  useEffect(() => {
-    // On first render, mark all existing tool call IDs as processed
-    // so chat history replay doesn't re-dispatch old actions.
-    if (processedActionIds.current === null) {
-      const existing = new Set<string>();
-      for (const msg of uiMessages) {
-        if (msg.role !== "assistant") continue;
-        for (const part of msg.parts) {
-          if (!part.type.startsWith("tool-") && part.type !== "dynamic-tool") continue;
-          const toolPart = part as unknown as { toolCallId: string };
-          if (toolPart.toolCallId) existing.add(toolPart.toolCallId);
-        }
-      }
-      processedActionIds.current = existing;
-      console.log('[ActionDispatch] Skipped', existing.size, 'historical actions on mount');
-      return;
-    }
-
-    const actions = musicActionsRef.current;
-    const ops = queueOpsRef.current;
-
-    for (const msg of uiMessages) {
-      if (msg.role !== "assistant") continue;
-      for (const part of msg.parts) {
-        if (!part.type.startsWith("tool-") && part.type !== "dynamic-tool") continue;
-        const toolPart = part as unknown as {
-          toolCallId: string;
-          state: string;
-          output?: unknown;
-        };
-
-        if (toolPart.state !== "output-available") continue;
-        if (processedActionIds.current.has(toolPart.toolCallId)) continue;
-
-        const action = extractAction(toolPart.output);
-        if (!action) continue;
-
-        processedActionIds.current.add(toolPart.toolCallId);
-        console.log('[ActionDispatch] Dispatching:', action.type, action.data);
-
-        // Update global queue immediately
-        if (action.type === "add_to_queue" && action.data?.track_id && ops) {
-          ops.addTrack({
-            id: action.data.track_id as string,
-            name: (action.data.name as string) || "Unknown",
-            artist: (action.data.artist as string) || "Unknown Artist",
-            album: (action.data.album as string) || "",
-            artworkUrl: (action.data.artwork_url as string) || "",
-            durationSeconds: (action.data.duration as number) || 0,
-            provider: 'apple-music',
-          });
-        } else if (action.type === "remove_track" && action.data?.index != null && ops) {
-          ops.removeTrack(action.data.index as number);
-        }
-
-        // Dispatch playback actions
-        if (actions) {
-          switch (action.type) {
-            case "add_to_queue":
-              // Track already added to queue above — no MusicKit action needed
-              break;
-            case "play_track":
-              if (ops) {
-                ops.playAtIndex(action.data.index as number).catch((e) =>
-                  console.error("[Agent] play_track error:", e)
-                );
-              }
-              break;
-            case "skip_next":
-              if (ops) {
-                ops.skipNext().catch((e) =>
-                  console.error("[Agent] skip_next error:", e)
-                );
-              }
-              break;
-            case "remove_track":
-              // Already handled above
-              break;
-          }
-        }
-      }
-    }
-  }, [uiMessages]);
 
   const messages = useMemo(
     () => mapUIMessagesToMessages(uiMessages),
