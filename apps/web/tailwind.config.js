@@ -17,6 +17,15 @@ export default {
                     border: '#E3E3E3',
                     hover: '#F2F2F2',
                 },
+                air: {
+                    50: '#F9FAFB',
+                    100: '#F3F4F6',
+                    200: '#E5E7EB',
+                    300: '#D1D5DB',
+                    400: '#9CA3AF',
+                    500: '#6B7280',
+                    900: '#111827',
+                },
             },
             fontFamily: {
                 // System font stack tuned for CJK + Latin harmony

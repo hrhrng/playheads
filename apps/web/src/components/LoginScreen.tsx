@@ -105,7 +105,7 @@ export function LoginScreen({ email, setEmail, loading, message, onLogin }: Logi
           </div>
         </div>
 
-        <div className="absolute bottom-8 text-air-300 text-[10px] font-mono">v3.0.0</div>
+        <div className="absolute bottom-8 text-air-300 text-[10px] font-mono">The Playheads</div>
       </div>
     </div>
   );

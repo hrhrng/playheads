@@ -5,8 +5,7 @@
 html, body {
   height: 100%;
   overflow: hidden;
-  background-color: #111111;
-  color: #E0E0E0;
+  @apply bg-night-950 text-night-100;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -18,15 +17,4 @@ main {
 }
 main::-webkit-scrollbar {
   display: none;
-}
-
-/* Scroll-triggered line reveal */
-.reveal-line {
-  opacity: 0;
-  transform: translateY(16px);
-  transition: opacity 0.8s ease, transform 0.8s ease;
-}
-.reveal-line.visible {
-  opacity: 1;
-  transform: translateY(0);
 }
