@@ -180,7 +180,7 @@ export const AppLayout = ({
     <>
       {/* Burger Menu / toggle (desktop only) */}
       {!isMobile && (
-        <div className="mb-3 px-4">
+        <div className="nav-item">
           <button
             onClick={() => setExpanded(!expanded)}
             className="nav-btn"
@@ -191,7 +191,7 @@ export const AppLayout = ({
       )}
 
       {/* New Chat — always at this level, same position expanded or collapsed */}
-      <div className="px-4 mb-2">
+      <div className="nav-item">
         <button
           onClick={handleNewChat}
           className="w-full p-3 rounded-xl text-gemini-subtext hover:bg-gemini-hover transition-colors flex items-center overflow-hidden whitespace-nowrap"
@@ -205,7 +205,7 @@ export const AppLayout = ({
 
       {/* Scrollable conversation container — only when expanded */}
       {(isMobile || expanded) && (
-        <div className="bg-gemini-hover/50 rounded-3xl mx-2 py-4 flex flex-col gap-2 overflow-hidden overflow-y-auto max-h-[calc(100vh-248px)]">
+        <div className="bg-gemini-hover/50 rounded-3xl mx-2 py-4 flex flex-col gap-2 overflow-hidden overflow-y-auto max-h-[calc(100vh-200px)]">
           {/* Conversation List */}
           <ConversationList
             conversations={conversations}
@@ -223,7 +223,7 @@ export const AppLayout = ({
       )}
 
       {/* Bottom section: User info with settings popover */}
-      <div className="mt-auto px-4">
+      <div className="mt-auto nav-item">
         <div className="p-3 flex items-center overflow-hidden whitespace-nowrap">
           <div className="w-6 flex justify-center shrink-0">
             <UserSettingsPopover
