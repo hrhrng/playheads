@@ -69,13 +69,13 @@
 
   /* Unified spacing for sidebar fixed items (burger, new chat, avatar) */
   .nav-item {
-    @apply px-4 py-1;
+    @apply px-4 py-2;
   }
   .nav-item:first-child {
-    @apply pt-6;
+    @apply pt-4;
   }
   .nav-item:last-child {
-    @apply pb-6;
+    @apply pb-2;
   }
 }
 
