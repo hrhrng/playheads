@@ -5,20 +5,14 @@
   <div class="absolute inset-0 opacity-[0.03] pointer-events-none" style="background-image: url('data:image/svg+xml,%3Csvg viewBox=%220 0 256 256%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noise%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.9%22 numOctaves=%224%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noise)%22/%3E%3C/svg%3E'); background-repeat: repeat;" />
 
   <div class="relative z-10 min-h-screen flex flex-col items-center justify-center max-w-2xl mx-auto text-center">
-    <h1 class="reveal-line font-display font-black text-5xl sm:text-6xl md:text-8xl text-night-50 tracking-tight leading-[1.05]" style="transition-delay: 0.1s">
+    <h1 class="font-display font-black text-5xl sm:text-6xl md:text-8xl text-night-50 tracking-tight leading-[1.05] opacity-100 translate-y-0">
       Here's to the<br />crazy ones.
     </h1>
 
-    <div class="reveal-line mt-20 animate-scroll-hint" style="transition-delay: 0.6s">
+    <div class="mt-20 animate-scroll-hint opacity-100 translate-y-0">
       <svg class="w-5 h-5 text-night-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 14l-7 7m0 0l-7-7" />
       </svg>
     </div>
   </div>
 </section>
-
-<script is:inline>
-  document.querySelectorAll('.reveal-line').forEach((el) => {
-    el.classList.add('visible');
-  });
-</script>

@@ -57,7 +57,7 @@ export const RecordPlayer = ({
     <div className="flex flex-col items-center gap-8 group w-full">
       {/* Cover Art */}
       <div className="relative pointer-events-auto">
-        <div className={`w-72 h-72 md:w-96 md:h-96 rounded-2xl shadow-2xl overflow-hidden relative bg-black border border-gray-800 transition-transform duration-700 ${!isPaused ? 'scale-100' : 'scale-95 opacity-90'}`}>
+        <div className={`w-80 h-80 md:w-[420px] md:h-[420px] rounded-2xl shadow-2xl overflow-hidden relative bg-black border border-gray-800 transition-transform duration-700 ${!isPaused ? 'scale-100' : 'scale-95 opacity-90'}`}>
           {artworkUrl ? (
             <img src={artworkUrl} alt={trackName} className="w-full h-full object-cover" />
           ) : (

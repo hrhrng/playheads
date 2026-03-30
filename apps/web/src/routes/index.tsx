@@ -208,7 +208,9 @@ export function ChatRoute({
           currentTrack={currentTrack}
           isPlaying={isPlaying}
           queue={queue.queue}
+          history={queue.history}
           onPlayTrack={(index) => queue.playAtIndex(index)}
+          onPlayFromHistory={(index) => queue.playFromHistory(index)}
           collapsed={collapsed}
           toggleCollapse={toggleCollapse}
           width={width}

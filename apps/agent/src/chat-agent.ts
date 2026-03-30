@@ -8,7 +8,7 @@
  * Ported from apps/backend/agent.py
  */
 import { AIChatAgent } from "@cloudflare/ai-chat";
-import { streamText, convertToModelMessages, stepCountIs, tool } from "ai";
+import { streamText, convertToModelMessages, stepCountIs, tool, createUIMessageStream, createUIMessageStreamResponse } from "ai";
 import { z } from "zod";
 import { createMusicTools } from "./tools";
 import { generateAndUpdateTitle } from "./title";
@@ -266,57 +266,76 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
 
     console.log(`[MusicChatAgent] card=${card?.id || "unknown"} thinking=${!!providerOptions} maxOut=${maxOutputTokens} search=${effectiveSearchProvider || "none"}`);
 
-    const result = streamText({
-      model: model as Parameters<typeof streamText>[0]["model"],
-      ...(maxOutputTokens ? { maxOutputTokens } : {}),
-      providerOptions: providerOptions as Parameters<typeof streamText>[0]["providerOptions"],
-      system: buildSystemPrompt(globalState),
-      messages: await convertToModelMessages(this.messages),
-      tools,
-      stopWhen: stepCountIs(10), // Allow multi-turn tool calling (replaces LangGraph agentic loop)
-      abortSignal: options?.abortSignal,
-      onFinish: async ({ text }) => {
-        console.log("[MusicChatAgent] onFinish sessionId=%s textLen=%d", sessionId, text?.length || 0);
-        if (!sessionId) return;
+    const convertedMessages = await convertToModelMessages(this.messages);
+    const agentMessages = this.messages;
+    const agentEnv = this.env;
 
-        // streamText's onFinish fires when the LLM is done, BEFORE the SDK
-        // persists the assistant message to this.messages. So we use the
-        // result `text` directly and add +1 for the assistant message.
-        const now = Date.now();
-        const totalMessages = messageCount + 1; // +1 for the assistant reply
-        const preview = (text || "...").slice(0, 100);
+    const stream = createUIMessageStream({
+      execute: ({ writer }) => {
+        const result = streamText({
+          model: model as Parameters<typeof streamText>[0]["model"],
+          ...(maxOutputTokens ? { maxOutputTokens } : {}),
+          providerOptions: providerOptions as Parameters<typeof streamText>[0]["providerOptions"],
+          system: buildSystemPrompt(globalState),
+          messages: convertedMessages,
+          tools,
+          stopWhen: stepCountIs(10),
+          abortSignal: options?.abortSignal,
+          onStepFinish: ({ toolResults }) => {
+            // Emit music actions as transient data parts (not persisted to SQLite)
+            for (const tr of toolResults) {
+              const output = (tr as unknown as { result: unknown }).result ?? (tr as unknown as { output: unknown }).output;
+              try {
+                const parsed = typeof output === "string" ? JSON.parse(output) : null;
+                if (parsed?._action) {
+                  writer.write({
+                    transient: true,
+                    type: "data-music-action",
+                    data: { ...parsed._action, id: (tr as unknown as { toolCallId: string }).toolCallId },
+                  });
+                }
+              } catch { /* not JSON */ }
+            }
+          },
+          onFinish: async ({ text }) => {
+            console.log("[MusicChatAgent] onFinish sessionId=%s textLen=%d", sessionId, text?.length || 0);
+            if (!sessionId) return;
 
-        this.env.DB.batch([
-          this.env.DB.prepare(
-            'UPDATE "conversation" SET "messageCount" = ?, "lastMessagePreview" = ?, "lastMessageAt" = ?, "updatedAt" = ? WHERE "id" = ?'
-          ).bind(totalMessages, preview, now, now, sessionId),
-        ]).catch((e) => console.warn("D1 metadata sync failed:", e));
+            const now = Date.now();
+            const totalMessages = messageCount + 1;
+            const preview = (text || "...").slice(0, 100);
 
-        // Generate title after first exchange (1 user + 1 assistant = 2)
-        if (userId && messageCount <= 2) {
-          // Build simplified messages from what we have: this.messages
-          // contains the user message(s), plus the assistant text from result
-          const simplifiedMessages = this.messages.map((m) => ({
-            role: m.role,
-            content: m.parts
-              .filter((p): p is Extract<typeof p, { type: "text" }> => p.type === "text")
-              .map((p) => p.text)
-              .join("") || "",
-          }));
-          // Append the assistant reply (not yet in this.messages)
-          simplifiedMessages.push({ role: "assistant", content: text });
+            agentEnv.DB.batch([
+              agentEnv.DB.prepare(
+                'UPDATE "conversation" SET "messageCount" = ?, "lastMessagePreview" = ?, "lastMessageAt" = ?, "updatedAt" = ? WHERE "id" = ?'
+              ).bind(totalMessages, preview, now, now, sessionId),
+            ]).catch((e) => console.warn("D1 metadata sync failed:", e));
 
-          generateAndUpdateTitle(
-            this.env.DB,
-            sessionId,
-            simplifiedMessages.slice(0, 5),
-            this.env
-          ).catch((e) => console.warn("Title generation failed:", e));
-        }
+            if (userId && messageCount <= 2) {
+              const simplifiedMessages = agentMessages.map((m) => ({
+                role: m.role,
+                content: m.parts
+                  .filter((p): p is Extract<typeof p, { type: "text" }> => p.type === "text")
+                  .map((p) => p.text)
+                  .join("") || "",
+              }));
+              simplifiedMessages.push({ role: "assistant", content: text });
+
+              generateAndUpdateTitle(
+                agentEnv.DB,
+                sessionId,
+                simplifiedMessages.slice(0, 5),
+                agentEnv
+              ).catch((e) => console.warn("Title generation failed:", e));
+            }
+          },
+        });
+
+        writer.merge(result.toUIMessageStream());
       },
     });
 
-    return result.toUIMessageStreamResponse();
+    return createUIMessageStreamResponse({ stream });
   }
 }
 

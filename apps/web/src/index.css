@@ -66,6 +66,17 @@
   .nav-btn {
     @apply p-3 rounded-xl text-gemini-subtext hover:bg-white hover:text-gemini-text transition-colors;
   }
+
+  /* Unified spacing for sidebar fixed items (burger, new chat, avatar) */
+  .nav-item {
+    @apply px-4 py-2;
+  }
+  .nav-item:first-child {
+    @apply pt-4;
+  }
+  .nav-item:last-child {
+    @apply pb-2;
+  }
 }
 
 @layer utilities {

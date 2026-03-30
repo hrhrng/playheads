@@ -180,7 +180,7 @@ export const AppLayout = ({
     <>
       {/* Burger Menu / toggle (desktop only) */}
       {!isMobile && (
-        <div className="mb-3 px-4">
+        <div className="nav-item">
           <button
             onClick={() => setExpanded(!expanded)}
             className="nav-btn"
@@ -191,7 +191,7 @@ export const AppLayout = ({
       )}
 
       {/* New Chat — always at this level, same position expanded or collapsed */}
-      <div className="px-4 mb-2">
+      <div className="nav-item">
         <button
           onClick={handleNewChat}
           className="w-full p-3 rounded-xl text-gemini-subtext hover:bg-gemini-hover transition-colors flex items-center overflow-hidden whitespace-nowrap"
@@ -205,7 +205,7 @@ export const AppLayout = ({
 
       {/* Scrollable conversation container — only when expanded */}
       {(isMobile || expanded) && (
-        <div className="bg-gemini-hover/50 rounded-3xl mx-2 py-4 flex flex-col gap-2 overflow-hidden overflow-y-auto max-h-[calc(100vh-300px)]">
+        <div className="bg-gemini-hover/50 rounded-3xl mx-2 py-4 flex flex-col gap-2 overflow-hidden overflow-y-auto max-h-[calc(100vh-200px)]">
           {/* Conversation List */}
           <ConversationList
             conversations={conversations}
@@ -223,8 +223,8 @@ export const AppLayout = ({
       )}
 
       {/* Bottom section: User info with settings popover */}
-      <div className="mt-auto mb-2 px-4">
-        <div className="p-2 flex items-center overflow-hidden whitespace-nowrap">
+      <div className="mt-auto nav-item">
+        <div className="p-3 flex items-center overflow-hidden whitespace-nowrap">
           <div className="w-6 flex justify-center shrink-0">
             <UserSettingsPopover
               userEmail={userEmail}
@@ -274,7 +274,7 @@ export const AppLayout = ({
           <nav
             ref={navRef}
             style={{ width: `${width}px` }}
-            className={`relative hidden md:flex flex-col py-6 shrink-0 z-20 ${isResizing ? '' : 'transition-all duration-300 ease-in-out'}`}
+            className={`relative hidden md:flex flex-col pt-4 shrink-0 z-20 ${isResizing ? '' : 'transition-all duration-300 ease-in-out'}`}
           >
             {/* Resize Handle - positioned on the right edge */}
             <div
@@ -312,7 +312,7 @@ export const AppLayout = ({
               onClick={() => setMobileNavOpen(false)}
             />
             {/* Drawer */}
-            <nav className="fixed inset-y-0 left-0 w-72 z-50 md:hidden bg-gemini-bg flex flex-col py-6 shadow-2xl">
+            <nav className="fixed inset-y-0 left-0 w-72 z-50 md:hidden bg-gemini-bg flex flex-col shadow-2xl">
               {/* Close button */}
               <div className="mb-4 px-4">
                 <button
