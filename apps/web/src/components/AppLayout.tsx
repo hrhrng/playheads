@@ -274,7 +274,7 @@ export const AppLayout = ({
           <nav
             ref={navRef}
             style={{ width: `${width}px` }}
-            className={`relative hidden md:flex flex-col py-6 shrink-0 z-20 ${isResizing ? '' : 'transition-all duration-300 ease-in-out'}`}
+            className={`relative hidden md:flex flex-col shrink-0 z-20 ${isResizing ? '' : 'transition-all duration-300 ease-in-out'}`}
           >
             {/* Resize Handle - positioned on the right edge */}
             <div
@@ -312,7 +312,7 @@ export const AppLayout = ({
               onClick={() => setMobileNavOpen(false)}
             />
             {/* Drawer */}
-            <nav className="fixed inset-y-0 left-0 w-72 z-50 md:hidden bg-gemini-bg flex flex-col py-6 shadow-2xl">
+            <nav className="fixed inset-y-0 left-0 w-72 z-50 md:hidden bg-gemini-bg flex flex-col shadow-2xl">
               {/* Close button */}
               <div className="mb-4 px-4">
                 <button
