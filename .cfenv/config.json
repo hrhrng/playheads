@@ -1,0 +1,33 @@
+{
+  "version": 2,
+  "defaultLinkKey": "playheads:development",
+  "links": {
+    "playheads:development": {
+      "version": 1,
+      "profile": "default",
+      "namespaceId": "50436375971b4e1e94437b08db4b2be4",
+      "keyPrefix": "cfenv",
+      "project": "playheads",
+      "environment": "development",
+      "storageMode": "flat"
+    },
+    "playheads:production": {
+      "version": 1,
+      "profile": "default",
+      "namespaceId": "50436375971b4e1e94437b08db4b2be4",
+      "keyPrefix": "cfenv",
+      "project": "playheads",
+      "environment": "production",
+      "storageMode": "flat"
+    },
+    "playheads:preview": {
+      "version": 1,
+      "profile": "default",
+      "namespaceId": "50436375971b4e1e94437b08db4b2be4",
+      "keyPrefix": "cfenv",
+      "project": "playheads",
+      "environment": "preview",
+      "storageMode": "flat"
+    }
+  }
+}
