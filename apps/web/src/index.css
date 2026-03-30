@@ -72,7 +72,7 @@
     @apply px-4 py-2;
   }
   .nav-item:first-child {
-    @apply pt-8;
+    @apply pt-4;
   }
   .nav-item:last-child {
     @apply pb-2;
