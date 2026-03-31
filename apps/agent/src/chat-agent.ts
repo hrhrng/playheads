@@ -96,9 +96,10 @@ function buildWebSearchTool(env: Env, dbOverride?: { providerType: string; apiKe
             fetch(`https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(buildBraveSiteQuery(query))}&count=3`, { headers }),
             fetch(`https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5`, { headers }),
           ]);
+          console.log(`[WebSearch] Brave: authStatus=${authRes.status} generalStatus=${generalRes.status}`);
 
-          const authData = JSON.parse(await authRes.text()) as BraveResponse;
-          const generalData = JSON.parse(await generalRes.text()) as BraveResponse;
+          const authData = authRes.ok ? JSON.parse(await authRes.text()) as BraveResponse : {};
+          const generalData = generalRes.ok ? JSON.parse(await generalRes.text()) as BraveResponse : {};
 
           // Merge: authoritative results first, then general (deduplicated)
           const authResults = authData.web?.results || [];
@@ -148,9 +149,10 @@ function buildWebSearchTool(env: Env, dbOverride?: { providerType: string; apiKe
               body: JSON.stringify({ query, max_results: 5, search_depth: "basic" }),
             }),
           ]);
+          console.log(`[WebSearch] Tavily: authStatus=${authRes.status} generalStatus=${generalRes.status}`);
 
-          const authData = JSON.parse(await authRes.text()) as TavilyResponse;
-          const generalData = JSON.parse(await generalRes.text()) as TavilyResponse;
+          const authData = authRes.ok ? JSON.parse(await authRes.text()) as TavilyResponse : {};
+          const generalData = generalRes.ok ? JSON.parse(await generalRes.text()) as TavilyResponse : {};
 
           // Merge: authoritative results first, then general (deduplicated)
           const authResults = authData.results || [];
@@ -162,7 +164,8 @@ function buildWebSearchTool(env: Env, dbOverride?: { providerType: string; apiKe
           }
 
           console.log(`[WebSearch] Tavily: authCount=${authResults.length} generalCount=${generalResults.length} mergedCount=${merged.length}`);
-          return merged.map((r, i) => `${i + 1}. ${annotateSearchResult(r.title, r.url)}\n${r.url}\n${r.content}`).join("\n\n");
+          if (!merged.length) return `No results found for: ${query}`;
+          return merged.map((r, i) => `${i + 1}. ${annotateSearchResult(r.title || "", r.url)}\n${r.url}\n${r.content || ""}`).join("\n\n");
         } catch (e) {
           console.error(`[WebSearch] Tavily: error=`, e);
           return `Web search failed: ${e}`;
@@ -294,7 +297,8 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
 
     if (effectiveSearchProvider === "anthropic" && anthropicInstance) {
       console.log("[WebSearch] Using Anthropic native webSearch_20250305");
-      tools = { ...musicTools, web_search: anthropicInstance.tools.webSearch_20250305({ maxUses: 5 }) };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Anthropic native tool type is incompatible with Vercel AI SDK's Tool union
+      tools = { ...musicTools, web_search: anthropicInstance.tools.webSearch_20250305({ maxUses: 5 }) } as any;
     } else {
       const webSearchTool = buildWebSearchTool(this.env, searchDbOverride);
       console.log(`[WebSearch] Custom tool built: ${webSearchTool ? "yes" : "no (undefined)"}`);
