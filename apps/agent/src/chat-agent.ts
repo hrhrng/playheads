@@ -13,6 +13,7 @@ import { z } from "zod";
 import { createMusicTools } from "./tools";
 import { generateAndUpdateTitle } from "./title";
 import { resolveLLM, decryptApiKey } from "./resolve-llm";
+import { annotateSearchResult } from "./source-credibility";
 import type { Env, PlaybackState } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -53,6 +54,13 @@ IMPORTANT:
 - web_search is for discovery and recommendations (web results). search_music is for finding specific tracks on Apple Music.
 - When asked to build a playlist, use web_search for ideas, then search_music + add_to_queue for each track.
 
+Source Credibility:
+- When presenting information from web_search results, prefer authoritative music sources.
+- Results tagged [High Credibility] (e.g. Wikipedia, AllMusic, Discogs, MusicBrainz) are preferred for music history, discographies, and factual claims.
+- Results tagged [Medium Credibility] (e.g. Pitchfork, Rolling Stone, Billboard) are good for reviews, opinions, and current music news.
+- When multiple sources conflict on factual matters, defer to the higher-credibility source.
+- Always mention the source name when citing specific facts or claims.
+
 Be conversational and fun! Keep responses concise.`;
 
 /**
@@ -88,7 +96,7 @@ function buildWebSearchTool(env: Env, dbOverride?: { providerType: string; apiKe
           const results = data.web?.results || [];
           console.log(`[WebSearch] Brave: resultCount=${results.length}`);
           if (!results.length) return `No results found for: ${query}`;
-          return results.map((r, i) => `${i + 1}. ${r.title}\n${r.url}\n${r.description}`).join("\n\n");
+          return results.map((r, i) => `${i + 1}. ${annotateSearchResult(r.title, r.url)}\n${r.url}\n${r.description}`).join("\n\n");
         } catch (e) {
           console.error(`[WebSearch] Brave: error=`, e);
           return `Web search failed: ${e}`;
@@ -121,7 +129,7 @@ function buildWebSearchTool(env: Env, dbOverride?: { providerType: string; apiKe
           const data = JSON.parse(rawText) as { results?: Array<{ title: string; url: string; content: string }> };
           const resultCount = (data.results || []).length;
           console.log(`[WebSearch] Tavily: resultCount=${resultCount}`);
-          return (data.results || []).map((r, i) => `${i + 1}. ${r.title}\n${r.url}\n${r.content}`).join("\n\n");
+          return (data.results || []).map((r, i) => `${i + 1}. ${annotateSearchResult(r.title, r.url)}\n${r.url}\n${r.content}`).join("\n\n");
         } catch (e) {
           console.error(`[WebSearch] Tavily: error=`, e);
           return `Web search failed: ${e}`;
