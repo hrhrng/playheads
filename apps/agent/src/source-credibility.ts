@@ -19,29 +19,42 @@ const DOMAIN_CREDIBILITY: Record<string, CredibilityInfo> = {
   "discogs.com": { tier: 1, label: "High Credibility", name: "Discogs" },
   "musicbrainz.org": { tier: 1, label: "High Credibility", name: "MusicBrainz" },
 
+  // Tier 1 — Chinese authoritative sources
+  "baike.baidu.com": { tier: 1, label: "High Credibility", name: "百度百科" },
+  "douban.com": { tier: 1, label: "High Credibility", name: "豆瓣" },
+
   // Tier 2 — reputable music journalism & reference
   "pitchfork.com": { tier: 2, label: "Medium Credibility", name: "Pitchfork" },
   "rollingstone.com": { tier: 2, label: "Medium Credibility", name: "Rolling Stone" },
   "nme.com": { tier: 2, label: "Medium Credibility", name: "NME" },
   "billboard.com": { tier: 2, label: "Medium Credibility", name: "Billboard" },
   "genius.com": { tier: 2, label: "Medium Credibility", name: "Genius" },
+
+  // Tier 2 — Chinese music platforms & reference
+  "music.163.com": { tier: 2, label: "Medium Credibility", name: "网易云音乐" },
+  "y.qq.com": { tier: 2, label: "Medium Credibility", name: "QQ音乐" },
 };
 
 /**
- * Extract the registrable domain from a URL (strips subdomains like "en.").
- * Returns lowercase domain or empty string on failure.
+ * Look up credibility info for a URL by trying progressively shorter
+ * domain suffixes. This handles subdomain-specific entries like
+ * "baike.baidu.com" or "music.163.com" while still matching plain
+ * domains like "wikipedia.org".
  */
-function extractDomain(url: string): string {
+function lookupCredibility(url: string): CredibilityInfo | null {
   try {
     const hostname = new URL(url).hostname.toLowerCase();
-    // Match last two segments (handles "en.wikipedia.org" → "wikipedia.org")
     const parts = hostname.split(".");
-    if (parts.length >= 2) {
-      return parts.slice(-2).join(".");
+    // Try from full hostname down to registrable domain (last 2 segments)
+    // e.g. "baike.baidu.com" → try "baike.baidu.com", then "baidu.com"
+    for (let i = 0; i <= parts.length - 2; i++) {
+      const candidate = parts.slice(i).join(".");
+      const info = DOMAIN_CREDIBILITY[candidate];
+      if (info) return info;
     }
-    return hostname;
+    return null;
   } catch {
-    return "";
+    return null;
   }
 }
 
@@ -49,8 +62,7 @@ function extractDomain(url: string): string {
  * Get the credibility label for a URL, or null if the domain is unknown.
  */
 export function getCredibilityLabel(url: string): string | null {
-  const domain = extractDomain(url);
-  const info = DOMAIN_CREDIBILITY[domain];
+  const info = lookupCredibility(url);
   if (!info) return null;
   return `[${info.label} - ${info.name}]`;
 }
