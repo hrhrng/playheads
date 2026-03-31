@@ -63,6 +63,20 @@ Source Credibility:
 
 Be conversational and fun! Keep responses concise.`;
 
+/** Safely parse a fetch Response as JSON, logging errors on failure. */
+async function safeParseJSON<T>(res: Response, label: string): Promise<T | null> {
+  if (!res.ok) {
+    console.error(`[WebSearch] ${label}: HTTP ${res.status} ${res.statusText}`);
+    return null;
+  }
+  try {
+    return JSON.parse(await res.text()) as T;
+  } catch (e) {
+    console.error(`[WebSearch] ${label}: JSON parse failed:`, e);
+    return null;
+  }
+}
+
 /**
  * Build a web_search tool.
  * Priority: DB config (from search_provider_config table) > env vars.
@@ -96,14 +110,12 @@ function buildWebSearchTool(env: Env, dbOverride?: { providerType: string; apiKe
             fetch(`https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(buildBraveSiteQuery(query))}&count=3`, { headers }),
             fetch(`https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5`, { headers }),
           ]);
-          console.log(`[WebSearch] Brave: authStatus=${authRes.status} generalStatus=${generalRes.status}`);
-
-          const authData = authRes.ok ? JSON.parse(await authRes.text()) as BraveResponse : {};
-          const generalData = generalRes.ok ? JSON.parse(await generalRes.text()) as BraveResponse : {};
+          const authData = await safeParseJSON<BraveResponse>(authRes, "Brave/auth");
+          const generalData = await safeParseJSON<BraveResponse>(generalRes, "Brave/general");
 
           // Merge: authoritative results first, then general (deduplicated)
-          const authResults = authData.web?.results || [];
-          const generalResults = generalData.web?.results || [];
+          const authResults = authData?.web?.results || [];
+          const generalResults = generalData?.web?.results || [];
           const seen = new Set<string>();
           const merged: BraveResult[] = [];
           for (const r of [...authResults, ...generalResults]) {
@@ -112,10 +124,10 @@ function buildWebSearchTool(env: Env, dbOverride?: { providerType: string; apiKe
 
           console.log(`[WebSearch] Brave: authCount=${authResults.length} generalCount=${generalResults.length} mergedCount=${merged.length}`);
           if (!merged.length) return `No results found for: ${query}`;
-          return merged.map((r, i) => `${i + 1}. ${annotateSearchResult(r.title, r.url)}\n${r.url}\n${r.description}`).join("\n\n");
+          return merged.map((r, i) => `${i + 1}. ${annotateSearchResult(r.title || "", r.url)}\n${r.url}\n${r.description || ""}`).join("\n\n");
         } catch (e) {
           console.error(`[WebSearch] Brave: error=`, e);
-          return `Web search failed: ${e}`;
+          return `Web search failed: ${e instanceof Error ? e.message : String(e)}`;
         }
       },
     });
@@ -149,14 +161,12 @@ function buildWebSearchTool(env: Env, dbOverride?: { providerType: string; apiKe
               body: JSON.stringify({ query, max_results: 5, search_depth: "basic" }),
             }),
           ]);
-          console.log(`[WebSearch] Tavily: authStatus=${authRes.status} generalStatus=${generalRes.status}`);
-
-          const authData = authRes.ok ? JSON.parse(await authRes.text()) as TavilyResponse : {};
-          const generalData = generalRes.ok ? JSON.parse(await generalRes.text()) as TavilyResponse : {};
+          const authData = await safeParseJSON<TavilyResponse>(authRes, "Tavily/auth");
+          const generalData = await safeParseJSON<TavilyResponse>(generalRes, "Tavily/general");
 
           // Merge: authoritative results first, then general (deduplicated)
-          const authResults = authData.results || [];
-          const generalResults = generalData.results || [];
+          const authResults = authData?.results || [];
+          const generalResults = generalData?.results || [];
           const seen = new Set<string>();
           const merged: TavilyResult[] = [];
           for (const r of [...authResults, ...generalResults]) {
@@ -168,7 +178,7 @@ function buildWebSearchTool(env: Env, dbOverride?: { providerType: string; apiKe
           return merged.map((r, i) => `${i + 1}. ${annotateSearchResult(r.title || "", r.url)}\n${r.url}\n${r.content || ""}`).join("\n\n");
         } catch (e) {
           console.error(`[WebSearch] Tavily: error=`, e);
-          return `Web search failed: ${e}`;
+          return `Web search failed: ${e instanceof Error ? e.message : String(e)}`;
         }
       },
     });
@@ -292,13 +302,14 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
     const effectiveSearchProvider = (searchDbOverride?.providerType || this.env.SEARCH_PROVIDER || (card?.nativeSearch ? "anthropic" : "")).toLowerCase();
     console.log(`[WebSearch] Resolution: dbOverride=${JSON.stringify(searchDbOverride ? { providerType: searchDbOverride.providerType, hasApiKey: !!searchDbOverride.apiKey } : null)} envProvider=${this.env.SEARCH_PROVIDER || "unset"} nativeSearch=${card?.nativeSearch} effective="${effectiveSearchProvider}" hasAnthropicInstance=${!!anthropicInstance}`);
 
+    type ToolSet = Parameters<typeof streamText>[0]["tools"];
     const musicTools = createMusicTools({ env: this.env, state: globalState, storefront });
-    let tools: Parameters<typeof streamText>[0]["tools"] = musicTools;
+    let tools: ToolSet = musicTools;
 
     if (effectiveSearchProvider === "anthropic" && anthropicInstance) {
       console.log("[WebSearch] Using Anthropic native webSearch_20250305");
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Anthropic native tool type is incompatible with Vercel AI SDK's Tool union
-      tools = { ...musicTools, web_search: anthropicInstance.tools.webSearch_20250305({ maxUses: 5 }) } as any;
+      // Anthropic native tool type is structurally compatible but nominally mismatched with Vercel AI SDK's Tool union
+      tools = { ...musicTools, web_search: anthropicInstance.tools.webSearch_20250305({ maxUses: 5 }) } as unknown as ToolSet;
     } else {
       const webSearchTool = buildWebSearchTool(this.env, searchDbOverride);
       console.log(`[WebSearch] Custom tool built: ${webSearchTool ? "yes" : "no (undefined)"}`);
