@@ -75,3 +75,20 @@ export function annotateSearchResult(title: string, url: string): string {
   const label = getCredibilityLabel(url);
   return label ? `${title} ${label}` : title;
 }
+
+/**
+ * Authoritative domains for Tavily's `include_domains` parameter.
+ * These are the full domains Tavily expects (not URL patterns).
+ */
+export const PREFERRED_DOMAINS = Object.keys(DOMAIN_CREDIBILITY);
+
+/**
+ * Build a Brave `site:` query fragment targeting Tier 1 sources.
+ * E.g. "jazz history site:wikipedia.org OR site:allmusic.com OR ..."
+ */
+export function buildBraveSiteQuery(query: string): string {
+  const tier1 = Object.entries(DOMAIN_CREDIBILITY)
+    .filter(([, info]) => info.tier === 1)
+    .map(([domain]) => `site:${domain}`);
+  return `${query} ${tier1.join(" OR ")}`;
+}

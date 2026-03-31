@@ -13,7 +13,7 @@ import { z } from "zod";
 import { createMusicTools } from "./tools";
 import { generateAndUpdateTitle } from "./title";
 import { resolveLLM, decryptApiKey } from "./resolve-llm";
-import { annotateSearchResult } from "./source-credibility";
+import { annotateSearchResult, PREFERRED_DOMAINS, buildBraveSiteQuery } from "./source-credibility";
 import type { Env, PlaybackState } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -87,16 +87,31 @@ function buildWebSearchTool(env: Env, dbOverride?: { providerType: string; apiKe
       execute: async ({ query }: { query: string }) => {
         console.log(`[WebSearch] Brave: executing query="${query}"`);
         try {
-          const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5`;
-          const res = await fetch(url, { headers: { "X-Subscription-Token": apiKey, Accept: "application/json" } });
-          console.log(`[WebSearch] Brave: status=${res.status} statusText=${res.statusText}`);
-          const rawText = await res.text();
-          console.log(`[WebSearch] Brave: rawResponse=${rawText.substring(0, 500)}`);
-          const data = JSON.parse(rawText) as { web?: { results?: Array<{ title: string; url: string; description: string }> } };
-          const results = data.web?.results || [];
-          console.log(`[WebSearch] Brave: resultCount=${results.length}`);
-          if (!results.length) return `No results found for: ${query}`;
-          return results.map((r, i) => `${i + 1}. ${annotateSearchResult(r.title, r.url)}\n${r.url}\n${r.description}`).join("\n\n");
+          const headers = { "X-Subscription-Token": apiKey, Accept: "application/json" };
+          type BraveResult = { title: string; url: string; description: string };
+          type BraveResponse = { web?: { results?: BraveResult[] } };
+
+          // Parallel: one query targeting authoritative sources, one general
+          const [authRes, generalRes] = await Promise.all([
+            fetch(`https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(buildBraveSiteQuery(query))}&count=3`, { headers }),
+            fetch(`https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(query)}&count=5`, { headers }),
+          ]);
+
+          const authData = JSON.parse(await authRes.text()) as BraveResponse;
+          const generalData = JSON.parse(await generalRes.text()) as BraveResponse;
+
+          // Merge: authoritative results first, then general (deduplicated)
+          const authResults = authData.web?.results || [];
+          const generalResults = generalData.web?.results || [];
+          const seen = new Set<string>();
+          const merged: BraveResult[] = [];
+          for (const r of [...authResults, ...generalResults]) {
+            if (!seen.has(r.url)) { seen.add(r.url); merged.push(r); }
+          }
+
+          console.log(`[WebSearch] Brave: authCount=${authResults.length} generalCount=${generalResults.length} mergedCount=${merged.length}`);
+          if (!merged.length) return `No results found for: ${query}`;
+          return merged.map((r, i) => `${i + 1}. ${annotateSearchResult(r.title, r.url)}\n${r.url}\n${r.description}`).join("\n\n");
         } catch (e) {
           console.error(`[WebSearch] Brave: error=`, e);
           return `Web search failed: ${e}`;
@@ -118,18 +133,36 @@ function buildWebSearchTool(env: Env, dbOverride?: { providerType: string; apiKe
       execute: async ({ query }: { query: string }) => {
         console.log(`[WebSearch] Tavily: executing query="${query}"`);
         try {
-          const res = await fetch("https://api.tavily.com/search", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-            body: JSON.stringify({ query, max_results: 5, search_depth: "basic" }),
-          });
-          console.log(`[WebSearch] Tavily: status=${res.status} statusText=${res.statusText}`);
-          const rawText = await res.text();
-          console.log(`[WebSearch] Tavily: rawResponse=${rawText.substring(0, 500)}`);
-          const data = JSON.parse(rawText) as { results?: Array<{ title: string; url: string; content: string }> };
-          const resultCount = (data.results || []).length;
-          console.log(`[WebSearch] Tavily: resultCount=${resultCount}`);
-          return (data.results || []).map((r, i) => `${i + 1}. ${annotateSearchResult(r.title, r.url)}\n${r.url}\n${r.content}`).join("\n\n");
+          type TavilyResult = { title: string; url: string; content: string; score?: number };
+          type TavilyResponse = { results?: TavilyResult[] };
+          const tavilyHeaders = { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` };
+
+          // Parallel: one query targeting authoritative domains, one general
+          const [authRes, generalRes] = await Promise.all([
+            fetch("https://api.tavily.com/search", {
+              method: "POST", headers: tavilyHeaders,
+              body: JSON.stringify({ query, max_results: 3, search_depth: "basic", include_domains: PREFERRED_DOMAINS }),
+            }),
+            fetch("https://api.tavily.com/search", {
+              method: "POST", headers: tavilyHeaders,
+              body: JSON.stringify({ query, max_results: 5, search_depth: "basic" }),
+            }),
+          ]);
+
+          const authData = JSON.parse(await authRes.text()) as TavilyResponse;
+          const generalData = JSON.parse(await generalRes.text()) as TavilyResponse;
+
+          // Merge: authoritative results first, then general (deduplicated)
+          const authResults = authData.results || [];
+          const generalResults = generalData.results || [];
+          const seen = new Set<string>();
+          const merged: TavilyResult[] = [];
+          for (const r of [...authResults, ...generalResults]) {
+            if (!seen.has(r.url)) { seen.add(r.url); merged.push(r); }
+          }
+
+          console.log(`[WebSearch] Tavily: authCount=${authResults.length} generalCount=${generalResults.length} mergedCount=${merged.length}`);
+          return merged.map((r, i) => `${i + 1}. ${annotateSearchResult(r.title, r.url)}\n${r.url}\n${r.content}`).join("\n\n");
         } catch (e) {
           console.error(`[WebSearch] Tavily: error=`, e);
           return `Web search failed: ${e}`;
