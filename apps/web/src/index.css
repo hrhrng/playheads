@@ -127,6 +127,14 @@
   animation: lyric-tap 0.2s ease-out;
 }
 
+/* GenUI export mode — hide interactive elements for screenshot */
+.genui-export-mode button {
+  display: none !important;
+}
+.genui-export-mode .group:hover > * {
+  opacity: 1 !important;
+}
+
 body {
   @apply bg-gemini-bg text-gemini-text font-sans selection:bg-gemini-primary selection:text-white antialiased;
 }

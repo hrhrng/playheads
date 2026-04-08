@@ -367,6 +367,7 @@ export const ChatInterface = ({
           messages={messages}
           isLoading={isLoading}
           showHistory={showHistory}
+          queueOps={queueOps}
         />
 
       </div>

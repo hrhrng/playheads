@@ -94,7 +94,8 @@ function mapUIMessagesToMessages(uiMessages: UIMessage[]): Message[] {
             if (hasOutput && !hasError && typeof toolPart.output === "string") {
               try {
                 const parsed = JSON.parse(toolPart.output);
-                if (parsed?.message) displayResult = parsed.message;
+                if (parsed?._genui) displayResult = parsed;           // GenUI: preserve full payload
+                else if (parsed?.message) displayResult = parsed.message;
                 else displayResult = toolPart.output;
               } catch {
                 displayResult = toolPart.output;

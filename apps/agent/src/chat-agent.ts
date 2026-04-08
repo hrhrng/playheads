@@ -10,7 +10,7 @@
 import { AIChatAgent } from "@cloudflare/ai-chat";
 import { streamText, convertToModelMessages, stepCountIs, tool, createUIMessageStream, createUIMessageStreamResponse } from "ai";
 import { z } from "zod";
-import { createMusicTools } from "./tools";
+import { createMusicTools, createGenUITools } from "./tools";
 import { generateAndUpdateTitle } from "./title";
 import { resolveLLM, decryptApiKey } from "./resolve-llm";
 import type { Env, PlaybackState } from "./types";
@@ -33,6 +33,7 @@ Available Tools:
 - play_track(index) — play a track ALREADY in the playlist (1-indexed position).
 - skip_next() — skip to the next track.
 - remove_from_playlist(index) — remove a track by position (1-indexed).
+- show_visual(title, subtitle, gradient, sections) — render a rich visual UI inline in the chat. Compose from base primitives: section, timeline-era, grid, carousel, album-card, track-card, text, stat, badge-group. For album-card/track-card items, provide a 'query' field (e.g. "Kind of Blue Miles Davis") for Apple Music artwork/playback enrichment.
 
 Workflow:
 - "Play X" → search_music(X) → add_to_queue(id) → play_track(position)
@@ -44,6 +45,7 @@ Workflow:
 - "What's playing?" → get_now_playing()
 - "Show queue" → get_playlist()
 - "Recommend" → web_search(query) → show results → wait for user to pick
+- "History of X" / "How did X evolve?" / "Best albums of Y" / "Compare X vs Y" → show_visual with timeline-era sections, grids, or mixed layouts. Build the component tree from your knowledge; album-card items will be enriched with artwork automatically.
 
 IMPORTANT:
 - search_music only searches — it does NOT add to queue or play.
@@ -248,17 +250,19 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
     const effectiveSearchProvider = (searchDbOverride?.providerType || this.env.SEARCH_PROVIDER || (card?.nativeSearch ? "anthropic" : "")).toLowerCase();
     console.log(`[WebSearch] Resolution: dbOverride=${JSON.stringify(searchDbOverride ? { providerType: searchDbOverride.providerType, hasApiKey: !!searchDbOverride.apiKey } : null)} envProvider=${this.env.SEARCH_PROVIDER || "unset"} nativeSearch=${card?.nativeSearch} effective="${effectiveSearchProvider}" hasAnthropicInstance=${!!anthropicInstance}`);
 
-    const musicTools = createMusicTools({ env: this.env, state: globalState, storefront });
-    let tools: Parameters<typeof streamText>[0]["tools"] = musicTools;
+    const toolCtx = { env: this.env, state: globalState, storefront };
+    const musicTools = createMusicTools(toolCtx);
+    const genuiTools = createGenUITools(toolCtx);
+    let tools: Parameters<typeof streamText>[0]["tools"] = { ...musicTools, ...genuiTools };
 
     if (effectiveSearchProvider === "anthropic" && anthropicInstance) {
       console.log("[WebSearch] Using Anthropic native webSearch_20250305");
-      tools = { ...musicTools, web_search: anthropicInstance.tools.webSearch_20250305({ maxUses: 5 }) };
+      tools = { ...musicTools, ...genuiTools, web_search: anthropicInstance.tools.webSearch_20250305({ maxUses: 5 }) };
     } else {
       const webSearchTool = buildWebSearchTool(this.env, searchDbOverride);
       console.log(`[WebSearch] Custom tool built: ${webSearchTool ? "yes" : "no (undefined)"}`);
       if (webSearchTool) {
-        tools = { ...musicTools, web_search: webSearchTool };
+        tools = { ...musicTools, ...genuiTools, web_search: webSearchTool };
       } else {
         console.log("[WebSearch] WARNING: No web search tool registered!");
       }

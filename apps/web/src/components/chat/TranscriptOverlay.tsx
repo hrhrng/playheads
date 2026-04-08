@@ -6,6 +6,7 @@
 import { useAutoScroll } from '../../hooks/useChatHelpers';
 import { MessageList } from './MessageList';
 import type { Message } from '../../types';
+import type { QueueOperations } from '../../hooks/useAgentChatAdapter';
 
 interface TranscriptOverlayProps {
   /** Array of chat messages */
@@ -14,6 +15,8 @@ interface TranscriptOverlayProps {
   isLoading: boolean;
   /** Whether to show the history overlay */
   showHistory: boolean;
+  /** Queue operations for GenUI interactive components */
+  queueOps?: QueueOperations | null;
 }
 
 /**
@@ -22,7 +25,8 @@ interface TranscriptOverlayProps {
 export const TranscriptOverlay = ({
   messages,
   isLoading,
-  showHistory
+  showHistory,
+  queueOps,
 }: TranscriptOverlayProps): React.JSX.Element => {
   const endRef = useAutoScroll(messages);
 
@@ -34,7 +38,7 @@ export const TranscriptOverlay = ({
     >
       <div className="w-full px-6 overflow-y-auto no-scrollbar pb-44 pt-8">
       <div className="max-w-xl mx-auto">
-        <MessageList messages={messages} isLoading={isLoading} />
+        <MessageList messages={messages} isLoading={isLoading} queueOps={queueOps} />
         <div ref={endRef} />
       </div>
       </div>

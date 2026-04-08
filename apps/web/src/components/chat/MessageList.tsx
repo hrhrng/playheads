@@ -6,13 +6,18 @@
 import { ToolCall } from './ToolCall';
 import { ThinkingProcess } from './ThinkingProcess';
 import { MarkdownMessage } from './MarkdownMessage';
+import { GenUIContainer, GenUILoadingSkeleton } from '../genui';
 import type { Message, MessagePart } from '../../types';
+import type { GenUIPayload } from '../../types/genui';
+import type { QueueOperations } from '../../hooks/useAgentChatAdapter';
 
 interface MessageListProps {
   /** Array of messages to display */
   messages: Message[];
   /** Whether a new message is currently loading */
   isLoading: boolean;
+  /** Queue operations for GenUI interactive components */
+  queueOps?: QueueOperations | null;
 }
 
 /**
@@ -23,7 +28,7 @@ interface MessageListProps {
  * - text 部分保持大字体
  * - tool_call 和 thinking 紧凑展示在同一个block
  */
-export const MessageList = ({ messages, isLoading }: MessageListProps): React.JSX.Element => {
+export const MessageList = ({ messages, isLoading, queueOps }: MessageListProps): React.JSX.Element => {
   /**
    * Type guard to check if message uses modern parts format
    */
@@ -71,6 +76,26 @@ export const MessageList = ({ messages, isLoading }: MessageListProps): React.JS
                       </div>
                     );
                   } else if (part.type === 'tool_call') {
+                    // GenUI: detect _genui marker in tool result
+                    const isGenUI = part.result &&
+                      typeof part.result === 'object' &&
+                      '_genui' in (part.result as Record<string, unknown>);
+
+                    if (isGenUI && part.status === 'success') {
+                      const payload = part.result as { data: GenUIPayload };
+                      return (
+                        <GenUIContainer
+                          key={`genui-${part.id}-${pIdx}`}
+                          data={payload.data}
+                          queueOps={queueOps}
+                        />
+                      );
+                    }
+
+                    if (isGenUI && part.status === 'pending') {
+                      return <GenUILoadingSkeleton key={`genui-skel-${pIdx}`} />;
+                    }
+
                     return (
                       <ToolCall
                         key={`tool-${part.id}-${pIdx}`}
