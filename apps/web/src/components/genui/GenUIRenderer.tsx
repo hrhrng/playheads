@@ -54,6 +54,7 @@ export function renderNode(node: GenUINode, key: string): React.ReactNode {
       return <Divider key={key} />;
 
     default:
+      console.warn('[GenUI] Unknown node type:', (node as { type: string }).type);
       return null;
   }
 }

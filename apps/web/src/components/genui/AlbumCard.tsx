@@ -9,6 +9,10 @@ import { useState, useEffect } from 'react';
 import { useGenUIActions } from './GenUIContext';
 import { API_BASE } from '../../config/api';
 import type { AlbumCardNode } from '../../types/genui';
+import type { UnifiedTrack } from '../../providers/types';
+
+/** Delay before skipNext after addTrack to allow queue update to settle. */
+const PLAY_AFTER_QUEUE_DELAY_MS = 300;
 
 interface EnrichedData {
   artworkUrl?: string;
@@ -38,16 +42,19 @@ export function AlbumCard({
   useEffect(() => {
     if (enriched.artworkUrl || !query) return;
 
-    let cancelled = false;
+    const controller = new AbortController();
+    const { signal } = controller;
+
     (async () => {
       try {
         const res = await fetch(
-          `${API_BASE}/apple-music/catalog/search?term=${encodeURIComponent(query)}&types=albums&storefront=us&limit=1`
+          `${API_BASE}/apple-music/catalog/search?term=${encodeURIComponent(query)}&types=albums&storefront=us&limit=1`,
+          { signal },
         );
-        if (cancelled || !res.ok) return;
+        if (!res.ok) return;
         const data = await res.json();
         const album = data?.results?.albums?.data?.[0];
-        if (!album || cancelled) return;
+        if (!album) return;
 
         const attrs = album.attributes || {};
         const artwork = attrs.artwork || {};
@@ -59,57 +66,54 @@ export function AlbumCard({
         let songId: string | undefined;
         try {
           const tracksRes = await fetch(
-            `${API_BASE}/apple-music/catalog/albums/${album.id}?storefront=us`
+            `${API_BASE}/apple-music/catalog/albums/${album.id}?storefront=us`,
+            { signal },
           );
           if (tracksRes.ok) {
             const albumData = await tracksRes.json();
             const tracks = albumData?.data?.[0]?.relationships?.tracks?.data;
             songId = tracks?.[0]?.id;
           }
-        } catch { /* best effort */ }
+        } catch (e) {
+          if ((e as Error).name !== 'AbortError') console.warn('[GenUI] album track lookup failed:', e);
+        }
 
-        if (!cancelled) {
+        if (!signal.aborted) {
           setEnriched({ artworkUrl, albumId: album.id, songId });
         }
-      } catch {
-        // Enrichment is best-effort
+      } catch (e) {
+        if ((e as Error).name !== 'AbortError') console.warn('[GenUI] enrichment failed:', e);
       }
     })();
 
-    return () => { cancelled = true; };
+    return () => { controller.abort(); };
   }, [query, enriched.artworkUrl]);
 
   const artworkUrl = enriched.artworkUrl;
   const songId = enriched.songId;
   const canPlay = !!songId && !!actions;
 
+  const buildTrack = (): UnifiedTrack => ({
+    id: songId!,
+    name: title,
+    artist: subtitle,
+    album: title,
+    artworkUrl: artworkUrl || '',
+    durationSeconds: 0, // Duration unknown from catalog search; MusicKit resolves at playback
+    provider: 'apple-music',
+  });
+
   const handlePlay = async () => {
     if (!songId || !actions) return;
-    actions.addTrack({
-      id: songId,
-      name: title,
-      artist: subtitle,
-      album: title,
-      artworkUrl: artworkUrl || '',
-      durationSeconds: 0,
-      provider: 'apple-music',
-    });
+    actions.addTrack(buildTrack());
     setTimeout(() => {
       actions.skipNext().catch(console.error);
-    }, 300);
+    }, PLAY_AFTER_QUEUE_DELAY_MS);
   };
 
   const handleQueue = () => {
     if (!songId || !actions) return;
-    actions.addTrack({
-      id: songId,
-      name: title,
-      artist: subtitle,
-      album: title,
-      artworkUrl: artworkUrl || '',
-      durationSeconds: 0,
-      provider: 'apple-music',
-    });
+    actions.addTrack(buildTrack());
   };
 
   return (

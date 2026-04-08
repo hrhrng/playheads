@@ -50,7 +50,7 @@ const itemSchema = z.object({
  * Section schema — a logical group with optional layout override.
  * Sections contain items (leaf nodes).
  */
-const sectionSchema = z.object({
+const sectionSchema: z.ZodType<SectionSchemaInput> = z.object({
   type: z.enum(["section", "timeline-era", "grid", "carousel", "stack"]).default("section"),
   title: z.string().optional(),
   subtitle: z.string().optional(),
@@ -61,8 +61,23 @@ const sectionSchema = z.object({
   columns: z.number().min(1).max(6).optional(),
   gap: z.number().optional(),
   items: z.array(itemSchema).optional().describe("Leaf-level content items"),
-  children: z.array(z.lazy(() => sectionSchema)).optional().describe("Nested sub-sections"),
+  children: z.array(z.lazy((): z.ZodType<SectionSchemaInput> => sectionSchema)).optional().describe("Nested sub-sections"),
 });
+
+/** Explicit type for the recursive section schema to satisfy TS7022/TS7024. */
+interface SectionSchemaInput {
+  type?: "section" | "timeline-era" | "grid" | "carousel" | "stack";
+  title?: string;
+  subtitle?: string;
+  description?: string;
+  year?: string;
+  label?: string;
+  direction?: "horizontal" | "vertical";
+  columns?: number;
+  gap?: number;
+  items?: z.infer<typeof itemSchema>[];
+  children?: SectionSchemaInput[];
+}
 
 type SectionInput = z.infer<typeof sectionSchema>;
 type ItemInput = z.infer<typeof itemSchema>;
@@ -77,6 +92,9 @@ interface EnrichedItem extends ItemInput {
   albumId?: string;
 }
 
+/** Maximum nesting depth for sections to prevent DoS via deeply nested trees. */
+const MAX_SECTION_DEPTH = 5;
+
 /**
  * Walk the section tree and enrich album-card / track-card items
  * with Apple Music data (artwork URL, song ID for playback).
@@ -85,7 +103,13 @@ async function enrichSections(
   sections: SectionInput[],
   storefront: string,
   env: import("../types").Env,
+  depth = 0,
 ): Promise<SectionInput[]> {
+  if (depth >= MAX_SECTION_DEPTH) {
+    console.warn(`[GenUI] Max section nesting depth (${MAX_SECTION_DEPTH}) reached, skipping deeper children`);
+    return sections;
+  }
+
   return Promise.all(
     sections.map(async (section) => {
       const enrichedItems = section.items
@@ -93,7 +117,7 @@ async function enrichSections(
         : undefined;
 
       const enrichedChildren = section.children
-        ? await enrichSections(section.children, storefront, env)
+        ? await enrichSections(section.children, storefront, env, depth + 1)
         : undefined;
 
       return { ...section, items: enrichedItems, children: enrichedChildren };
@@ -136,17 +160,16 @@ async function enrichMusicItem(
       env,
       { term: item.query!, types: "albums", limit: 1 },
     );
-    const albums =
-      ((result.results as Record<string, unknown>)?.albums as Record<string, unknown>)
-        ?.data as Array<Record<string, unknown>> | undefined;
+    const resultsObj = result?.results as Record<string, unknown> | undefined;
+    const albumsObj = resultsObj?.albums as Record<string, unknown> | undefined;
+    const albums = albumsObj?.data as Array<Record<string, unknown>> | undefined;
     const found = albums?.[0];
     if (!found) return item;
 
-    const attrs = (found.attributes || {}) as Record<string, unknown>;
-    const artwork = (attrs.artwork || {}) as Record<string, unknown>;
-    const artworkUrl = ((artwork.url as string) || "")
-      .replace("{w}", "300")
-      .replace("{h}", "300");
+    const attrs = (found.attributes ?? {}) as Record<string, unknown>;
+    const artwork = (attrs.artwork ?? {}) as Record<string, unknown>;
+    const rawUrl = typeof artwork.url === "string" ? artwork.url : "";
+    const artworkUrl = rawUrl.replace("{w}", "300").replace("{h}", "300");
 
     // Fetch first track from the album for playback
     let songId: string | undefined;
@@ -156,18 +179,19 @@ async function enrichMusicItem(
         env,
         { limit: 1 },
       );
-      const tracks = (tracksResult.data as Array<Record<string, unknown>>) || [];
-      songId = tracks[0]?.id as string | undefined;
-    } catch {
-      // Album track lookup is best-effort
+      const tracks = Array.isArray(tracksResult?.data) ? tracksResult.data as Array<Record<string, unknown>> : [];
+      const firstId = tracks[0]?.id;
+      songId = typeof firstId === "string" ? firstId : undefined;
+    } catch (e) {
+      console.warn("[GenUI] album track lookup failed:", e);
     }
 
     return {
       ...item,
-      title: item.title || (attrs.name as string) || item.title,
-      subtitle: item.subtitle || (attrs.artistName as string) || item.subtitle,
+      title: item.title || (typeof attrs.name === "string" ? attrs.name : "") || item.title,
+      subtitle: item.subtitle || (typeof attrs.artistName === "string" ? attrs.artistName : "") || item.subtitle,
       artworkUrl,
-      albumId: found.id as string,
+      albumId: String(found.id ?? ""),
       songId,
     };
   }
@@ -178,22 +202,21 @@ async function enrichMusicItem(
     env,
     { term: item.query!, types: "songs", limit: 1 },
   );
-  const songs =
-    ((result.results as Record<string, unknown>)?.songs as Record<string, unknown>)
-      ?.data as Array<Record<string, unknown>> | undefined;
+  const resultsObj = result?.results as Record<string, unknown> | undefined;
+  const songsObj = resultsObj?.songs as Record<string, unknown> | undefined;
+  const songs = songsObj?.data as Array<Record<string, unknown>> | undefined;
   const found = songs?.[0];
   if (!found) return item;
 
-  const attrs = (found.attributes || {}) as Record<string, unknown>;
-  const artwork = (attrs.artwork || {}) as Record<string, unknown>;
-  const artworkUrl = ((artwork.url as string) || "")
-    .replace("{w}", "300")
-    .replace("{h}", "300");
+  const attrs = (found.attributes ?? {}) as Record<string, unknown>;
+  const artwork = (attrs.artwork ?? {}) as Record<string, unknown>;
+  const rawUrl = typeof artwork.url === "string" ? artwork.url : "";
+  const artworkUrl = rawUrl.replace("{w}", "300").replace("{h}", "300");
 
   return {
     ...item,
-    title: item.title || (attrs.name as string),
-    artist: item.artist || (attrs.artistName as string),
+    title: item.title || (typeof attrs.name === "string" ? attrs.name : ""),
+    artist: item.artist || (typeof attrs.artistName === "string" ? attrs.artistName : ""),
     artworkUrl,
     songId: found.id as string,
   };

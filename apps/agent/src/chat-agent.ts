@@ -257,7 +257,7 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
 
     if (effectiveSearchProvider === "anthropic" && anthropicInstance) {
       console.log("[WebSearch] Using Anthropic native webSearch_20250305");
-      tools = { ...musicTools, ...genuiTools, web_search: anthropicInstance.tools.webSearch_20250305({ maxUses: 5 }) };
+      tools = { ...musicTools, ...genuiTools, web_search: anthropicInstance.tools.webSearch_20250305({ maxUses: 5 }) as typeof tools[string] };
     } else {
       const webSearchTool = buildWebSearchTool(this.env, searchDbOverride);
       console.log(`[WebSearch] Custom tool built: ${webSearchTool ? "yes" : "no (undefined)"}`);

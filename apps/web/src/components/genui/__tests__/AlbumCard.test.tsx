@@ -202,10 +202,12 @@ describe('AlbumCard', () => {
     );
 
     expect(mockFetch).toHaveBeenCalledWith(
-      expect.stringContaining('catalog/search')
+      expect.stringContaining('catalog/search'),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
     expect(mockFetch).toHaveBeenCalledWith(
-      expect.stringContaining('Kind%20of%20Blue%20Miles%20Davis')
+      expect.stringContaining('Kind%20of%20Blue%20Miles%20Davis'),
+      expect.anything(),
     );
   });
 

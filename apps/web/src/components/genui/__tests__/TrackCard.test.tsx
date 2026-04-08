@@ -124,7 +124,8 @@ describe('TrackCard', () => {
     );
 
     expect(mockFetch).toHaveBeenCalledWith(
-      expect.stringContaining('catalog/search')
+      expect.stringContaining('catalog/search'),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
   });
 });

@@ -7,6 +7,7 @@ import { ToolCall } from './ToolCall';
 import { ThinkingProcess } from './ThinkingProcess';
 import { MarkdownMessage } from './MarkdownMessage';
 import { GenUIContainer, GenUILoadingSkeleton } from '../genui';
+import { GenUIErrorBoundary } from '../genui/GenUIErrorBoundary';
 import type { Message, MessagePart } from '../../types';
 import type { GenUIPayload } from '../../types/genui';
 import type { QueueOperations } from '../../hooks/useAgentChatAdapter';
@@ -84,11 +85,12 @@ export const MessageList = ({ messages, isLoading, queueOps }: MessageListProps)
                     if (isGenUI && part.status === 'success') {
                       const payload = part.result as { data: GenUIPayload };
                       return (
-                        <GenUIContainer
-                          key={`genui-${part.id}-${pIdx}`}
-                          data={payload.data}
-                          queueOps={queueOps}
-                        />
+                        <GenUIErrorBoundary key={`genui-${part.id}-${pIdx}`}>
+                          <GenUIContainer
+                            data={payload.data}
+                            queueOps={queueOps}
+                          />
+                        </GenUIErrorBoundary>
                       );
                     }
 
