@@ -8,7 +8,7 @@
  * @module components/chat/MessageList
  */
 
-import { Renderer, type ComponentRegistry } from '@json-render/react';
+import { Renderer, JSONUIProvider, type ComponentRegistry } from '@json-render/react';
 import { useJsonRenderMessage, type DataPart } from '@json-render/react';
 import type { UIMessage } from 'ai';
 import { ToolCall } from './ToolCall';
@@ -57,7 +57,9 @@ function AssistantMessage({
         <GenUIErrorBoundary>
           <div className="w-full max-w-[calc(100vw-48px)] rounded-2xl border border-gray-200 bg-white overflow-hidden animate-genui-slide-in shadow-sm">
             <div className="p-4">
-              <Renderer spec={spec} registry={registry as unknown as ComponentRegistry} loading={isStreaming} />
+              <JSONUIProvider registry={registry as unknown as ComponentRegistry}>
+                <Renderer spec={spec} registry={registry as unknown as ComponentRegistry} loading={isStreaming} />
+              </JSONUIProvider>
             </div>
           </div>
         </GenUIErrorBoundary>
