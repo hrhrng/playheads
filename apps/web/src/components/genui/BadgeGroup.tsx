@@ -1,29 +1,30 @@
 /**
- * BadgeGroup — cluster of tag/label badges.
+ * BadgeGroup — cluster of tag/label badges (dark theme).
  */
-import type { BadgeGroupNode } from '../../types/genui';
+interface BadgeGroupProps {
+  type?: string;
+  badges: { label: string; color?: string | null }[];
+}
 
 const DEFAULT_COLORS = [
-  'bg-blue-50 text-blue-700',
-  'bg-purple-50 text-purple-700',
-  'bg-green-50 text-green-700',
-  'bg-amber-50 text-amber-700',
-  'bg-rose-50 text-rose-700',
-  'bg-cyan-50 text-cyan-700',
+  'bg-blue-500/20 text-blue-300',
+  'bg-purple-500/20 text-purple-300',
+  'bg-emerald-500/20 text-emerald-300',
+  'bg-amber-500/20 text-amber-300',
+  'bg-rose-500/20 text-rose-300',
+  'bg-cyan-500/20 text-cyan-300',
 ];
 
-export function BadgeGroup({ badges }: BadgeGroupNode) {
+export function BadgeGroup({ badges }: BadgeGroupProps) {
   return (
     <div className="flex flex-wrap gap-1.5 animate-genui-slide-in">
       {badges.map((badge, i) => (
         <span
           key={`${badge.label}-${i}`}
           className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium ${
-            badge.color
-              ? '' // custom color: user provides full class
-              : DEFAULT_COLORS[i % DEFAULT_COLORS.length]
+            badge.color ? '' : DEFAULT_COLORS[i % DEFAULT_COLORS.length]
           }`}
-          style={badge.color ? { backgroundColor: `${badge.color}20`, color: badge.color } : undefined}
+          style={badge.color ? { backgroundColor: `${badge.color}30`, color: badge.color } : undefined}
         >
           {badge.label}
         </span>

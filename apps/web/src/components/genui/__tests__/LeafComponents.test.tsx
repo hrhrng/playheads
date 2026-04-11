@@ -1,6 +1,6 @@
 /**
  * Tests for GenUI leaf (content) components:
- * TextBlock, Stat, BadgeGroup, Divider, ImageBlock
+ * TextBlock, Stat, BadgeGroup, Divider
  */
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
@@ -8,7 +8,6 @@ import { TextBlock } from '../TextBlock';
 import { Stat } from '../Stat';
 import { BadgeGroup } from '../BadgeGroup';
 import { Divider } from '../Divider';
-import { ImageBlock } from '../ImageBlock';
 
 // ------------------------------------------------------------------
 // TextBlock
@@ -29,13 +28,13 @@ describe('TextBlock', () => {
   it('applies caption style class', () => {
     const { container } = render(<TextBlock type="text" content="Note" style="caption" />);
     const wrapper = container.firstChild as HTMLElement;
-    expect(wrapper.className).toContain('text-gray-500');
+    expect(wrapper.className).toContain('text-white/40');
   });
 
   it('defaults to body style', () => {
     const { container } = render(<TextBlock type="text" content="Body text" />);
     const wrapper = container.firstChild as HTMLElement;
-    expect(wrapper.className).toContain('text-gray-700');
+    expect(wrapper.className).toContain('text-white/60');
   });
 });
 
@@ -98,7 +97,7 @@ describe('BadgeGroup', () => {
       />
     );
     const badge = container.querySelector('span');
-    expect(badge?.className).toContain('bg-blue-50');
+    expect(badge?.className).toContain('bg-blue-500');
   });
 
   it('renders empty when no badges', () => {
@@ -121,29 +120,3 @@ describe('Divider', () => {
   });
 });
 
-// ------------------------------------------------------------------
-// ImageBlock
-// ------------------------------------------------------------------
-
-describe('ImageBlock', () => {
-  it('renders an image with src and alt', () => {
-    render(<ImageBlock type="image" src="https://example.com/photo.jpg" alt="A photo" />);
-    const img = screen.getByAltText('A photo');
-    expect(img).toBeInTheDocument();
-    expect(img).toHaveAttribute('src', 'https://example.com/photo.jpg');
-  });
-
-  it('shows placeholder while loading', () => {
-    const { container } = render(<ImageBlock type="image" src="https://example.com/photo.jpg" />);
-    // Before image loads, there should be a pulse animation placeholder
-    expect(container.querySelector('.animate-pulse')).toBeInTheDocument();
-  });
-
-  it('uses empty string for alt when not provided', () => {
-    const { container } = render(<ImageBlock type="image" src="https://example.com/photo.jpg" />);
-    // alt="" gives the img a "presentation" role, so use querySelector
-    const img = container.querySelector('img');
-    expect(img).toBeInTheDocument();
-    expect(img).toHaveAttribute('alt', '');
-  });
-});

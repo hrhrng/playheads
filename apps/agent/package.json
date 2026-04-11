@@ -8,14 +8,15 @@
     "types": "wrangler types"
   },
   "dependencies": {
-    "@playheads/llm-config": "workspace:*",
     "@ai-sdk/anthropic": "^3.0.58",
     "@ai-sdk/openai-compatible": "^2.0.0",
     "@cloudflare/ai-chat": "^0.1.0",
+    "@json-render/yaml": "^0.17.0",
+    "@playheads/llm-config": "workspace:*",
     "agents": "^0.7.0",
     "ai": "^6.0.0",
     "jose": "^6.0.0",
-    "zod": "^3.24.0"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20241205.0",

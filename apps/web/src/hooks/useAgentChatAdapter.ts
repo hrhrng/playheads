@@ -51,6 +51,8 @@ interface UseAgentChatAdapterParams {
 
 interface UseAgentChatAdapterReturn {
   messages: Message[];
+  /** Raw UIMessages from AI SDK — needed by json-render's useJsonRenderMessage */
+  rawMessages: UIMessage[];
   sendMessage: (text: string) => void;
   isLoading: boolean;
   clearHistory: () => void;
@@ -94,8 +96,7 @@ function mapUIMessagesToMessages(uiMessages: UIMessage[]): Message[] {
             if (hasOutput && !hasError && typeof toolPart.output === "string") {
               try {
                 const parsed = JSON.parse(toolPart.output);
-                if (parsed?._genui) displayResult = parsed;           // GenUI: preserve full payload
-                else if (parsed?.message) displayResult = parsed.message;
+                if (parsed?.message) displayResult = parsed.message;
                 else displayResult = toolPart.output;
               } catch {
                 displayResult = toolPart.output;
@@ -216,6 +217,7 @@ export function useAgentChatAdapter({
 
   return {
     messages,
+    rawMessages: uiMessages,
     sendMessage,
     isLoading,
     clearHistory,

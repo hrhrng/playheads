@@ -1,62 +1,78 @@
 /**
- * Timeline — horizontal scrollable timeline with era nodes,
- * connecting line, and content sections.
+ * Timeline — horizontal scrollable timeline with era nodes.
+ *
+ * Works with json-render: TimelineEra components are rendered as children.
+ * The Timeline.Era sub-component provides individual era styling.
  */
-import { renderNode } from './GenUIRenderer';
-import type { TimelineNode } from '../../types/genui';
+import { Children, type ReactNode } from 'react';
 
-export function Timeline({ items }: TimelineNode) {
+interface TimelineEraProps {
+  year: string;
+  label: string;
+  description?: string;
+  children?: ReactNode;
+}
+
+/**
+ * Individual era node with connector, dot, labels, and content.
+ */
+function Era({ year, label, description, children }: TimelineEraProps) {
   return (
-    <div className="overflow-x-auto no-scrollbar -mx-1 px-1 pb-2">
-      <div className="flex items-start min-w-max">
-        {items.map((item, i) => (
-          <div
-            key={`era-${i}`}
-            className="flex flex-col items-center animate-genui-slide-in"
-            style={{ animationDelay: `${i * 100}ms` }}
-          >
-            {/* Timeline connector + dot */}
-            <div className="flex items-center w-full px-2">
-              {/* Left line */}
-              <div className={`h-[2px] flex-1 ${i === 0 ? 'bg-transparent' : 'bg-gray-300'}`} />
-              {/* Dot */}
-              <div className="relative">
-                <div className="w-3 h-3 rounded-full bg-gray-800 ring-4 ring-white shadow-sm z-10" />
-              </div>
-              {/* Right line */}
-              <div className={`h-[2px] flex-1 ${i === items.length - 1 ? 'bg-transparent' : 'bg-gray-300'}`} />
-            </div>
+    <div className="flex flex-col items-center min-w-[160px] animate-genui-slide-in">
+      {/* Year + label */}
+      <div className="text-center mb-3">
+        <span className="text-xs font-bold text-white/90 tabular-nums">{year}</span>
+        <div className="mt-0.5">
+          <span className="text-[11px] font-medium text-white/50">{label}</span>
+        </div>
+        {description && (
+          <p className="mt-1 text-[10px] text-white/30 max-w-[180px] line-clamp-2">
+            {description}
+          </p>
+        )}
+      </div>
 
-            {/* Year label */}
-            <div className="mt-2 text-center">
-              <span className="text-[11px] font-bold text-gray-900 tabular-nums">{item.year}</span>
-            </div>
-
-            {/* Era name */}
-            <div className="mt-0.5 text-center px-3">
-              <span className="text-[11px] font-medium text-gray-600">{item.label}</span>
-            </div>
-
-            {/* Description */}
-            {item.description && (
-              <p className="mt-1 text-[10px] text-gray-400 text-center px-3 max-w-[200px] line-clamp-2">
-                {item.description}
-              </p>
-            )}
-
-            {/* Content below */}
-            <div className="mt-3 px-2">
-              <div className="flex gap-3 pb-1">
-                {item.children.map((child, ci) => (
-                  <div key={`era-${i}-child-${ci}`} className="shrink-0">
-                    {renderNode(child, `era-${i}-child-${ci}`)}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        ))}
+      {/* Content — album cards etc */}
+      <div className="flex gap-3 pb-1">
+        {children}
       </div>
     </div>
   );
 }
+
+interface TimelineContainerProps {
+  children?: ReactNode;
+}
+
+/**
+ * Horizontal scrollable timeline container.
+ * Renders a connecting line between era nodes.
+ */
+function TimelineContainer({ children }: TimelineContainerProps) {
+  const count = Children.count(children);
+
+  return (
+    <div className="overflow-x-auto no-scrollbar -mx-1 px-1 pb-2">
+      {/* Timeline line */}
+      <div className="relative">
+        {/* Connecting line behind the dots */}
+        <div className="flex items-start min-w-max">
+          {Children.map(children, (child, i) => (
+            <div key={i} className="flex flex-col items-center">
+              {/* Dot + connector */}
+              <div className="flex items-center w-full px-4 mb-2">
+                <div className={`h-[2px] flex-1 ${i === 0 ? 'bg-transparent' : 'bg-white/20'}`} />
+                <div className="w-2.5 h-2.5 rounded-full bg-white/80 ring-[3px] ring-white/10 shadow-sm z-10 shrink-0" />
+                <div className={`h-[2px] flex-1 ${i === count - 1 ? 'bg-transparent' : 'bg-white/20'}`} />
+              </div>
+              {/* Era content */}
+              {child}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export const Timeline = Object.assign(TimelineContainer, { Era });

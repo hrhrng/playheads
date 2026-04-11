@@ -14,6 +14,9 @@
   },
   "dependencies": {
     "@cloudflare/ai-chat": "^0.1.0",
+    "@json-render/core": "^0.17.0",
+    "@json-render/react": "^0.17.0",
+    "@json-render/yaml": "^0.17.0",
     "@playheads/auth": "workspace:*",
     "@use-gesture/react": "^10.3.1",
     "agents": "^0.7.0",
@@ -27,6 +30,7 @@
     "react-router-dom": "^7.12.0",
     "remark-gfm": "^4.0.1",
     "sonner": "^1.4.0",
+    "zod": "^4.3.6",
     "zustand": "^5.0.10"
   },
   "devDependencies": {

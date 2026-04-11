@@ -10,7 +10,10 @@
 import { AIChatAgent } from "@cloudflare/ai-chat";
 import { streamText, convertToModelMessages, stepCountIs, tool, createUIMessageStream, createUIMessageStreamResponse } from "ai";
 import { z } from "zod";
-import { createMusicTools, createGenUITools } from "./tools";
+import { createMusicTools } from "./tools";
+import { pipeYamlRender } from "@json-render/yaml";
+import { yamlPrompt } from "@json-render/yaml";
+import { musicCatalog } from "./genui-catalog";
 import { generateAndUpdateTitle } from "./title";
 import { resolveLLM, decryptApiKey } from "./resolve-llm";
 import type { Env, PlaybackState } from "./types";
@@ -33,7 +36,8 @@ Available Tools:
 - play_track(index) — play a track ALREADY in the playlist (1-indexed position).
 - skip_next() — skip to the next track.
 - remove_from_playlist(index) — remove a track by position (1-indexed).
-- show_visual(title, subtitle, gradient, sections) — render a rich visual UI inline in the chat. Compose from base primitives: section, timeline-era, grid, carousel, album-card, track-card, text, stat, badge-group. For album-card/track-card items, provide a 'query' field (e.g. "Kind of Blue Miles Davis") for Apple Music artwork/playback enrichment.
+
+You can also render rich visual UIs (timelines, album grids, artist spotlights) inline using YAML spec blocks. See the GENUI section below for details.
 
 Workflow:
 - "Play X" → search_music(X) → add_to_queue(id) → play_track(position)
@@ -45,7 +49,7 @@ Workflow:
 - "What's playing?" → get_now_playing()
 - "Show queue" → get_playlist()
 - "Recommend" → web_search(query) → show results → wait for user to pick
-- "History of X" / "How did X evolve?" / "Best albums of Y" / "Compare X vs Y" → show_visual with timeline-era sections, grids, or mixed layouts. Build the component tree from your knowledge; album-card items will be enriched with artwork automatically.
+- "History of X" / "How did X evolve?" / "Best albums of Y" / "Compare X vs Y" / "Show me artist's discography" → Use a yaml-spec block to render a rich visual (see GENUI section).
 
 IMPORTANT:
 - search_music only searches — it does NOT add to queue or play.
@@ -160,7 +164,21 @@ function buildSystemPrompt(state: PlaybackState): string {
     lines.push("Playlist is empty.");
   }
 
-  return SYSTEM_PROMPT_TEMPLATE.replace("{state_context}", lines.join("\n"));
+  const basePrompt = SYSTEM_PROMPT_TEMPLATE.replace("{state_context}", lines.join("\n"));
+
+  // Append json-render YAML catalog prompt so the LLM knows how to compose visual UIs
+  const genuiPrompt = yamlPrompt(musicCatalog, {
+    mode: "inline",
+    system: "\n\nGENUI — Rich Visual UI\nWhen asked about genre history, album timelines, artist spotlights, best-of lists, or comparisons, output a yaml-spec block to render a rich visual. Respond conversationally first, then include the yaml-spec block.",
+    customRules: [
+      "For AlbumCard, always set 'query' to 'AlbumTitle ArtistName' so artwork is auto-fetched from Apple Music.",
+      "Use TimelineEra children inside a Section to build horizontal timelines.",
+      "Use multiple AlbumCard children inside a TimelineEra for albums of that period.",
+      "Keep visuals focused — 3-6 TimelineEra nodes for timelines, 4-9 AlbumCards for grids.",
+    ],
+  });
+
+  return basePrompt + "\n\n" + genuiPrompt;
 }
 
 // ---------------------------------------------------------------------------
@@ -252,17 +270,16 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
 
     const toolCtx = { env: this.env, state: globalState, storefront };
     const musicTools = createMusicTools(toolCtx);
-    const genuiTools = createGenUITools(toolCtx);
-    let tools: Parameters<typeof streamText>[0]["tools"] = { ...musicTools, ...genuiTools };
+    let tools: Parameters<typeof streamText>[0]["tools"] = { ...musicTools };
 
     if (effectiveSearchProvider === "anthropic" && anthropicInstance) {
       console.log("[WebSearch] Using Anthropic native webSearch_20250305");
-      tools = { ...musicTools, ...genuiTools, web_search: anthropicInstance.tools.webSearch_20250305({ maxUses: 5 }) as typeof tools[string] };
+      tools = { ...musicTools, web_search: anthropicInstance.tools.webSearch_20250305({ maxUses: 5 }) as typeof tools[string] };
     } else {
       const webSearchTool = buildWebSearchTool(this.env, searchDbOverride);
       console.log(`[WebSearch] Custom tool built: ${webSearchTool ? "yes" : "no (undefined)"}`);
       if (webSearchTool) {
-        tools = { ...musicTools, ...genuiTools, web_search: webSearchTool };
+        tools = { ...musicTools, web_search: webSearchTool };
       } else {
         console.log("[WebSearch] WARNING: No web search tool registered!");
       }
@@ -335,7 +352,9 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
           },
         });
 
-        writer.merge(result.toUIMessageStream());
+        // Pipe through YAML transform: intercepts ```yaml-spec fences,
+        // parses them incrementally, and emits json-render data parts.
+        writer.merge(pipeYamlRender(result.toUIMessageStream()));
       },
     });
 

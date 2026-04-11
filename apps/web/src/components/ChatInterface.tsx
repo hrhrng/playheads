@@ -100,6 +100,7 @@ export const ChatInterface = ({
   // Use chat hook for state and methods
   const {
     messages,
+    rawMessages,
     input,
     isLoading,
     isLoadingHistory,
@@ -365,6 +366,7 @@ export const ChatInterface = ({
         {/* Transcript Overlay */}
         <TranscriptOverlay
           messages={messages}
+          rawMessages={rawMessages}
           isLoading={isLoading}
           showHistory={showHistory}
           queueOps={queueOps}
