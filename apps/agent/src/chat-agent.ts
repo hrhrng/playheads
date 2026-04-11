@@ -49,7 +49,7 @@ Workflow:
 - "What's playing?" → get_now_playing()
 - "Show queue" → get_playlist()
 - "Recommend" → web_search(query) → show results → wait for user to pick
-- "History of X" / "How did X evolve?" / "Best albums of Y" / "Compare X vs Y" / "Show me artist's discography" → Use a yaml-spec block to render a rich visual (see GENUI section).
+- "History of X" / "How did X evolve?" / "Best albums of Y" / "Compare X vs Y" / "Show me artist's discography" → FIRST call search_music for each key album/track to get real Apple Music IDs, THEN output a yaml-spec block using those real IDs in trackId props. Never make up IDs.
 
 IMPORTANT:
 - search_music only searches — it does NOT add to queue or play.
@@ -169,10 +169,18 @@ function buildSystemPrompt(state: PlaybackState): string {
   // Append json-render YAML catalog prompt so the LLM knows how to compose visual UIs
   const genuiPrompt = yamlPrompt(musicCatalog, {
     mode: "inline",
-    system: "\n\nGENUI — Rich Visual UI\nWhen asked about genre history, album timelines, artist spotlights, best-of lists, or comparisons, output a yaml-spec block to render a rich visual. Respond conversationally first, then include the yaml-spec block.",
+    system:
+      "\n\nGENUI — Rich Visual UI\n" +
+      "When asked about genre history, album timelines, artist spotlights, best-of lists, or comparisons:\n" +
+      "1. FIRST call search_music for each key album/track to get real Apple Music track IDs.\n" +
+      "2. THEN output a yaml-spec block using those real IDs in the trackId prop.\n" +
+      "3. NEVER fabricate track IDs. Only use IDs returned by search_music.\n" +
+      "4. Respond conversationally, then include the yaml-spec block.",
     customRules: [
-      "For AlbumCard, always set 'query' to 'AlbumTitle ArtistName' so artwork is auto-fetched from Apple Music.",
-      "Use TimelineEra children inside a Section to build horizontal timelines.",
+      "CRITICAL: AlbumCard and TrackCard MUST have a real trackId from search_music results. Do NOT use made-up IDs.",
+      "For AlbumCard, set trackId to a real Apple Music song ID (e.g. '965771855'). Artwork is auto-fetched from the track.",
+      "Only use 'query' as a fallback when you absolutely cannot search first.",
+      "Use TimelineEra children inside a Section to build vertical timelines.",
       "Use multiple AlbumCard children inside a TimelineEra for albums of that period.",
       "Keep visuals focused — 3-6 TimelineEra nodes for timelines, 4-9 AlbumCards for grids.",
     ],

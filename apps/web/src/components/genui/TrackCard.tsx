@@ -9,29 +9,50 @@ import type { UnifiedTrack } from '../../providers/types';
 const PLAY_AFTER_QUEUE_DELAY_MS = 300;
 
 interface TrackCardProps {
-  type?: string;
   title: string;
   artist: string;
   album?: string;
+  /** Real Apple Music track ID from search_music — preferred */
+  trackId?: string;
   query?: string;
   artworkUrl?: string;
   songId?: string;
-  onPlay?: () => void;
-  onQueue?: () => void;
 }
 
 export function TrackCard({
-  title, artist, album, artworkUrl: initialArtworkUrl, songId: initialSongId, query, onPlay, onQueue,
+  title, artist, album, artworkUrl: initialArtworkUrl, songId: initialSongId, trackId, query,
 }: TrackCardProps) {
   const actions = useGenUIActions();
   const sf = useStorefront();
   const [imageLoaded, setImageLoaded] = useState(false);
-  const [enriched, setEnriched] = useState({ artworkUrl: initialArtworkUrl, songId: initialSongId });
+  const [enriched, setEnriched] = useState({ artworkUrl: initialArtworkUrl, songId: initialSongId || trackId });
 
   useEffect(() => {
-    if (enriched.artworkUrl || !query) return;
+    if (enriched.artworkUrl) return;
+
     const controller = new AbortController();
     const { signal } = controller;
+
+    // If we have a trackId, fetch directly
+    const id = trackId || enriched.songId;
+    if (id) {
+      (async () => {
+        try {
+          const res = await fetch(`${API_BASE}/apple-music/catalog/songs/${id}?storefront=${sf}`, { signal });
+          if (!res.ok) return;
+          const data = await res.json();
+          const song = data?.data?.[0];
+          if (!song) return;
+          const attrs = song.attributes || {};
+          const artworkUrl = ((attrs.artwork?.url || '') as string).replace('{w}', '300').replace('{h}', '300');
+          if (!signal.aborted) setEnriched({ artworkUrl, songId: id });
+        } catch (e) { if ((e as Error).name !== 'AbortError') console.warn('[GenUI] track lookup failed:', e); }
+      })();
+      return () => { controller.abort(); };
+    }
+
+    // Fallback: search by query
+    if (!query) return;
     (async () => {
       try {
         const res = await fetch(`${API_BASE}/apple-music/catalog/search?term=${encodeURIComponent(query)}&types=songs&storefront=${sf}&limit=1`, { signal });

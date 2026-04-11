@@ -14,6 +14,8 @@ const PLAY_AFTER_QUEUE_DELAY_MS = 300;
 export interface AlbumCardProps {
   title: string;
   subtitle: string;
+  /** Real Apple Music track ID from search_music — preferred */
+  trackId?: string;
   query?: string;
   year?: string;
   artworkUrl?: string;
@@ -34,16 +36,53 @@ interface TrackItem {
   durationMs: number;
 }
 
-/** Hook for client-side Apple Music enrichment. */
-export function useAlbumEnrichment(query?: string, initial?: EnrichedAlbumData, storefront = 'us') {
+/**
+ * Hook for client-side Apple Music enrichment.
+ * Priority: trackId (direct lookup) > query (album search fallback).
+ */
+export function useAlbumEnrichment(opts: { trackId?: string; query?: string; initial?: EnrichedAlbumData; storefront?: string }) {
+  const { trackId, query, initial, storefront = 'us' } = opts;
   const [enriched, setEnriched] = useState<EnrichedAlbumData>({
     artworkUrl: initial?.artworkUrl,
-    songId: initial?.songId,
+    songId: initial?.songId || trackId,
     albumId: initial?.albumId,
   });
 
   useEffect(() => {
-    if (enriched.artworkUrl || !query) return;
+    if (enriched.artworkUrl) return;
+
+    // If we have a trackId, fetch the track directly (no search needed)
+    if (trackId) {
+      const controller = new AbortController();
+      const { signal } = controller;
+      (async () => {
+        try {
+          const res = await fetch(
+            `${API_BASE}/apple-music/catalog/songs/${trackId}?storefront=${storefront}`,
+            { signal },
+          );
+          if (!res.ok) return;
+          const data = await res.json();
+          const song = data?.data?.[0];
+          if (!song) return;
+          const attrs = song.attributes || {};
+          const artwork = attrs.artwork || {};
+          const artworkUrl = (artwork.url || '').replace('{w}', '300').replace('{h}', '300');
+          const albumName = attrs.albumName;
+          if (!signal.aborted) setEnriched({
+            artworkUrl,
+            songId: trackId,
+            albumId: albumName, // store album name for display
+          });
+        } catch (e) {
+          if ((e as Error).name !== 'AbortError') console.warn('[GenUI] track lookup failed:', e);
+        }
+      })();
+      return () => { controller.abort(); };
+    }
+
+    // Fallback: search by query
+    if (!query) return;
     const controller = new AbortController();
     const { signal } = controller;
     (async () => {
@@ -66,13 +105,13 @@ export function useAlbumEnrichment(query?: string, initial?: EnrichedAlbumData, 
       }
     })();
     return () => { controller.abort(); };
-  }, [query, enriched.artworkUrl]);
+  }, [trackId, query, enriched.artworkUrl, storefront]);
 
   return enriched;
 }
 
 export function AlbumCard({
-  title, subtitle, query, year, artworkUrl: initialArtworkUrl,
+  title, subtitle, trackId, query, year, artworkUrl: initialArtworkUrl,
   songId: initialSongId, albumId: initialAlbumId,
 }: AlbumCardProps) {
   const actions = useGenUIActions();
@@ -83,9 +122,10 @@ export function AlbumCard({
   const [loadingTracks, setLoadingTracks] = useState(false);
 
   const sf = useStorefront();
-  const enriched = useAlbumEnrichment(query, {
-    artworkUrl: initialArtworkUrl, songId: initialSongId, albumId: initialAlbumId,
-  }, sf);
+  const enriched = useAlbumEnrichment({
+    trackId, query, storefront: sf,
+    initial: { artworkUrl: initialArtworkUrl, songId: initialSongId || trackId, albumId: initialAlbumId },
+  });
   const { artworkUrl, songId, albumId } = enriched;
   const canPlay = !!songId && !!actions;
 

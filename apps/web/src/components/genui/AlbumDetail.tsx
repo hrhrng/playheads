@@ -44,8 +44,9 @@ export function AlbumDetail({
   const [tracks, setTracks] = useState<TrackItem[]>([]);
   const [loadingTracks, setLoadingTracks] = useState(false);
 
-  const enriched = useAlbumEnrichment(query, {
-    artworkUrl: initialArtworkUrl, songId: initialSongId, albumId: initialAlbumId,
+  const enriched = useAlbumEnrichment({
+    query, storefront: sf,
+    initial: { artworkUrl: initialArtworkUrl, songId: initialSongId, albumId: initialAlbumId },
   });
 
   const { artworkUrl, albumId } = enriched;

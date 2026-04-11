@@ -1,16 +1,9 @@
 /**
  * Music GenUI catalog — defines the component vocabulary the LLM can compose.
- *
- * Uses defineSchema + defineCatalog from @json-render/core (no React dependency,
- * safe for Cloudflare Workers).
  */
 import { defineCatalog, defineSchema } from "@json-render/core";
 import { z } from "zod";
 
-/**
- * Define the same schema structure as @json-render/react/schema
- * but without depending on the React package.
- */
 const schema = defineSchema((s) => ({
   spec: s.object({
     root: s.string(),
@@ -48,8 +41,7 @@ export const musicCatalog = defineCatalog(schema, {
     },
     TimelineEra: {
       description:
-        "A labelled node on a horizontal timeline. Place album cards as children. " +
-        "Use multiple TimelineEra children inside a Section to build a timeline.",
+        "A labelled node on a vertical timeline. Place AlbumCard or TrackCard as children.",
       props: z.object({
         year: z.string().describe("Year or decade, e.g. '1994' or '1990s'"),
         label: z.string().describe("Short era name, e.g. 'Cantopop Era'"),
@@ -58,37 +50,43 @@ export const musicCatalog = defineCatalog(schema, {
     },
     AlbumCard: {
       description:
-        "Compact album cover card — shows artwork, title, artist, year. " +
-        "Hover to play the first track. Best for visual grids and timelines. " +
-        "Set 'query' for Apple Music artwork auto-fetch.",
+        "Album cover card. IMPORTANT: Before using AlbumCard in a yaml-spec, you MUST call search_music " +
+        "to find the real track. Then fill trackId with the Apple Music song ID from search results, " +
+        "and set title/subtitle from the actual search result. " +
+        "If trackId is provided, artwork is fetched automatically from Apple Music. " +
+        "Only use 'query' as a fallback if you cannot call search_music first.",
       props: z.object({
-        title: z.string().describe("Album title"),
-        subtitle: z.string().describe("Artist name"),
-        query: z.string().nullable().describe("Apple Music search query, e.g. 'Fable Faye Wong'"),
+        title: z.string().describe("Album title (from search_music results)"),
+        subtitle: z.string().describe("Artist name (from search_music results)"),
+        trackId: z.string().nullable().describe("Apple Music song ID from search_music results, e.g. '965771855'"),
         year: z.string().nullable(),
+        query: z.string().nullable().describe("Fallback: Apple Music search query if trackId unavailable"),
       }),
-      example: { title: "Fable", subtitle: "Faye Wong", query: "Fable Faye Wong", year: "2000" },
+      example: { title: "天空", subtitle: "王菲", trackId: "965771855", year: "1994", query: null },
     },
     AlbumDetail: {
       description:
-        "Album card with expandable tracklist — tap to expand and see all tracks. " +
-        "Each track can be played or queued individually. Best for detailed album views. " +
-        "Use AlbumCard for compact grids, AlbumDetail for detailed lists.",
+        "Album with expandable tracklist. Same as AlbumCard but shows track list on tap. " +
+        "Use search_music first to get a real trackId.",
       props: z.object({
         title: z.string().describe("Album title"),
         subtitle: z.string().describe("Artist name"),
-        query: z.string().nullable().describe("Apple Music search query, e.g. 'Fable Faye Wong'"),
+        trackId: z.string().nullable().describe("Apple Music song ID from search_music"),
         year: z.string().nullable(),
+        query: z.string().nullable().describe("Fallback search query"),
       }),
-      example: { title: "Fable", subtitle: "Faye Wong", query: "Fable Faye Wong", year: "2000" },
+      example: { title: "天空", subtitle: "王菲", trackId: "965771855", year: "1994", query: null },
     },
     TrackCard: {
-      description: "Compact track row with small artwork. Set 'query' for Apple Music lookup.",
+      description:
+        "Compact track row. Use search_music first to get the real track ID. " +
+        "Fill trackId with the Apple Music song ID.",
       props: z.object({
         title: z.string(),
         artist: z.string(),
         album: z.string().nullable(),
-        query: z.string().nullable(),
+        trackId: z.string().nullable().describe("Apple Music song ID from search_music"),
+        query: z.string().nullable().describe("Fallback search query"),
       }),
     },
     TextBlock: {
@@ -100,10 +98,7 @@ export const musicCatalog = defineCatalog(schema, {
     },
     Stat: {
       description: "Key metric — large value with small label underneath.",
-      props: z.object({
-        value: z.string(),
-        label: z.string(),
-      }),
+      props: z.object({ value: z.string(), label: z.string() }),
     },
     BadgeGroup: {
       description: "Cluster of coloured tag badges.",
@@ -117,11 +112,7 @@ export const musicCatalog = defineCatalog(schema, {
     },
   },
   actions: {
-    play: {
-      description: "Play a track via Apple Music. Triggered by AlbumCard / TrackCard on.play event.",
-    },
-    queue: {
-      description: "Add a track to the playback queue. Triggered by on.queue event.",
-    },
+    play: { description: "Play a track via Apple Music." },
+    queue: { description: "Add a track to the playback queue." },
   },
 });
