@@ -93,31 +93,15 @@ function AssistantMessage({
   // Normalize spec: ensure every element has props and children
   const spec = useMemo(() => normalizeSpec(rawSpec), [rawSpec]);
 
-  // If we have a json-render spec, render it alongside text
-  if (hasSpec && spec) {
-    return (
-      <div className="space-y-3">
-        {text && (
-          <div className="text-gray-800 text-[15px] leading-relaxed">
-            <MarkdownMessage content={text} />
-          </div>
-        )}
-        <GenUIErrorBoundary>
-          <ShareableCard>
-            <JSONUIProvider registry={registry as unknown as ComponentRegistry}>
-              <Renderer spec={spec} registry={registry as unknown as ComponentRegistry} loading={isStreaming} />
-            </JSONUIProvider>
-          </ShareableCard>
-        </GenUIErrorBoundary>
-      </div>
-    );
-  }
-
-  // Regular message — render parts in order
+  // Render all parts (tool calls, thinking) + GenUI spec if present
   return (
     <div className="space-y-3">
+      {/* Tool calls and thinking — always render from mapped parts */}
       {msg.parts.map((part, pIdx) => {
         if (part.type === 'text') {
+          // If we have a spec, use the text extracted by json-render (strips yaml fence)
+          // Otherwise use the raw text part
+          if (hasSpec) return null; // text rendered separately below
           return (
             <div key={`text-${pIdx}`} className="text-gray-800 text-[15px] leading-relaxed">
               <MarkdownMessage content={part.content} />
@@ -141,6 +125,24 @@ function AssistantMessage({
         }
         return null;
       })}
+
+      {/* GenUI spec — rendered after tool calls */}
+      {hasSpec && spec && (
+        <>
+          {text && (
+            <div className="text-gray-800 text-[15px] leading-relaxed">
+              <MarkdownMessage content={text} />
+            </div>
+          )}
+          <GenUIErrorBoundary>
+            <ShareableCard>
+              <JSONUIProvider registry={registry as unknown as ComponentRegistry}>
+                <Renderer spec={spec} registry={registry as unknown as ComponentRegistry} loading={isStreaming} />
+              </JSONUIProvider>
+            </ShareableCard>
+          </GenUIErrorBoundary>
+        </>
+      )}
     </div>
   );
 }
