@@ -5,7 +5,7 @@
  * Always renders both states — CSS handles the transition.
  */
 import { useState, useEffect, useCallback } from 'react';
-import { useGenUIActions } from './GenUIContext';
+import { useGenUIActions, useStorefront } from './GenUIContext';
 import { API_BASE } from '../../config/api';
 import type { UnifiedTrack } from '../../providers/types';
 
@@ -35,7 +35,7 @@ interface TrackItem {
 }
 
 /** Hook for client-side Apple Music enrichment. */
-export function useAlbumEnrichment(query?: string, initial?: EnrichedAlbumData) {
+export function useAlbumEnrichment(query?: string, initial?: EnrichedAlbumData, storefront = 'us') {
   const [enriched, setEnriched] = useState<EnrichedAlbumData>({
     artworkUrl: initial?.artworkUrl,
     songId: initial?.songId,
@@ -49,7 +49,7 @@ export function useAlbumEnrichment(query?: string, initial?: EnrichedAlbumData) 
     (async () => {
       try {
         const res = await fetch(
-          `${API_BASE}/apple-music/catalog/search?term=${encodeURIComponent(query)}&types=albums&storefront=us&limit=1`,
+          `${API_BASE}/apple-music/catalog/search?term=${encodeURIComponent(query)}&types=albums&storefront=${storefront}&limit=1`,
           { signal },
         );
         if (!res.ok) return;
@@ -82,9 +82,10 @@ export function AlbumCard({
   const [tracks, setTracks] = useState<TrackItem[]>([]);
   const [loadingTracks, setLoadingTracks] = useState(false);
 
+  const sf = useStorefront();
   const enriched = useAlbumEnrichment(query, {
     artworkUrl: initialArtworkUrl, songId: initialSongId, albumId: initialAlbumId,
-  });
+  }, sf);
   const { artworkUrl, songId, albumId } = enriched;
   const canPlay = !!songId && !!actions;
 
@@ -93,7 +94,7 @@ export function AlbumCard({
     if (!albumId || tracks.length > 0 || loadingTracks) return;
     setLoadingTracks(true);
     try {
-      const res = await fetch(`${API_BASE}/apple-music/catalog/albums/${albumId}?storefront=us`);
+      const res = await fetch(`${API_BASE}/apple-music/catalog/albums/${albumId}?storefront=${sf}`);
       if (!res.ok) return;
       const data = await res.json();
       const trackList = data?.data?.[0]?.relationships?.tracks?.data || [];

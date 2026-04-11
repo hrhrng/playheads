@@ -6,7 +6,7 @@
  * Used in GenUI timelines, grids, and anywhere else.
  */
 import { useState, useCallback, useEffect } from 'react';
-import { useGenUIActions } from './GenUIContext';
+import { useGenUIActions, useStorefront } from './GenUIContext';
 import { useAlbumEnrichment, type EnrichedAlbumData } from './AlbumCard';
 import { API_BASE } from '../../config/api';
 
@@ -37,6 +37,7 @@ export function AlbumDetail({
   onCollapse,
 }: AlbumDetailProps) {
   const actions = useGenUIActions();
+  const sf = useStorefront();
   const [imageLoaded, setImageLoaded] = useState(false);
   // Start expanded when used inline from AlbumCard (onCollapse is set)
   const [expanded, setExpanded] = useState(!!onCollapse);
@@ -54,7 +55,7 @@ export function AlbumDetail({
     if (!albumId || tracks.length > 0 || loadingTracks) return;
     setLoadingTracks(true);
     try {
-      const res = await fetch(`${API_BASE}/apple-music/catalog/albums/${albumId}?storefront=us`);
+      const res = await fetch(`${API_BASE}/apple-music/catalog/albums/${albumId}?storefront=${sf}`);
       if (!res.ok) return;
       const data = await res.json();
       const trackList = data?.data?.[0]?.relationships?.tracks?.data || [];

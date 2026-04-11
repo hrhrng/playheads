@@ -2,7 +2,7 @@
  * TrackCard — compact track row with small artwork and play/queue buttons.
  */
 import { useState, useEffect } from 'react';
-import { useGenUIActions } from './GenUIContext';
+import { useGenUIActions, useStorefront } from './GenUIContext';
 import { API_BASE } from '../../config/api';
 import type { UnifiedTrack } from '../../providers/types';
 
@@ -24,6 +24,7 @@ export function TrackCard({
   title, artist, album, artworkUrl: initialArtworkUrl, songId: initialSongId, query, onPlay, onQueue,
 }: TrackCardProps) {
   const actions = useGenUIActions();
+  const sf = useStorefront();
   const [imageLoaded, setImageLoaded] = useState(false);
   const [enriched, setEnriched] = useState({ artworkUrl: initialArtworkUrl, songId: initialSongId });
 
@@ -33,7 +34,7 @@ export function TrackCard({
     const { signal } = controller;
     (async () => {
       try {
-        const res = await fetch(`${API_BASE}/apple-music/catalog/search?term=${encodeURIComponent(query)}&types=songs&storefront=us&limit=1`, { signal });
+        const res = await fetch(`${API_BASE}/apple-music/catalog/search?term=${encodeURIComponent(query)}&types=songs&storefront=${sf}&limit=1`, { signal });
         if (!res.ok) return;
         const data = await res.json();
         const song = data?.results?.songs?.data?.[0];

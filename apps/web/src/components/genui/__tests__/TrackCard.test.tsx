@@ -4,7 +4,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { TrackCard } from '../TrackCard';
-import { GenUIActionsProvider } from '../GenUIContext';
+import { GenUIProvider } from '../GenUIContext';
 import type { QueueOperations } from '../../../hooks/useAgentChatAdapter';
 
 const mockFetch = vi.fn();
@@ -21,9 +21,9 @@ function createMockQueueOps(): QueueOperations {
 
 function renderWithActions(ui: React.ReactElement, queueOps?: QueueOperations) {
   return render(
-    <GenUIActionsProvider value={queueOps || null}>
+    <GenUIProvider queueOps={queueOps || null} storefront="us">
       {ui}
-    </GenUIActionsProvider>
+    </GenUIProvider>
   );
 }
 

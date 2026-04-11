@@ -1,14 +1,27 @@
 /**
- * GenUI Actions Context — provides queue operations to deeply nested GenUI components
- * without prop drilling through every layout level.
+ * GenUI Context — provides queue operations and storefront to nested components.
  */
 import { createContext, useContext } from 'react';
 import type { QueueOperations } from '../../hooks/useAgentChatAdapter';
 
-const GenUIActionsContext = createContext<QueueOperations | null>(null);
+interface GenUIContextValue {
+  queueOps: QueueOperations | null;
+  storefront: string;
+}
 
-export const GenUIActionsProvider = GenUIActionsContext.Provider;
+const GenUIContext = createContext<GenUIContextValue>({ queueOps: null, storefront: 'us' });
+
+export function GenUIProvider({ queueOps, storefront, children }: { queueOps: QueueOperations | null; storefront: string; children: React.ReactNode }) {
+  return <GenUIContext.Provider value={{ queueOps, storefront }}>{children}</GenUIContext.Provider>;
+}
 
 export function useGenUIActions(): QueueOperations | null {
-  return useContext(GenUIActionsContext);
+  return useContext(GenUIContext).queueOps;
 }
+
+export function useStorefront(): string {
+  return useContext(GenUIContext).storefront;
+}
+
+// Keep backward compat
+export const GenUIActionsProvider = GenUIContext.Provider;

@@ -370,6 +370,7 @@ export const ChatInterface = ({
           isLoading={isLoading}
           showHistory={showHistory}
           queueOps={queueOps}
+          storefront={musicActions?.storefront}
         />
 
       </div>

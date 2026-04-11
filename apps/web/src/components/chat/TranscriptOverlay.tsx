@@ -15,6 +15,7 @@ interface TranscriptOverlayProps {
   isLoading: boolean;
   showHistory: boolean;
   queueOps?: QueueOperations | null;
+  storefront?: string;
 }
 
 export const TranscriptOverlay = ({
@@ -23,6 +24,7 @@ export const TranscriptOverlay = ({
   isLoading,
   showHistory,
   queueOps,
+  storefront,
 }: TranscriptOverlayProps): React.JSX.Element => {
   const endRef = useAutoScroll(messages);
 
@@ -34,7 +36,7 @@ export const TranscriptOverlay = ({
     >
       <div className="w-full px-6 overflow-y-auto no-scrollbar pb-44 pt-8">
       <div className="max-w-xl mx-auto">
-        <MessageList messages={messages} rawMessages={rawMessages} isLoading={isLoading} queueOps={queueOps} />
+        <MessageList messages={messages} rawMessages={rawMessages} isLoading={isLoading} queueOps={queueOps} storefront={storefront} />
         <div ref={endRef} />
       </div>
       </div>

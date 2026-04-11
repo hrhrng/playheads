@@ -16,7 +16,7 @@ import { ToolCall } from './ToolCall';
 import { ThinkingProcess } from './ThinkingProcess';
 import { MarkdownMessage } from './MarkdownMessage';
 import { GenUIErrorBoundary } from '../genui/GenUIErrorBoundary';
-import { GenUIActionsProvider } from '../genui/GenUIContext';
+import { GenUIProvider } from '../genui/GenUIContext';
 import { ShareableCard } from '../genui/ShareableCard';
 import { registry } from '../../genui/registry';
 import type { Message, MessagePart } from '../../types';
@@ -67,10 +67,10 @@ import type { QueueOperations } from '../../hooks/useAgentChatAdapter';
 
 interface MessageListProps {
   messages: Message[];
-  /** Raw UIMessages from AI SDK for json-render spec extraction */
   rawMessages?: UIMessage[];
   isLoading: boolean;
   queueOps?: QueueOperations | null;
+  storefront?: string;
 }
 
 /**
@@ -147,7 +147,7 @@ function AssistantMessage({
   );
 }
 
-export const MessageList = ({ messages, rawMessages = [], isLoading, queueOps }: MessageListProps): React.JSX.Element => {
+export const MessageList = ({ messages, rawMessages = [], isLoading, queueOps, storefront = 'us' }: MessageListProps): React.JSX.Element => {
   const isModernMessage = (message: Message): message is Message & { parts: MessagePart[] } => {
     return 'parts' in message && Array.isArray(message.parts);
   };
@@ -157,7 +157,7 @@ export const MessageList = ({ messages, rawMessages = [], isLoading, queueOps }:
   };
 
   return (
-    <GenUIActionsProvider value={queueOps || null}>
+    <GenUIProvider queueOps={queueOps || null} storefront={storefront}>
       <div className="space-y-6 pb-12">
         {messages.map((msg, idx) => (
           <div
@@ -213,6 +213,6 @@ export const MessageList = ({ messages, rawMessages = [], isLoading, queueOps }:
           </div>
         )}
       </div>
-    </GenUIActionsProvider>
+    </GenUIProvider>
   );
 };
