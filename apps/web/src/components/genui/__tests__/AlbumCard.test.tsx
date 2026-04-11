@@ -86,7 +86,7 @@ describe('AlbumCard', () => {
     expect(svg).toBeInTheDocument();
   });
 
-  it('shows action buttons on hover when songId and actions available', () => {
+  it('shows play button on hover when songId and actions available', () => {
     const queueOps = createMockQueueOps();
     const { container } = renderWithActions(
       <AlbumCard
@@ -99,9 +99,9 @@ describe('AlbumCard', () => {
       queueOps,
     );
 
-    // Action overlay exists (hidden until hover)
+    // Play overlay button on collapsed card
     const buttons = container.querySelectorAll('button');
-    expect(buttons.length).toBe(2); // Play + Queue
+    expect(buttons.length).toBe(1); // Play only (queue is in expanded tracklist)
   });
 
   it('hides action buttons when no songId', () => {
@@ -135,7 +135,8 @@ describe('AlbumCard', () => {
     expect(buttons.length).toBe(0);
   });
 
-  it('calls addTrack when queue button is clicked', () => {
+  it('calls addTrack + skipNext when play button is clicked on collapsed card', () => {
+    vi.useFakeTimers();
     const queueOps = createMockQueueOps();
     const { container } = renderWithActions(
       <AlbumCard
@@ -148,9 +149,8 @@ describe('AlbumCard', () => {
       queueOps,
     );
 
-    // Click the second button (Add to Queue)
     const buttons = container.querySelectorAll('button');
-    fireEvent.click(buttons[1]); // Queue button
+    fireEvent.click(buttons[0]); // Play button
 
     expect(queueOps.addTrack).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -160,6 +160,9 @@ describe('AlbumCard', () => {
         provider: 'apple-music',
       })
     );
+    vi.advanceTimersByTime(300);
+    expect(queueOps.skipNext).toHaveBeenCalled();
+    vi.useRealTimers();
   });
 
   it('calls addTrack + skipNext when play button is clicked', async () => {
