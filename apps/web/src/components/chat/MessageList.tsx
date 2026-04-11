@@ -21,9 +21,10 @@ import { registry } from '../../genui/registry';
 import type { Message, MessagePart } from '../../types';
 
 /**
- * Normalize a json-render spec so every element has `props` and `children`.
- * LLMs sometimes omit these fields, which crashes the Renderer's
- * Object.entries(props) call.
+ * Normalize a json-render spec:
+ * 1. Every element gets `props: {}` and `children: []` if missing
+ * 2. If `root` doesn't exist in `elements`, synthesize a wrapper that
+ *    references all top-level elements as children
  */
 function normalizeSpec(spec: Spec | null): Spec | null {
   if (!spec?.elements) return spec;
@@ -37,6 +38,28 @@ function normalizeSpec(spec: Spec | null): Spec | null {
       children: element.children ?? [],
     };
   }
+
+  // If root element doesn't exist, synthesize one wrapping all top-level elements
+  const root = spec.root;
+  if (root && !elements[root]) {
+    // Collect all element keys that are NOT referenced as children of others
+    const referencedAsChild = new Set<string>();
+    for (const el of Object.values(elements)) {
+      const children = (el as Record<string, unknown>).children;
+      if (Array.isArray(children)) {
+        for (const c of children) {
+          if (typeof c === 'string') referencedAsChild.add(c);
+        }
+      }
+    }
+    const topLevel = Object.keys(elements).filter(k => !referencedAsChild.has(k));
+    elements[root] = {
+      type: 'Section',
+      props: { title: null, subtitle: null },
+      children: topLevel,
+    };
+  }
+
   return { ...spec, elements: elements as Spec['elements'] };
 }
 import type { QueueOperations } from '../../hooks/useAgentChatAdapter';
