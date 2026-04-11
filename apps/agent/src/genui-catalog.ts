@@ -1,12 +1,41 @@
 /**
  * Music GenUI catalog — defines the component vocabulary the LLM can compose.
  *
- * Uses json-render's defineCatalog with Zod schemas.
- * The catalog generates the LLM system prompt via yamlPrompt().
+ * Uses defineSchema + defineCatalog from @json-render/core (no React dependency,
+ * safe for Cloudflare Workers).
  */
-import { defineCatalog } from "@json-render/core";
-import { schema } from "@json-render/react/schema";
+import { defineCatalog, defineSchema } from "@json-render/core";
 import { z } from "zod";
+
+/**
+ * Define the same schema structure as @json-render/react/schema
+ * but without depending on the React package.
+ */
+const schema = defineSchema((s) => ({
+  spec: s.object({
+    root: s.string(),
+    elements: s.record(
+      s.object({
+        type: s.ref("catalog.components"),
+        props: s.propsOf("catalog.components"),
+        children: s.array(s.string()),
+        visible: s.any(),
+      })
+    ),
+  }),
+  catalog: s.object({
+    components: s.map({
+      props: s.zod(),
+      slots: s.array(s.string()),
+      description: s.string(),
+      example: s.any(),
+    }),
+    actions: s.map({
+      params: s.zod(),
+      description: s.string(),
+    }),
+  }),
+}));
 
 export const musicCatalog = defineCatalog(schema, {
   components: {

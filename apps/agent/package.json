@@ -11,6 +11,7 @@
     "@ai-sdk/anthropic": "^3.0.58",
     "@ai-sdk/openai-compatible": "^2.0.0",
     "@cloudflare/ai-chat": "^0.1.0",
+    "@json-render/core": "^0.17.0",
     "@json-render/yaml": "^0.17.0",
     "@playheads/llm-config": "workspace:*",
     "agents": "^0.7.0",
