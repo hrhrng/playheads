@@ -53,7 +53,7 @@
     "jsdom": "^27.0.1",
     "postcss": "^8.4.35",
     "tailwindcss": "^3.4.1",
-    "typescript": "^5.9.3",
+    "typescript": "^6.0.2",
     "vite": "^5.1.4",
     "vitest": "^3.2.4",
     "wrangler": "^4.73.0"
