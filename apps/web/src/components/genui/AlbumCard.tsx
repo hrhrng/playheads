@@ -1,15 +1,12 @@
 /**
- * AlbumCard — premium album artwork card with play/queue actions.
- *
- * Client-side enrichment: if `query` is present but artwork is missing,
- * lazily fetches from Apple Music → artwork fades in progressively.
+ * AlbumCard — album artwork card with play/queue actions.
+ * Client-side enrichment via Apple Music for progressive artwork loading.
  */
 import { useState, useEffect } from 'react';
 import { useGenUIActions } from './GenUIContext';
 import { API_BASE } from '../../config/api';
 import type { UnifiedTrack } from '../../providers/types';
 
-/** Delay before skipNext after addTrack to allow queue update to settle. */
 const PLAY_AFTER_QUEUE_DELAY_MS = 300;
 
 interface AlbumCardProps {
@@ -51,13 +48,10 @@ export function AlbumCard({
     albumId: initialAlbumId,
   });
 
-  // Client-side enrichment
   useEffect(() => {
     if (enriched.artworkUrl || !query) return;
-
     const controller = new AbortController();
     const { signal } = controller;
-
     (async () => {
       try {
         const res = await fetch(
@@ -68,36 +62,20 @@ export function AlbumCard({
         const data = await res.json();
         const album = data?.results?.albums?.data?.[0];
         if (!album) return;
-
         const attrs = album.attributes || {};
         const artwork = attrs.artwork || {};
-        const artworkUrl = (artwork.url || '')
-          .replace('{w}', '300')
-          .replace('{h}', '300');
-
+        const artworkUrl = (artwork.url || '').replace('{w}', '300').replace('{h}', '300');
         let songId: string | undefined;
         try {
-          const tracksRes = await fetch(
-            `${API_BASE}/apple-music/catalog/albums/${album.id}?storefront=us`,
-            { signal },
-          );
+          const tracksRes = await fetch(`${API_BASE}/apple-music/catalog/albums/${album.id}?storefront=us`, { signal });
           if (tracksRes.ok) {
             const albumData = await tracksRes.json();
-            const tracks = albumData?.data?.[0]?.relationships?.tracks?.data;
-            songId = tracks?.[0]?.id;
+            songId = albumData?.data?.[0]?.relationships?.tracks?.data?.[0]?.id;
           }
-        } catch (e) {
-          if ((e as Error).name !== 'AbortError') console.warn('[GenUI] album track lookup failed:', e);
-        }
-
-        if (!signal.aborted) {
-          setEnriched({ artworkUrl, albumId: album.id, songId });
-        }
-      } catch (e) {
-        if ((e as Error).name !== 'AbortError') console.warn('[GenUI] enrichment failed:', e);
-      }
+        } catch (e) { if ((e as Error).name !== 'AbortError') console.warn('[GenUI] album track lookup failed:', e); }
+        if (!signal.aborted) setEnriched({ artworkUrl, albumId: album.id, songId });
+      } catch (e) { if ((e as Error).name !== 'AbortError') console.warn('[GenUI] enrichment failed:', e); }
     })();
-
     return () => { controller.abort(); };
   }, [query, enriched.artworkUrl]);
 
@@ -106,13 +84,8 @@ export function AlbumCard({
   const canPlay = !!songId && (!!actions || !!onPlay);
 
   const buildTrack = (): UnifiedTrack => ({
-    id: songId!,
-    name: title,
-    artist: subtitle,
-    album: title,
-    artworkUrl: artworkUrl || '',
-    durationSeconds: 0, // Duration resolved by MusicKit at playback
-    provider: 'apple-music',
+    id: songId!, name: title, artist: subtitle, album: title,
+    artworkUrl: artworkUrl || '', durationSeconds: 0, provider: 'apple-music',
   });
 
   const handlePlay = () => {
@@ -134,63 +107,40 @@ export function AlbumCard({
       onMouseEnter={() => setHovering(true)}
       onMouseLeave={() => setHovering(false)}
     >
-      {/* Artwork */}
-      <div className="relative aspect-square rounded-lg overflow-hidden bg-white/[0.08] shadow-lg shadow-black/20">
+      <div className="relative aspect-square rounded-xl overflow-hidden bg-gray-100 shadow-sm">
         {artworkUrl ? (
           <>
-            {!imageLoaded && (
-              <div className="absolute inset-0 bg-white/[0.06] animate-pulse rounded-lg" />
-            )}
+            {!imageLoaded && <div className="absolute inset-0 bg-gray-200 animate-pulse rounded-xl" />}
             <img
               src={artworkUrl}
               alt={`${title} by ${subtitle}`}
-              className={`w-full h-full object-cover transition-all duration-500 ${
-                hovering ? 'scale-[1.06] brightness-75' : 'scale-100 brightness-100'
-              } ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
+              className={`w-full h-full object-cover transition-transform duration-300 ${hovering ? 'scale-105' : 'scale-100'} ${imageLoaded ? 'opacity-100' : 'opacity-0'}`}
               onLoad={() => setImageLoaded(true)}
               loading="lazy"
             />
           </>
         ) : (
-          <div className="w-full h-full bg-white/[0.06] flex items-center justify-center animate-pulse">
-            <svg className="w-7 h-7 text-white/20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="w-full h-full bg-gray-100 flex items-center justify-center animate-pulse">
+            <svg className="w-7 h-7 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 19V6l12-3v13M9 10l12-3" />
             </svg>
           </div>
         )}
-
-        {/* Hover overlay */}
         {canPlay && (
-          <div className={`absolute inset-0 flex items-center justify-center gap-2 transition-opacity duration-200 ${
-            hovering ? 'opacity-100' : 'opacity-0'
-          }`}>
-            <button
-              onClick={handlePlay}
-              className="w-9 h-9 rounded-full bg-white text-gray-900 flex items-center justify-center hover:scale-110 transition-transform shadow-lg"
-              title="Play now"
-            >
-              <svg className="w-4 h-4 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M8 5v14l11-7z" />
-              </svg>
+          <div className={`absolute inset-0 bg-black/30 backdrop-blur-[2px] flex items-center justify-center gap-2 transition-opacity duration-200 ${hovering ? 'opacity-100' : 'opacity-0'}`}>
+            <button onClick={handlePlay} className="w-9 h-9 rounded-full bg-white text-gray-900 flex items-center justify-center hover:scale-110 transition-transform shadow-md" title="Play now">
+              <svg className="w-4 h-4 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
             </button>
-            <button
-              onClick={handleQueue}
-              className="w-8 h-8 rounded-full bg-white/20 backdrop-blur text-white flex items-center justify-center hover:scale-110 transition-transform"
-              title="Add to queue"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-              </svg>
+            <button onClick={handleQueue} className="w-8 h-8 rounded-full bg-white/80 text-gray-700 flex items-center justify-center hover:scale-110 transition-transform shadow-md" title="Add to queue">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
             </button>
           </div>
         )}
       </div>
-
-      {/* Text */}
       <div className="mt-2 px-0.5">
-        <p className="text-[12px] font-medium text-white/85 leading-tight line-clamp-2">{title}</p>
-        <p className="text-[11px] text-white/40 mt-0.5 line-clamp-1">{subtitle}</p>
-        {year && <p className="text-[10px] text-white/25 mt-0.5">{year}</p>}
+        <p className="text-[12px] font-medium text-gray-800 leading-tight line-clamp-2">{title}</p>
+        <p className="text-[11px] text-gray-500 mt-0.5 line-clamp-1">{subtitle}</p>
+        {year && <p className="text-[10px] text-gray-400 mt-0.5">{year}</p>}
       </div>
     </div>
   );

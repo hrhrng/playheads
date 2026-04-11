@@ -55,10 +55,7 @@ function AssistantMessage({
           </div>
         )}
         <GenUIErrorBoundary>
-          {/* Dark container for GenUI */}
-          <div className="w-full max-w-[calc(100vw-48px)] rounded-2xl overflow-hidden animate-genui-slide-in"
-            style={{ background: 'linear-gradient(160deg, #0f0f23, #1a1a3e)' }}
-          >
+          <div className="w-full max-w-[calc(100vw-48px)] rounded-2xl border border-gray-200 bg-white overflow-hidden animate-genui-slide-in shadow-sm">
             <div className="p-4">
               <Renderer spec={spec} registry={registry as unknown as ComponentRegistry} loading={isStreaming} />
             </div>

@@ -26,8 +26,8 @@ export const registry: Record<string, (ctx: ComponentRenderProps<any>) => ReactN
       <div className="space-y-3 animate-genui-slide-in">
         {(props.title || props.subtitle) && (
           <div>
-            {props.title && <h3 className="text-sm font-semibold text-white/90">{props.title}</h3>}
-            {props.subtitle && <p className="text-[11px] text-white/40 mt-0.5">{props.subtitle}</p>}
+            {props.title && <h3 className="text-sm font-semibold text-gray-900">{props.title}</h3>}
+            {props.subtitle && <p className="text-[11px] text-gray-500 mt-0.5">{props.subtitle}</p>}
           </div>
         )}
         <div className="space-y-2">{ctx.children}</div>
