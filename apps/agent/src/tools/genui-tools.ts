@@ -3,12 +3,13 @@
  *
  * The `show_visual` tool lets the LLM compose a rich UI from a library of
  * base component primitives (timeline, grid, carousel, album-card, etc.).
- * The server enriches music items with Apple Music data (artwork, song IDs)
- * before returning the tree to the client for rendering.
+ *
+ * ZERO server-side enrichment — the tool returns instantly.
+ * Each album-card / track-card enriches itself on the client via Apple Music API,
+ * giving a natural streaming feel as artwork loads in progressively.
  */
 import { tool } from "ai";
 import { z } from "zod";
-import { appleMusicGet } from "../apple-music";
 import type { ToolContext } from "./music-tools";
 
 // ---------------------------------------------------------------------------
@@ -20,41 +21,23 @@ const badgeSchema = z.object({
   color: z.string().optional(),
 });
 
-/**
- * Item schema — leaf-level content nodes.
- * The LLM fills these; the server enriches album/track items.
- */
 const itemSchema = z.object({
   type: z.enum(["album-card", "track-card", "text", "stat", "image", "badge-group", "divider"]),
-  // album-card / track-card
   title: z.string().optional(),
   subtitle: z.string().optional(),
-  query: z.string().optional().describe("Apple Music search query for enrichment, e.g. 'Kind of Blue Miles Davis'"),
+  query: z.string().optional().describe("Apple Music search query for client-side enrichment, e.g. 'Kind of Blue Miles Davis'"),
   year: z.string().optional(),
   artist: z.string().optional(),
   album: z.string().optional(),
-  // text
   content: z.string().optional(),
   style: z.enum(["heading", "body", "caption"]).optional(),
-  // stat
   value: z.string().optional(),
   label: z.string().optional(),
-  // image
   src: z.string().optional(),
   alt: z.string().optional(),
-  // badge-group
   badges: z.array(badgeSchema).optional(),
 });
 
-/**
- * Section schema — a logical group with optional layout override.
- * Sections contain items (leaf nodes).
- *
- * NOTE: No recursive `z.lazy()` — LLM providers (Anthropic, OpenAI) reject
- * JSON Schema with `$ref` cycles. Instead, the tree is flat: the tool accepts
- * a flat array of sections and the execute handler groups timeline-eras into
- * a TimelineNode automatically.
- */
 const sectionSchema = z.object({
   type: z.enum(["section", "timeline-era", "grid", "carousel", "stack"]).default("section"),
   title: z.string().optional(),
@@ -72,150 +55,21 @@ type SectionInput = z.infer<typeof sectionSchema>;
 type ItemInput = z.infer<typeof itemSchema>;
 
 // ---------------------------------------------------------------------------
-// Apple Music enrichment
-// ---------------------------------------------------------------------------
-
-interface EnrichedItem extends ItemInput {
-  artworkUrl?: string;
-  songId?: string;
-  albumId?: string;
-}
-
-/**
- * Walk the section tree and enrich album-card / track-card items
- * with Apple Music data (artwork URL, song ID for playback).
- */
-async function enrichSections(
-  sections: SectionInput[],
-  storefront: string,
-  env: import("../types").Env,
-): Promise<SectionInput[]> {
-  return Promise.all(
-    sections.map(async (section) => {
-      const enrichedItems = section.items
-        ? await enrichItems(section.items, storefront, env)
-        : undefined;
-
-      return { ...section, items: enrichedItems };
-    }),
-  );
-}
-
-async function enrichItems(
-  items: ItemInput[],
-  storefront: string,
-  env: import("../types").Env,
-): Promise<EnrichedItem[]> {
-  return Promise.all(
-    items.map(async (item): Promise<EnrichedItem> => {
-      if (
-        (item.type === "album-card" || item.type === "track-card") &&
-        item.query
-      ) {
-        try {
-          return await enrichMusicItem(item, storefront, env);
-        } catch (e) {
-          console.warn("[GenUI] enrichment failed for query:", item.query, e);
-          return item;
-        }
-      }
-      return item;
-    }),
-  );
-}
-
-async function enrichMusicItem(
-  item: ItemInput,
-  storefront: string,
-  env: import("../types").Env,
-): Promise<EnrichedItem> {
-  if (item.type === "album-card") {
-    // Search for album
-    const result = await appleMusicGet(
-      `v1/catalog/${storefront}/search`,
-      env,
-      { term: item.query!, types: "albums", limit: 1 },
-    );
-    const resultsObj = result?.results as Record<string, unknown> | undefined;
-    const albumsObj = resultsObj?.albums as Record<string, unknown> | undefined;
-    const albums = albumsObj?.data as Array<Record<string, unknown>> | undefined;
-    const found = albums?.[0];
-    if (!found) return item;
-
-    const attrs = (found.attributes ?? {}) as Record<string, unknown>;
-    const artwork = (attrs.artwork ?? {}) as Record<string, unknown>;
-    const rawUrl = typeof artwork.url === "string" ? artwork.url : "";
-    const artworkUrl = rawUrl.replace("{w}", "300").replace("{h}", "300");
-
-    // Fetch first track from the album for playback
-    let songId: string | undefined;
-    try {
-      const tracksResult = await appleMusicGet(
-        `v1/catalog/${storefront}/albums/${found.id}/tracks`,
-        env,
-        { limit: 1 },
-      );
-      const tracks = Array.isArray(tracksResult?.data) ? tracksResult.data as Array<Record<string, unknown>> : [];
-      const firstId = tracks[0]?.id;
-      songId = typeof firstId === "string" ? firstId : undefined;
-    } catch (e) {
-      console.warn("[GenUI] album track lookup failed:", e);
-    }
-
-    return {
-      ...item,
-      title: item.title || (typeof attrs.name === "string" ? attrs.name : "") || item.title,
-      subtitle: item.subtitle || (typeof attrs.artistName === "string" ? attrs.artistName : "") || item.subtitle,
-      artworkUrl,
-      albumId: String(found.id ?? ""),
-      songId,
-    };
-  }
-
-  // track-card: search for song directly
-  const result = await appleMusicGet(
-    `v1/catalog/${storefront}/search`,
-    env,
-    { term: item.query!, types: "songs", limit: 1 },
-  );
-  const resultsObj = result?.results as Record<string, unknown> | undefined;
-  const songsObj = resultsObj?.songs as Record<string, unknown> | undefined;
-  const songs = songsObj?.data as Array<Record<string, unknown>> | undefined;
-  const found = songs?.[0];
-  if (!found) return item;
-
-  const attrs = (found.attributes ?? {}) as Record<string, unknown>;
-  const artwork = (attrs.artwork ?? {}) as Record<string, unknown>;
-  const rawUrl = typeof artwork.url === "string" ? artwork.url : "";
-  const artworkUrl = rawUrl.replace("{w}", "300").replace("{h}", "300");
-
-  return {
-    ...item,
-    title: item.title || (typeof attrs.name === "string" ? attrs.name : ""),
-    artist: item.artist || (typeof attrs.artistName === "string" ? attrs.artistName : ""),
-    artworkUrl,
-    songId: found.id as string,
-  };
-}
-
-// ---------------------------------------------------------------------------
 // Convert flat section input → GenUI node tree for the client
+// (no enrichment — pure synchronous transform, instant return)
 // ---------------------------------------------------------------------------
 
 function sectionsToGenUINodes(sections: SectionInput[]): unknown[] {
   return sections.map((section) => {
     const children: unknown[] = [];
-
-    // Add items as leaf nodes
     if (section.items) {
       for (const item of section.items) {
-        children.push(itemToGenUINode(item as EnrichedItem));
+        children.push(itemToNode(item));
       }
     }
 
     switch (section.type) {
       case "timeline-era":
-        // Timeline eras get collected by the parent into a TimelineNode
         return {
           _era: true,
           year: section.year || "",
@@ -223,111 +77,49 @@ function sectionsToGenUINodes(sections: SectionInput[]): unknown[] {
           description: section.description,
           children,
         };
-
       case "grid":
-        return {
-          type: "grid",
-          columns: section.columns,
-          children,
-        };
-
+        return { type: "grid", columns: section.columns, children };
       case "carousel":
         return { type: "carousel", children };
-
       case "stack":
-        return {
-          type: "stack",
-          direction: section.direction,
-          gap: section.gap,
-          children,
-        };
-
+        return { type: "stack", direction: section.direction, gap: section.gap, children };
       case "section":
       default:
-        return {
-          type: "section",
-          title: section.title,
-          subtitle: section.subtitle,
-          children,
-        };
+        return { type: "section", title: section.title, subtitle: section.subtitle, children };
     }
   });
 }
 
-/**
- * If the top-level sections are all timeline-era, wrap them in a timeline node.
- */
 function maybeWrapTimeline(nodes: unknown[]): unknown[] {
   const allEras = nodes.length > 0 && nodes.every((n: any) => n._era);
   if (allEras) {
-    return [
-      {
-        type: "timeline",
-        items: nodes.map((n: any) => {
-          const { _era, ...rest } = n;
-          return rest;
-        }),
-      },
-    ];
+    return [{
+      type: "timeline",
+      items: nodes.map((n: any) => {
+        const { _era, ...rest } = n;
+        return rest;
+      }),
+    }];
   }
   return nodes;
 }
 
-function itemToGenUINode(item: EnrichedItem): unknown {
+function itemToNode(item: ItemInput): unknown {
   switch (item.type) {
     case "album-card":
-      return {
-        type: "album-card",
-        title: item.title || "",
-        subtitle: item.subtitle || "",
-        query: item.query,          // kept for client-side enrichment fallback
-        artworkUrl: item.artworkUrl,
-        songId: item.songId,
-        albumId: item.albumId,
-        year: item.year,
-      };
-
+      return { type: "album-card", title: item.title || "", subtitle: item.subtitle || "", query: item.query, year: item.year };
     case "track-card":
-      return {
-        type: "track-card",
-        title: item.title || "",
-        artist: item.artist || "",
-        query: item.query,
-        album: item.album,
-        artworkUrl: item.artworkUrl,
-        songId: item.songId,
-      };
-
+      return { type: "track-card", title: item.title || "", artist: item.artist || "", query: item.query, album: item.album };
     case "text":
-      return {
-        type: "text",
-        content: item.content || "",
-        style: item.style,
-      };
-
+      return { type: "text", content: item.content || "", style: item.style };
     case "stat":
-      return {
-        type: "stat",
-        value: item.value || "",
-        label: item.label || "",
-      };
-
+      return { type: "stat", value: item.value || "", label: item.label || "" };
     case "image":
-      return {
-        type: "image",
-        src: item.src || "",
-        alt: item.alt,
-      };
-
+      return { type: "image", src: item.src || "", alt: item.alt };
     case "badge-group":
-      return {
-        type: "badge-group",
-        badges: item.badges || [],
-      };
-
+      return { type: "badge-group", badges: item.badges || [] };
     case "divider":
       return { type: "divider" };
-
     default:
       return { type: "text", content: "", style: "body" };
   }
@@ -337,7 +129,7 @@ function itemToGenUINode(item: EnrichedItem): unknown {
 // Tool factory
 // ---------------------------------------------------------------------------
 
-export function createGenUITools(ctx: ToolContext) {
+export function createGenUITools(_ctx: ToolContext) {
   return {
     show_visual: tool({
       description:
@@ -350,7 +142,7 @@ export function createGenUITools(ctx: ToolContext) {
         "'image', 'badge-group' (tags), 'divider'. " +
         "Use for genre timelines, album showcases, comparisons, 'best of' lists, artist spotlights, etc. " +
         "For album-card and track-card items, set the 'query' field to 'Album/Song Name Artist Name' — " +
-        "the server will enrich with artwork and playback IDs from Apple Music.",
+        "the client will automatically fetch artwork and playback IDs from Apple Music.",
       inputSchema: z.object({
         title: z.string().describe("Main title for the visual"),
         subtitle: z.string().optional().describe("Subtitle or tagline"),
@@ -366,27 +158,14 @@ export function createGenUITools(ctx: ToolContext) {
           .describe("Ordered list of sections composing the visual"),
       }),
       execute: async ({ title, subtitle, gradient, sections }) => {
-        const apiStart = Date.now();
-        const enriched = await enrichSections(sections, ctx.storefront, ctx.env);
-        console.log(
-          "[GenUI] show_visual enrichment elapsed=%dms sections=%d",
-          Date.now() - apiStart,
-          sections.length,
-        );
-
-        // Convert to GenUI node tree for client rendering
-        let nodes = sectionsToGenUINodes(enriched);
+        // Pure transform — no API calls, returns instantly
+        let nodes = sectionsToGenUINodes(sections);
         nodes = maybeWrapTimeline(nodes);
 
         return JSON.stringify({
           _genui: true,
           message: `Here's a visual for: ${title}`,
-          data: {
-            title,
-            subtitle,
-            gradient,
-            sections: nodes,
-          },
+          data: { title, subtitle, gradient, sections: nodes },
         });
       },
     }),

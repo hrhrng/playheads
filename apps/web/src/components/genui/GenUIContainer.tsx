@@ -1,10 +1,7 @@
 /**
- * GenUIContainer — top-level wrapper for GenUI visuals.
+ * GenUIContainer — premium top-level wrapper for GenUI visuals.
  *
- * Renders a card with:
- * - Gradient hero header (title + subtitle)
- * - GenUI node tree
- * - Share/download footer
+ * Dark, immersive card with gradient hero, content area, and share footer.
  */
 import { useRef, useState, useCallback } from 'react';
 import { GenUIRenderer } from './GenUIRenderer';
@@ -22,7 +19,7 @@ export function GenUIContainer({ data, queueOps }: GenUIContainerProps) {
   const [isExporting, setIsExporting] = useState(false);
 
   const { title, subtitle, gradient, sections } = data;
-  const [gradFrom, gradTo] = gradient || ['#1a1a2e', '#16213e'];
+  const [gradFrom, gradTo] = gradient || ['#0f0f23', '#1a1a3e'];
 
   const handleDownload = useCallback(async () => {
     const el = captureRef.current;
@@ -30,28 +27,24 @@ export function GenUIContainer({ data, queueOps }: GenUIContainerProps) {
 
     setIsExporting(true);
     try {
-      // Dynamic import to keep bundle small
       const { default: html2canvas } = await import('html2canvas');
-
-      // Add export class for styling overrides
       el.classList.add('genui-export-mode');
 
       const canvas = await html2canvas(el, {
         useCORS: true,
         scale: 2,
-        backgroundColor: '#ffffff',
+        backgroundColor: '#0f0f23',
         logging: false,
       });
 
       el.classList.remove('genui-export-mode');
 
-      // Download
       canvas.toBlob((blob) => {
         if (!blob) return;
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${title.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()}.png`;
+        a.download = `${title.replace(/[^a-zA-Z0-9\u4e00-\u9fff]/g, '-').toLowerCase()}.png`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -69,35 +62,35 @@ export function GenUIContainer({ data, queueOps }: GenUIContainerProps) {
       <div className="w-full max-w-[calc(100vw-48px)] animate-genui-slide-in">
         <div
           ref={captureRef}
-          className="rounded-2xl border border-gray-200 overflow-hidden bg-white shadow-sm"
+          className="rounded-2xl overflow-hidden"
+          style={{
+            background: `linear-gradient(160deg, ${gradFrom}, ${gradTo})`,
+          }}
         >
           {/* Hero header */}
-          <div
-            className="px-5 py-5"
-            style={{
-              background: `linear-gradient(135deg, ${gradFrom}, ${gradTo})`,
-            }}
-          >
-            <h2 className="text-lg font-bold text-white leading-tight">{title}</h2>
+          <div className="px-5 pt-6 pb-4">
+            <h2 className="text-xl font-bold text-white tracking-tight leading-tight">
+              {title}
+            </h2>
             {subtitle && (
-              <p className="text-[13px] text-white/70 mt-1">{subtitle}</p>
+              <p className="text-sm text-white/50 mt-1.5 leading-snug">{subtitle}</p>
             )}
           </div>
 
-          {/* Content */}
-          <div className="p-4 space-y-4">
+          {/* Content area — slightly lighter inner card */}
+          <div className="mx-2 mb-2 rounded-xl bg-white/[0.06] backdrop-blur-sm p-4 space-y-4">
             <GenUIRenderer sections={sections} />
           </div>
 
-          {/* Footer with share button */}
-          <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-between">
-            <span className="text-[10px] text-gray-400 uppercase tracking-wider font-medium">
+          {/* Footer */}
+          <div className="px-5 py-3 flex items-center justify-between">
+            <span className="text-[10px] text-white/25 uppercase tracking-widest font-semibold">
               Playheads
             </span>
             <button
               onClick={handleDownload}
               disabled={isExporting}
-              className="flex items-center gap-1.5 text-[11px] text-gray-500 hover:text-gray-700 transition-colors disabled:opacity-50"
+              className="flex items-center gap-1.5 text-[11px] text-white/40 hover:text-white/70 transition-colors disabled:opacity-50"
             >
               {isExporting ? (
                 <span className="animate-pulse">Exporting...</span>
@@ -106,7 +99,7 @@ export function GenUIContainer({ data, queueOps }: GenUIContainerProps) {
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
                   </svg>
-                  Download Image
+                  Save Image
                 </>
               )}
             </button>
