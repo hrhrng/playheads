@@ -58,13 +58,26 @@ export const musicCatalog = defineCatalog(schema, {
     },
     AlbumCard: {
       description:
-        "Album cover card with artwork, title, artist, and year. " +
-        "Set 'query' to 'Album Name Artist Name' — artwork is auto-fetched from Apple Music. " +
-        "Users can play or add to queue via on.play / on.queue events.",
+        "Compact album cover card — shows artwork, title, artist, year. " +
+        "Hover to play the first track. Best for visual grids and timelines. " +
+        "Set 'query' for Apple Music artwork auto-fetch.",
       props: z.object({
         title: z.string().describe("Album title"),
         subtitle: z.string().describe("Artist name"),
-        query: z.string().nullable().describe("Apple Music search query for artwork, e.g. 'Fable Faye Wong'"),
+        query: z.string().nullable().describe("Apple Music search query, e.g. 'Fable Faye Wong'"),
+        year: z.string().nullable(),
+      }),
+      example: { title: "Fable", subtitle: "Faye Wong", query: "Fable Faye Wong", year: "2000" },
+    },
+    AlbumDetail: {
+      description:
+        "Album card with expandable tracklist — tap to expand and see all tracks. " +
+        "Each track can be played or queued individually. Best for detailed album views. " +
+        "Use AlbumCard for compact grids, AlbumDetail for detailed lists.",
+      props: z.object({
+        title: z.string().describe("Album title"),
+        subtitle: z.string().describe("Artist name"),
+        query: z.string().nullable().describe("Apple Music search query, e.g. 'Fable Faye Wong'"),
         year: z.string().nullable(),
       }),
       example: { title: "Fable", subtitle: "Faye Wong", query: "Fable Faye Wong", year: "2000" },

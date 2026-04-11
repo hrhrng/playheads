@@ -35,7 +35,7 @@ beforeEach(() => {
 describe('TrackCard', () => {
   it('renders title and artist', () => {
     renderWithActions(
-      <TrackCard type="track-card" title="So What" artist="Miles Davis" />
+      <TrackCard  title="So What" artist="Miles Davis" />
     );
     expect(screen.getByText('So What')).toBeInTheDocument();
     expect(screen.getByText('Miles Davis')).toBeInTheDocument();
@@ -43,7 +43,7 @@ describe('TrackCard', () => {
 
   it('renders album info separated by dot', () => {
     renderWithActions(
-      <TrackCard type="track-card" title="So What" artist="Miles Davis" album="Kind of Blue" />
+      <TrackCard  title="So What" artist="Miles Davis" album="Kind of Blue" />
     );
     expect(screen.getByText(/Miles Davis.*Kind of Blue/)).toBeInTheDocument();
   });
@@ -51,7 +51,7 @@ describe('TrackCard', () => {
   it('renders artwork when artworkUrl is provided', () => {
     renderWithActions(
       <TrackCard
-        type="track-card"
+        
         title="So What"
         artist="Miles Davis"
         artworkUrl="https://example.com/art.jpg"
@@ -65,7 +65,7 @@ describe('TrackCard', () => {
     const queueOps = createMockQueueOps();
     const { container } = renderWithActions(
       <TrackCard
-        type="track-card"
+        
         title="So What"
         artist="Miles Davis"
         songId="12345"
@@ -80,7 +80,7 @@ describe('TrackCard', () => {
   it('hides action buttons when no songId', () => {
     const queueOps = createMockQueueOps();
     const { container } = renderWithActions(
-      <TrackCard type="track-card" title="So What" artist="Miles Davis" />,
+      <TrackCard  title="So What" artist="Miles Davis" />,
       queueOps,
     );
 
@@ -92,7 +92,7 @@ describe('TrackCard', () => {
     const queueOps = createMockQueueOps();
     const { container } = renderWithActions(
       <TrackCard
-        type="track-card"
+        
         title="So What"
         artist="Miles Davis"
         songId="12345"
@@ -116,7 +116,7 @@ describe('TrackCard', () => {
   it('attempts client-side enrichment when query but no artwork', () => {
     renderWithActions(
       <TrackCard
-        type="track-card"
+        
         title="So What"
         artist="Miles Davis"
         query="So What Miles Davis"

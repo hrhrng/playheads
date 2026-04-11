@@ -6,6 +6,7 @@
 import type { ComponentRenderProps } from "@json-render/react";
 import type { ReactNode } from "react";
 import { AlbumCard } from "../components/genui/AlbumCard";
+import { AlbumDetail } from "../components/genui/AlbumDetail";
 import { TrackCard } from "../components/genui/TrackCard";
 import { TextBlock } from "../components/genui/TextBlock";
 import { Stat } from "../components/genui/Stat";
@@ -45,6 +46,11 @@ export const registry: Record<string, (ctx: ComponentRenderProps<any>) => ReactN
   AlbumCard: (ctx: ComponentRenderProps<{ title: string; subtitle: string; query?: string; year?: string }>) => {
     const props = p(ctx);
     return <AlbumCard title={props.title} subtitle={props.subtitle} query={props.query ?? undefined} year={props.year ?? undefined} />;
+  },
+
+  AlbumDetail: (ctx: ComponentRenderProps<{ title: string; subtitle: string; query?: string; year?: string }>) => {
+    const props = p(ctx);
+    return <AlbumDetail title={props.title} subtitle={props.subtitle} query={props.query ?? undefined} year={props.year ?? undefined} />;
   },
 
   TrackCard: (ctx: ComponentRenderProps<{ title: string; artist: string; album?: string; query?: string }>) => {

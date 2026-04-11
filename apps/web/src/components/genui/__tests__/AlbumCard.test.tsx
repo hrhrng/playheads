@@ -37,7 +37,7 @@ describe('AlbumCard', () => {
   it('renders title and subtitle', () => {
     renderWithActions(
       <AlbumCard
-        type="album-card"
+        
         title="Kind of Blue"
         subtitle="Miles Davis"
         artworkUrl="https://example.com/art.jpg"
@@ -50,7 +50,7 @@ describe('AlbumCard', () => {
   it('renders year when provided', () => {
     renderWithActions(
       <AlbumCard
-        type="album-card"
+        
         title="Album"
         subtitle="Artist"
         year="1959"
@@ -62,7 +62,7 @@ describe('AlbumCard', () => {
   it('renders artwork image when artworkUrl is provided', () => {
     renderWithActions(
       <AlbumCard
-        type="album-card"
+        
         title="Album"
         subtitle="Artist"
         artworkUrl="https://example.com/art.jpg"
@@ -76,7 +76,7 @@ describe('AlbumCard', () => {
   it('renders placeholder when no artworkUrl', () => {
     const { container } = renderWithActions(
       <AlbumCard
-        type="album-card"
+        
         title="Album"
         subtitle="Artist"
       />
@@ -90,7 +90,7 @@ describe('AlbumCard', () => {
     const queueOps = createMockQueueOps();
     const { container } = renderWithActions(
       <AlbumCard
-        type="album-card"
+        
         title="Album"
         subtitle="Artist"
         artworkUrl="https://example.com/art.jpg"
@@ -108,7 +108,7 @@ describe('AlbumCard', () => {
     const queueOps = createMockQueueOps();
     const { container } = renderWithActions(
       <AlbumCard
-        type="album-card"
+        
         title="Album"
         subtitle="Artist"
         artworkUrl="https://example.com/art.jpg"
@@ -123,7 +123,7 @@ describe('AlbumCard', () => {
   it('hides action buttons when no queue operations context', () => {
     const { container } = renderWithActions(
       <AlbumCard
-        type="album-card"
+        
         title="Album"
         subtitle="Artist"
         artworkUrl="https://example.com/art.jpg"
@@ -140,7 +140,7 @@ describe('AlbumCard', () => {
     const queueOps = createMockQueueOps();
     const { container } = renderWithActions(
       <AlbumCard
-        type="album-card"
+        
         title="Kind of Blue"
         subtitle="Miles Davis"
         artworkUrl="https://example.com/art.jpg"
@@ -170,7 +170,7 @@ describe('AlbumCard', () => {
     const queueOps = createMockQueueOps();
     const { container } = renderWithActions(
       <AlbumCard
-        type="album-card"
+        
         title="Kind of Blue"
         subtitle="Miles Davis"
         artworkUrl="https://example.com/art.jpg"
@@ -197,7 +197,7 @@ describe('AlbumCard', () => {
   it('attempts client-side enrichment when query is provided but no artworkUrl', () => {
     renderWithActions(
       <AlbumCard
-        type="album-card"
+        
         title="Album"
         subtitle="Artist"
         query="Kind of Blue Miles Davis"
@@ -217,7 +217,7 @@ describe('AlbumCard', () => {
   it('does not attempt enrichment when artworkUrl is already present', () => {
     renderWithActions(
       <AlbumCard
-        type="album-card"
+        
         title="Album"
         subtitle="Artist"
         query="query"
@@ -231,7 +231,7 @@ describe('AlbumCard', () => {
   it('does not attempt enrichment when query is absent', () => {
     renderWithActions(
       <AlbumCard
-        type="album-card"
+        
         title="Album"
         subtitle="Artist"
       />
