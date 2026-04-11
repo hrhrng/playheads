@@ -125,6 +125,6 @@ export type GenUINode =
 export interface GenUIPayload {
   title: string;
   subtitle?: string;
-  gradient?: [string, string];
+  gradient?: string[];
   sections: GenUINode[];
 }

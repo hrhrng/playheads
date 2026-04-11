@@ -49,8 +49,13 @@ const itemSchema = z.object({
 /**
  * Section schema — a logical group with optional layout override.
  * Sections contain items (leaf nodes).
+ *
+ * NOTE: No recursive `z.lazy()` — LLM providers (Anthropic, OpenAI) reject
+ * JSON Schema with `$ref` cycles. Instead, the tree is flat: the tool accepts
+ * a flat array of sections and the execute handler groups timeline-eras into
+ * a TimelineNode automatically.
  */
-const sectionSchema: z.ZodType<SectionSchemaInput> = z.object({
+const sectionSchema = z.object({
   type: z.enum(["section", "timeline-era", "grid", "carousel", "stack"]).default("section"),
   title: z.string().optional(),
   subtitle: z.string().optional(),
@@ -61,23 +66,7 @@ const sectionSchema: z.ZodType<SectionSchemaInput> = z.object({
   columns: z.number().min(1).max(6).optional(),
   gap: z.number().optional(),
   items: z.array(itemSchema).optional().describe("Leaf-level content items"),
-  children: z.array(z.lazy((): z.ZodType<SectionSchemaInput> => sectionSchema)).optional().describe("Nested sub-sections"),
 });
-
-/** Explicit type for the recursive section schema to satisfy TS7022/TS7024. */
-interface SectionSchemaInput {
-  type?: "section" | "timeline-era" | "grid" | "carousel" | "stack";
-  title?: string;
-  subtitle?: string;
-  description?: string;
-  year?: string;
-  label?: string;
-  direction?: "horizontal" | "vertical";
-  columns?: number;
-  gap?: number;
-  items?: z.infer<typeof itemSchema>[];
-  children?: SectionSchemaInput[];
-}
 
 type SectionInput = z.infer<typeof sectionSchema>;
 type ItemInput = z.infer<typeof itemSchema>;
@@ -92,9 +81,6 @@ interface EnrichedItem extends ItemInput {
   albumId?: string;
 }
 
-/** Maximum nesting depth for sections to prevent DoS via deeply nested trees. */
-const MAX_SECTION_DEPTH = 5;
-
 /**
  * Walk the section tree and enrich album-card / track-card items
  * with Apple Music data (artwork URL, song ID for playback).
@@ -103,24 +89,14 @@ async function enrichSections(
   sections: SectionInput[],
   storefront: string,
   env: import("../types").Env,
-  depth = 0,
 ): Promise<SectionInput[]> {
-  if (depth >= MAX_SECTION_DEPTH) {
-    console.warn(`[GenUI] Max section nesting depth (${MAX_SECTION_DEPTH}) reached, skipping deeper children`);
-    return sections;
-  }
-
   return Promise.all(
     sections.map(async (section) => {
       const enrichedItems = section.items
         ? await enrichItems(section.items, storefront, env)
         : undefined;
 
-      const enrichedChildren = section.children
-        ? await enrichSections(section.children, storefront, env, depth + 1)
-        : undefined;
-
-      return { ...section, items: enrichedItems, children: enrichedChildren };
+      return { ...section, items: enrichedItems };
     }),
   );
 }
@@ -235,11 +211,6 @@ function sectionsToGenUINodes(sections: SectionInput[]): unknown[] {
       for (const item of section.items) {
         children.push(itemToGenUINode(item as EnrichedItem));
       }
-    }
-
-    // Add nested children
-    if (section.children) {
-      children.push(...sectionsToGenUINodes(section.children));
     }
 
     switch (section.type) {
@@ -384,7 +355,9 @@ export function createGenUITools(ctx: ToolContext) {
         title: z.string().describe("Main title for the visual"),
         subtitle: z.string().optional().describe("Subtitle or tagline"),
         gradient: z
-          .tuple([z.string(), z.string()])
+          .array(z.string())
+          .min(2)
+          .max(2)
           .optional()
           .describe("Two hex colors for header gradient, e.g. ['#1a1a2e', '#16213e']"),
         sections: z
