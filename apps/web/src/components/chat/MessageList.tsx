@@ -8,9 +8,10 @@
  * @module components/chat/MessageList
  */
 
-import { Renderer, JSONUIProvider, type ComponentRegistry } from '@json-render/react';
+import { Renderer, JSONUIProvider, type ComponentRegistry, type Spec } from '@json-render/react';
 import { useJsonRenderMessage, type DataPart } from '@json-render/react';
 import type { UIMessage } from 'ai';
+import { useMemo } from 'react';
 import { ToolCall } from './ToolCall';
 import { ThinkingProcess } from './ThinkingProcess';
 import { MarkdownMessage } from './MarkdownMessage';
@@ -18,6 +19,26 @@ import { GenUIErrorBoundary } from '../genui/GenUIErrorBoundary';
 import { GenUIActionsProvider } from '../genui/GenUIContext';
 import { registry } from '../../genui/registry';
 import type { Message, MessagePart } from '../../types';
+
+/**
+ * Normalize a json-render spec so every element has `props` and `children`.
+ * LLMs sometimes omit these fields, which crashes the Renderer's
+ * Object.entries(props) call.
+ */
+function normalizeSpec(spec: Spec | null): Spec | null {
+  if (!spec?.elements) return spec;
+  const elements: Record<string, unknown> = {};
+  for (const [key, el] of Object.entries(spec.elements)) {
+    const element = el as unknown as Record<string, unknown> | null;
+    if (!element) continue;
+    elements[key] = {
+      ...element,
+      props: element.props ?? {},
+      children: element.children ?? [],
+    };
+  }
+  return { ...spec, elements: elements as Spec['elements'] };
+}
 import type { QueueOperations } from '../../hooks/useAgentChatAdapter';
 
 interface MessageListProps {
@@ -43,10 +64,13 @@ function AssistantMessage({
 }) {
   // Extract json-render spec from raw UIMessage parts
   const rawParts = (rawMsg?.parts || []) as DataPart[];
-  const { spec, text, hasSpec } = useJsonRenderMessage(rawParts);
+  const { spec: rawSpec, text, hasSpec } = useJsonRenderMessage(rawParts);
+
+  // Normalize spec: ensure every element has props and children
+  const spec = useMemo(() => normalizeSpec(rawSpec), [rawSpec]);
 
   // If we have a json-render spec, render it alongside text
-  if (hasSpec) {
+  if (hasSpec && spec) {
     return (
       <div className="space-y-3">
         {text && (
