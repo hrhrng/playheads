@@ -47,7 +47,7 @@ export function TrackCard({
   }, [query, enriched.artworkUrl]);
 
   const { artworkUrl, songId } = enriched;
-  const canPlay = !!songId && (!!actions || !!onPlay);
+  const canPlay = !!songId && !!actions;
 
   const buildTrack = (): UnifiedTrack => ({
     id: songId!, name: title, artist, album: album || '',
@@ -55,14 +55,12 @@ export function TrackCard({
   });
 
   const handlePlay = () => {
-    if (onPlay) { onPlay(); return; }
     if (!songId || !actions) return;
     actions.addTrack(buildTrack());
     setTimeout(() => actions.skipNext().catch(console.error), PLAY_AFTER_QUEUE_DELAY_MS);
   };
 
   const handleQueue = () => {
-    if (onQueue) { onQueue(); return; }
     if (!songId || !actions) return;
     actions.addTrack(buildTrack());
   };

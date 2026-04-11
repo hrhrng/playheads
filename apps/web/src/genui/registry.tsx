@@ -1,8 +1,7 @@
 /**
- * json-render component registry — maps catalog component names to
- * React component implementations.
+ * json-render component registry — maps catalog component names to React components.
  *
- * Uses ComponentRenderProps which provides element.props, children, emit.
+ * Components use useGenUIActions() context for play/queue — no emit wiring needed.
  */
 import type { ComponentRenderProps } from "@json-render/react";
 import type { ReactNode } from "react";
@@ -14,7 +13,6 @@ import { BadgeGroup } from "../components/genui/BadgeGroup";
 import { Divider } from "../components/genui/Divider";
 import { Timeline } from "../components/genui/Timeline";
 
-// Helper to extract props from element
 function p<T>(ctx: ComponentRenderProps<T>): T {
   return ctx.element.props as T;
 }
@@ -30,7 +28,7 @@ export const registry: Record<string, (ctx: ComponentRenderProps<any>) => ReactN
             {props.subtitle && <p className="text-[11px] text-gray-500 mt-0.5">{props.subtitle}</p>}
           </div>
         )}
-        <div className="space-y-2">{ctx.children}</div>
+        <div className="space-y-0">{ctx.children}</div>
       </div>
     );
   },
@@ -46,30 +44,12 @@ export const registry: Record<string, (ctx: ComponentRenderProps<any>) => ReactN
 
   AlbumCard: (ctx: ComponentRenderProps<{ title: string; subtitle: string; query?: string; year?: string }>) => {
     const props = p(ctx);
-    return (
-      <AlbumCard
-        title={props.title}
-        subtitle={props.subtitle}
-        query={props.query ?? undefined}
-        year={props.year ?? undefined}
-        onPlay={() => ctx.emit("play")}
-        onQueue={() => ctx.emit("queue")}
-      />
-    );
+    return <AlbumCard title={props.title} subtitle={props.subtitle} query={props.query ?? undefined} year={props.year ?? undefined} />;
   },
 
   TrackCard: (ctx: ComponentRenderProps<{ title: string; artist: string; album?: string; query?: string }>) => {
     const props = p(ctx);
-    return (
-      <TrackCard
-        title={props.title}
-        artist={props.artist}
-        album={props.album ?? undefined}
-        query={props.query ?? undefined}
-        onPlay={() => ctx.emit("play")}
-        onQueue={() => ctx.emit("queue")}
-      />
-    );
+    return <TrackCard title={props.title} artist={props.artist} album={props.album ?? undefined} query={props.query ?? undefined} />;
   },
 
   TextBlock: (ctx: ComponentRenderProps<{ content: string; style?: string }>) => {
