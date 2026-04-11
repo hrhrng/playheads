@@ -17,6 +17,7 @@ import { ThinkingProcess } from './ThinkingProcess';
 import { MarkdownMessage } from './MarkdownMessage';
 import { GenUIErrorBoundary } from '../genui/GenUIErrorBoundary';
 import { GenUIActionsProvider } from '../genui/GenUIContext';
+import { ShareableCard } from '../genui/ShareableCard';
 import { registry } from '../../genui/registry';
 import type { Message, MessagePart } from '../../types';
 
@@ -102,13 +103,11 @@ function AssistantMessage({
           </div>
         )}
         <GenUIErrorBoundary>
-          <div className="w-full max-w-[calc(100vw-48px)] rounded-2xl border border-gray-200 bg-white overflow-hidden animate-genui-slide-in shadow-sm">
-            <div className="p-4">
-              <JSONUIProvider registry={registry as unknown as ComponentRegistry}>
-                <Renderer spec={spec} registry={registry as unknown as ComponentRegistry} loading={isStreaming} />
-              </JSONUIProvider>
-            </div>
-          </div>
+          <ShareableCard>
+            <JSONUIProvider registry={registry as unknown as ComponentRegistry}>
+              <Renderer spec={spec} registry={registry as unknown as ComponentRegistry} loading={isStreaming} />
+            </JSONUIProvider>
+          </ShareableCard>
         </GenUIErrorBoundary>
       </div>
     );
