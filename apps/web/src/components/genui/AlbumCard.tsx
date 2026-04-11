@@ -144,7 +144,7 @@ export function AlbumCard({
   };
 
   return (
-    <div className={`animate-genui-card-in transition-all duration-300 ease-out ${expanded ? 'w-full' : 'w-[130px] shrink-0'}`}>
+    <div className={`animate-genui-card-in transition-[width] duration-300 ease-out ${expanded ? 'w-full' : 'w-[130px] shrink-0'}`}>
       {/* Header — always visible */}
       <div
         className={`cursor-pointer ${expanded ? 'flex items-start gap-3 rounded-lg hover:bg-gray-50 p-1.5 -m-1.5 transition-colors' : ''}`}
@@ -152,10 +152,11 @@ export function AlbumCard({
         onMouseLeave={() => setHovering(false)}
         onClick={handleToggle}
       >
-        {/* Artwork — transitions size */}
-        <div className={`relative rounded-xl overflow-hidden bg-gray-100 shadow-sm shrink-0 transition-all duration-300 ease-out ${
-          expanded ? 'w-14 h-14 rounded-lg' : 'aspect-square w-full'
-        }`}>
+        {/* Artwork — fixed sizes, no aspect-ratio transition */}
+        <div
+          className="relative rounded-xl overflow-hidden bg-gray-100 shadow-sm shrink-0 transition-[width,height] duration-300 ease-out"
+          style={{ width: expanded ? 56 : 130, height: expanded ? 56 : 130 }}
+        >
           {artworkUrl ? (
             <>
               {!imageLoaded && <div className="absolute inset-0 bg-gray-200 animate-pulse rounded-xl" />}
