@@ -5,7 +5,7 @@
  * and reveal the full tracklist with play/queue buttons per track.
  * Used in GenUI timelines, grids, and anywhere else.
  */
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useGenUIActions } from './GenUIContext';
 import { useAlbumEnrichment, type EnrichedAlbumData } from './AlbumCard';
 import { API_BASE } from '../../config/api';
@@ -20,6 +20,8 @@ export interface AlbumDetailProps {
   artworkUrl?: string;
   songId?: string;
   albumId?: string;
+  /** Callback to collapse back to AlbumCard (when used inline) */
+  onCollapse?: () => void;
 }
 
 interface TrackItem {
@@ -32,10 +34,12 @@ interface TrackItem {
 export function AlbumDetail({
   title, subtitle, query, year,
   artworkUrl: initialArtworkUrl, songId: initialSongId, albumId: initialAlbumId,
+  onCollapse,
 }: AlbumDetailProps) {
   const actions = useGenUIActions();
   const [imageLoaded, setImageLoaded] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+  // Start expanded when used inline from AlbumCard (onCollapse is set)
+  const [expanded, setExpanded] = useState(!!onCollapse);
   const [tracks, setTracks] = useState<TrackItem[]>([]);
   const [loadingTracks, setLoadingTracks] = useState(false);
 
@@ -67,8 +71,14 @@ export function AlbumDetail({
     }
   }, [albumId, tracks.length, loadingTracks]);
 
+  // Auto-fetch when starting expanded
+  useEffect(() => {
+    if (expanded && tracks.length === 0 && !loadingTracks) fetchTracks();
+  }, [expanded]);
+
   const handleToggle = () => {
     const next = !expanded;
+    if (!next && onCollapse) { onCollapse(); return; }
     setExpanded(next);
     if (next) fetchTracks();
   };

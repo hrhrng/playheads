@@ -1,12 +1,12 @@
 /**
  * AlbumCard — compact album cover card.
  *
- * Shows artwork, title, artist, year. Hover reveals a play button.
+ * Tap to expand into AlbumDetail (tracklist). Hover reveals play button.
  * Client-side enrichment via Apple Music for artwork.
- * Reusable standalone — used inside Timeline, AlbumDetail, grids, etc.
  */
 import { useState, useEffect } from 'react';
 import { useGenUIActions } from './GenUIContext';
+import { AlbumDetail } from './AlbumDetail';
 import { API_BASE } from '../../config/api';
 import type { UnifiedTrack } from '../../providers/types';
 
@@ -20,8 +20,6 @@ export interface AlbumCardProps {
   artworkUrl?: string;
   songId?: string;
   albumId?: string;
-  /** Called when album is tapped (for parent to handle expand, etc.) */
-  onTap?: () => void;
 }
 
 export interface EnrichedAlbumData {
@@ -69,11 +67,12 @@ export function useAlbumEnrichment(query?: string, initial?: EnrichedAlbumData) 
 
 export function AlbumCard({
   title, subtitle, query, year, artworkUrl: initialArtworkUrl,
-  songId: initialSongId, albumId: initialAlbumId, onTap,
+  songId: initialSongId, albumId: initialAlbumId,
 }: AlbumCardProps) {
   const actions = useGenUIActions();
   const [imageLoaded, setImageLoaded] = useState(false);
   const [hovering, setHovering] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const enriched = useAlbumEnrichment(query, {
     artworkUrl: initialArtworkUrl, songId: initialSongId, albumId: initialAlbumId,
   });
@@ -91,12 +90,31 @@ export function AlbumCard({
     setTimeout(() => actions.skipNext().catch(console.error), PLAY_AFTER_QUEUE_DELAY_MS);
   };
 
+  // Expanded → show AlbumDetail
+  if (expanded) {
+    return (
+      <div className="animate-genui-slide-in">
+        <AlbumDetail
+          title={title}
+          subtitle={subtitle}
+          query={query}
+          year={year}
+          artworkUrl={enriched.artworkUrl}
+          songId={enriched.songId}
+          albumId={enriched.albumId}
+          onCollapse={() => setExpanded(false)}
+        />
+      </div>
+    );
+  }
+
+  // Collapsed → compact card
   return (
     <div
       className="group relative w-[130px] shrink-0 animate-genui-card-in cursor-pointer"
       onMouseEnter={() => setHovering(true)}
       onMouseLeave={() => setHovering(false)}
-      onClick={onTap}
+      onClick={() => setExpanded(true)}
     >
       <div className="relative aspect-square rounded-xl overflow-hidden bg-gray-100 shadow-sm">
         {artworkUrl ? (

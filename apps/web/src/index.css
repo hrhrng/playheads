@@ -127,6 +127,14 @@
   animation: lyric-tap 0.2s ease-out;
 }
 
+/* GenUI timeline — hide connecting line on last era */
+.genui-era:last-child {
+  padding-bottom: 0 !important;
+}
+.genui-era:last-child .genui-era-line {
+  display: none;
+}
+
 /* GenUI export mode — hide interactive elements for screenshot */
 .genui-export-mode button {
   display: none !important;
