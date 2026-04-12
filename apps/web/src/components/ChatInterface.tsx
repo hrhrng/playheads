@@ -147,6 +147,8 @@ export const ChatInterface = ({
   onSkipPrevRef.current = onSkipPrev;
   const showHistoryRef = useRef(showHistory);
   showHistoryRef.current = showHistory;
+  const hasHistoryRef = useRef(hasHistory);
+  hasHistoryRef.current = hasHistory;
 
   const nextTrack = queueTracks[1] || null;
 
@@ -169,10 +171,11 @@ export const ChatInterface = ({
       clearTimeout(scrollTimerRef.current);
       scrollTimerRef.current = window.setTimeout(() => {
         const page = Math.round(el.scrollTop / el.clientHeight);
-        const currentPage = hasHistory ? 1 : 0;
-        const resetTop = hasHistory ? el.clientHeight : 0;
+        const h = hasHistoryRef.current;
+        const currentPage = h ? 1 : 0;
+        const resetTop = h ? el.clientHeight : 0;
 
-        if (hasHistory && page === 0 && !pendingResetRef.current) {
+        if (h && page === 0 && !pendingResetRef.current) {
           // Swiped up → previous track
           pendingResetRef.current = true;
           onSkipPrevRef.current?.();
@@ -213,7 +216,7 @@ export const ChatInterface = ({
         const el = scrollRef.current;
         if (el) {
           isResettingRef.current = true;
-          el.scrollTo({ top: hasHistory ? el.clientHeight : 0, behavior: 'instant' as ScrollBehavior });
+          el.scrollTo({ top: hasHistoryRef.current ? el.clientHeight : 0, behavior: 'instant' as ScrollBehavior });
           requestAnimationFrame(() => {
             isResettingRef.current = false;
             pendingResetRef.current = false;
