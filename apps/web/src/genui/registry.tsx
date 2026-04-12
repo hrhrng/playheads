@@ -36,7 +36,7 @@ export const registry: Record<string, (ctx: ComponentRenderProps<any>) => ReactN
               {props.title && <h3 className="text-sm font-semibold text-gray-900">{props.title}</h3>}
               {props.subtitle && <p className="text-[11px] text-gray-500 mt-0.5">{props.subtitle}</p>}
               {collapsed && childCount > 0 && (
-                <p className="text-[10px] text-gray-400 mt-1">{childCount} items</p>
+                <p className="text-[10px] text-gray-400 mt-1">Tap to expand · {childCount} eras</p>
               )}
             </div>
             <svg className={`w-4 h-4 text-gray-400 shrink-0 transition-transform duration-200 ${collapsed ? '' : 'rotate-180'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
