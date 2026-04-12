@@ -4,7 +4,7 @@
  * Components use useGenUIActions() context for play/queue — no emit wiring needed.
  */
 import type { ComponentRenderProps } from "@json-render/react";
-import { useState, Children, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { AlbumCard } from "../components/genui/AlbumCard";
 import { AlbumDetail } from "../components/genui/AlbumDetail";
 import { TrackCard } from "../components/genui/TrackCard";
@@ -19,10 +19,9 @@ function p<T>(ctx: ComponentRenderProps<T>): T {
 }
 
 export const registry: Record<string, (ctx: ComponentRenderProps<any>) => ReactNode> = {
-  Section: (ctx: ComponentRenderProps<{ title?: string; subtitle?: string }>) => {
+  Section: (ctx: ComponentRenderProps<{ title?: string; subtitle?: string; collapsedHint?: string }>) => {
     const props = p(ctx);
     const [collapsed, setCollapsed] = useState(false);
-    const childCount = Children.count(ctx.children);
     const hasTitle = !!(props.title || props.subtitle);
 
     return (
@@ -35,8 +34,8 @@ export const registry: Record<string, (ctx: ComponentRenderProps<any>) => ReactN
             <div className="flex-1 min-w-0">
               {props.title && <h3 className="text-sm font-semibold text-gray-900">{props.title}</h3>}
               {props.subtitle && <p className="text-[11px] text-gray-500 mt-0.5">{props.subtitle}</p>}
-              {collapsed && childCount > 0 && (
-                <p className="text-[10px] text-gray-400 mt-1">Tap to expand · {childCount} eras</p>
+              {collapsed && props.collapsedHint && (
+                <p className="text-[10px] text-gray-400 mt-1">{props.collapsedHint}</p>
               )}
             </div>
             <svg className={`w-4 h-4 text-gray-400 shrink-0 transition-transform duration-200 ${collapsed ? '' : 'rotate-180'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">

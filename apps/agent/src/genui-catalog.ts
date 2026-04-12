@@ -33,10 +33,11 @@ const schema = defineSchema((s) => ({
 export const musicCatalog = defineCatalog(schema, {
   components: {
     Section: {
-      description: "Titled group of content. Use as a container for related items.",
+      description: "Titled group of content. Tap title to collapse/expand. Use collapsedHint to show a summary when collapsed, e.g. '6 eras · 1990-2003'.",
       props: z.object({
         title: z.string().nullable(),
         subtitle: z.string().nullable(),
+        collapsedHint: z.string().nullable().describe("Text shown when collapsed, e.g. '6 eras · 1990-2003'"),
       }),
     },
     TimelineEra: {
