@@ -185,6 +185,15 @@ export class AppleMusicProvider implements MusicProvider {
       if (startTime && startTime > 0) {
         this.seekTarget = startTime;
       }
+      // Update playbackTime.total from MusicKit's resolved queue item
+      // (the queue items have durationInMillis even without playing)
+      const nowPlaying = this.musicKit.queue?.items?.[0];
+      if (nowPlaying?.attributes?.durationInMillis) {
+        const total = nowPlaying.attributes.durationInMillis / 1000;
+        this.updateState({
+          playbackTime: { current: startTime || 0, total },
+        });
+      }
     } catch (e) {
       console.error('[AppleMusicProvider] setQueueWithoutPlaying error:', e);
     }
