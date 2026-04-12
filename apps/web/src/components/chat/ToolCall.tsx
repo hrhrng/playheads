@@ -127,7 +127,7 @@ function SearchMusicResult({ result, args }: { result: string; args: Record<stri
       {queryText && (
         <p className="text-[10px] text-gray-400 mb-1.5">Searched: {queryText}</p>
       )}
-      <div className="space-y-0.5 max-h-64 overflow-y-auto">
+      <div className="space-y-0.5 max-h-64 overflow-y-auto overflow-x-hidden">
         {tracks.slice(0, 10).map((track, i) => (
           <div
             key={track.id}
