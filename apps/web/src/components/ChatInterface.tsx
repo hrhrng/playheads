@@ -163,10 +163,11 @@ export const ChatInterface = ({
     const el = scrollRef.current;
     if (!el) return;
     requestAnimationFrame(() => {
-      // Current card is page 0 if no history, page 1 if history exists
       el.scrollTo({ top: hasHistory ? el.clientHeight : 0, behavior: 'instant' as ScrollBehavior });
     });
-  }, [sessionId, hasHistory]);
+    // Only on mount/session change — NOT on hasHistory change (would yank user back mid-scroll)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId]);
 
   // Detect scroll settle → fire skip if landed on prev/next card
   useEffect(() => {
