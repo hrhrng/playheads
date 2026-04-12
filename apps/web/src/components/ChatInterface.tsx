@@ -200,8 +200,12 @@ export const ChatInterface = ({
               }
             }, 400);
           } else {
-            // No next track → stay on empty page, stop playback
-            pendingResetRef.current = false;
+            // No next track → skip to advance position (moves current to history), then stop
+            onSkipNextRef.current?.();
+            // skipNext at end of queue may not change track — force stop after delay
+            setTimeout(() => {
+              pendingResetRef.current = false;
+            }, 500);
           }
         }
       }, 80);
