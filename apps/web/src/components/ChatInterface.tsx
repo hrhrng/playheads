@@ -318,13 +318,8 @@ export const ChatInterface = ({
             )}
             {isAppleMusicAuthorized && (
               <div
-                ref={(el) => {
-                  if (el && currentTrack) {
-                    const w = el.offsetWidth;
-                    if (w > 400) console.warn('[SeekBar] width exceeded max-w-sm:', w, 'parent:', el.parentElement?.offsetWidth, 'classes:', el.className);
-                  }
-                }}
-                className={`w-full max-w-sm px-8 mt-4 flex items-center gap-2 transition-opacity duration-200 ${showHistory || !currentTrack ? 'opacity-0 pointer-events-none' : ''}`}>
+                style={{ maxWidth: 384 }}
+                className={`w-full mx-auto px-8 mt-4 flex items-center gap-2 transition-opacity duration-200 ${showHistory || !currentTrack ? 'opacity-0 pointer-events-none' : ''}`}>
                 <span className="text-xs font-mono text-gray-400 tabular-nums shrink-0">
                   {formatTime(seekDisplayValue)}
                 </span>
