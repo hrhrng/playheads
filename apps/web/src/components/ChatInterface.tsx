@@ -157,9 +157,9 @@ export const ChatInterface = ({
     const el = scrollRef.current;
     if (!el) return;
     requestAnimationFrame(() => {
-      el.scrollTo({ top: hasHistory ? el.clientHeight : 0, behavior: 'instant' as ScrollBehavior });
+      el.scrollTo({ top: el.clientHeight, behavior: 'instant' as ScrollBehavior });
     });
-  }, [sessionId, hasHistory]);
+  }, [sessionId]);
 
   // Detect scroll settle → fire skip if landed on prev/next card
   useEffect(() => {
@@ -171,29 +171,27 @@ export const ChatInterface = ({
       clearTimeout(scrollTimerRef.current);
       scrollTimerRef.current = window.setTimeout(() => {
         const page = Math.round(el.scrollTop / el.clientHeight);
-        const h = hasHistoryRef.current;
-        const currentPage = h ? 1 : 0;
-        const resetTop = h ? el.clientHeight : 0;
-
-        if (h && page === 0 && !pendingResetRef.current) {
-          // Swiped up → previous track
+        // page 0 = prev, page 1 = current, page 2 = next
+        if (page === 0 && !pendingResetRef.current) {
           pendingResetRef.current = true;
-          onSkipPrevRef.current?.();
+          // Only fire skipPrev if there's history, otherwise just bounce back
+          if (hasHistoryRef.current) {
+            onSkipPrevRef.current?.();
+          }
           setTimeout(() => {
             if (pendingResetRef.current) {
               isResettingRef.current = true;
-              el.scrollTo({ top: resetTop, behavior: 'smooth' });
+              el.scrollTo({ top: el.clientHeight, behavior: 'smooth' });
               requestAnimationFrame(() => { isResettingRef.current = false; pendingResetRef.current = false; });
             }
           }, 400);
-        } else if (page > currentPage && !pendingResetRef.current) {
-          // Swiped down → next track
+        } else if (page >= 2 && !pendingResetRef.current) {
           pendingResetRef.current = true;
           onSkipNextRef.current?.();
           setTimeout(() => {
             if (pendingResetRef.current) {
               isResettingRef.current = true;
-              el.scrollTo({ top: resetTop, behavior: 'smooth' });
+              el.scrollTo({ top: el.clientHeight, behavior: 'smooth' });
               requestAnimationFrame(() => { isResettingRef.current = false; pendingResetRef.current = false; });
             }
           }, 400);
@@ -216,7 +214,7 @@ export const ChatInterface = ({
         const el = scrollRef.current;
         if (el) {
           isResettingRef.current = true;
-          el.scrollTo({ top: hasHistoryRef.current ? el.clientHeight : 0, behavior: 'instant' as ScrollBehavior });
+          el.scrollTo({ top: el.clientHeight, behavior: 'instant' as ScrollBehavior });
           requestAnimationFrame(() => {
             isResettingRef.current = false;
             pendingResetRef.current = false;
@@ -237,7 +235,7 @@ export const ChatInterface = ({
       if (e.key === 'ArrowDown') {
         e.preventDefault();
         el.scrollBy({ top: el.clientHeight, behavior: 'smooth' });
-      } else if (e.key === 'ArrowUp' && hasHistory) {
+      } else if (e.key === 'ArrowUp') {
         e.preventDefault();
         el.scrollBy({ top: -el.clientHeight, behavior: 'smooth' });
       }
@@ -292,8 +290,8 @@ export const ChatInterface = ({
           }`}
           style={{ overscrollBehaviorY: 'contain' }}
         >
-          {/* Previous card placeholder — only when history exists */}
-          {hasHistory && <div className="h-full shrink-0 snap-start snap-always" />}
+          {/* Previous card placeholder — always rendered for stable scroll-snap */}
+          <div className="h-full shrink-0 snap-start snap-always" />
 
           {/* Current track card */}
           <div className="h-full shrink-0 snap-start snap-always flex flex-col items-center justify-center pb-20">
