@@ -68,11 +68,12 @@ export function useAlbumEnrichment(opts: { trackId?: string; query?: string; ini
           const attrs = song.attributes || {};
           const artwork = attrs.artwork || {};
           const artworkUrl = (artwork.url || '').replace('{w}', '300').replace('{h}', '300');
-          const albumName = attrs.albumName;
+          // Extract real album ID from song's relationships
+          const realAlbumId = song.relationships?.albums?.data?.[0]?.id;
           if (!signal.aborted) setEnriched({
             artworkUrl,
             songId: trackId,
-            albumId: albumName, // store album name for display
+            albumId: realAlbumId || undefined,
           });
         } catch (e) {
           if ((e as Error).name !== 'AbortError') console.warn('[GenUI] track lookup failed:', e);
