@@ -57,8 +57,9 @@ interface ChatInterfaceProps {
   onSkipPrev?: () => Promise<void>;
   /** Full queue — queue[0] is now playing, queue[1..] is up next */
   queue?: UnifiedTrack[];
-  /** Play a track by Apple Music ID (provider.play) */
   playTrackById?: (trackId: string) => Promise<void>;
+  /** Whether there are previously played tracks (enables swipe-up) */
+  hasHistory?: boolean;
 }
 
 /**
@@ -90,6 +91,7 @@ export const ChatInterface = ({
   onSkipPrev,
   queue: queueTracks = [],
   playTrackById,
+  hasHistory = false,
 }: ChatInterfaceProps) => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -153,9 +155,9 @@ export const ChatInterface = ({
     const el = scrollRef.current;
     if (!el) return;
     requestAnimationFrame(() => {
-      el.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+      el.scrollTo({ top: hasHistory ? el.clientHeight : 0, behavior: 'instant' as ScrollBehavior });
     });
-  }, [sessionId]);
+  }, [sessionId, hasHistory]);
 
   // Detect scroll settle → fire skip if landed on prev/next card
   useEffect(() => {
@@ -167,16 +169,28 @@ export const ChatInterface = ({
       clearTimeout(scrollTimerRef.current);
       scrollTimerRef.current = window.setTimeout(() => {
         const page = Math.round(el.scrollTop / el.clientHeight);
-        // Current track = page 0, Next track = page 1
-        // No prev card — can't swipe up past page 0
-        if (page >= 1 && !pendingResetRef.current) {
+        const currentPage = hasHistory ? 1 : 0;
+        const resetTop = hasHistory ? el.clientHeight : 0;
+
+        if (hasHistory && page === 0 && !pendingResetRef.current) {
+          // Swiped up → previous track
           pendingResetRef.current = true;
-          onSkipNextRef.current?.();
-          // Scroll back to current card; track change will re-render
+          onSkipPrevRef.current?.();
           setTimeout(() => {
             if (pendingResetRef.current) {
               isResettingRef.current = true;
-              el.scrollTo({ top: 0, behavior: 'smooth' });
+              el.scrollTo({ top: resetTop, behavior: 'smooth' });
+              requestAnimationFrame(() => { isResettingRef.current = false; pendingResetRef.current = false; });
+            }
+          }, 400);
+        } else if (page > currentPage && !pendingResetRef.current) {
+          // Swiped down → next track
+          pendingResetRef.current = true;
+          onSkipNextRef.current?.();
+          setTimeout(() => {
+            if (pendingResetRef.current) {
+              isResettingRef.current = true;
+              el.scrollTo({ top: resetTop, behavior: 'smooth' });
               requestAnimationFrame(() => { isResettingRef.current = false; pendingResetRef.current = false; });
             }
           }, 400);
@@ -199,7 +213,7 @@ export const ChatInterface = ({
         const el = scrollRef.current;
         if (el) {
           isResettingRef.current = true;
-          el.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
+          el.scrollTo({ top: hasHistory ? el.clientHeight : 0, behavior: 'instant' as ScrollBehavior });
           requestAnimationFrame(() => {
             isResettingRef.current = false;
             pendingResetRef.current = false;
@@ -220,6 +234,9 @@ export const ChatInterface = ({
       if (e.key === 'ArrowDown') {
         e.preventDefault();
         el.scrollBy({ top: el.clientHeight, behavior: 'smooth' });
+      } else if (e.key === 'ArrowUp' && hasHistory) {
+        e.preventDefault();
+        el.scrollBy({ top: -el.clientHeight, behavior: 'smooth' });
       }
     };
     document.addEventListener('keydown', onKeyDown);
@@ -272,7 +289,10 @@ export const ChatInterface = ({
           }`}
           style={{ overscrollBehaviorY: 'contain' }}
         >
-          {/* Current track card (first card — no prev, can't swipe up) */}
+          {/* Previous card placeholder — only when history exists */}
+          {hasHistory && <div className="h-full shrink-0 snap-start snap-always" />}
+
+          {/* Current track card */}
           <div className="h-full shrink-0 snap-start snap-always flex flex-col items-center justify-center pb-20">
             <div className="relative z-10 w-full max-w-xl px-6">
               <RecordPlayer
