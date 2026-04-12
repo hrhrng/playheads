@@ -163,9 +163,10 @@ export const ChatInterface = ({
     const el = scrollRef.current;
     if (!el) return;
     requestAnimationFrame(() => {
-      el.scrollTo({ top: el.clientHeight, behavior: 'instant' as ScrollBehavior });
+      // Current card is page 0 if no history, page 1 if history exists
+      el.scrollTo({ top: hasHistory ? el.clientHeight : 0, behavior: 'instant' as ScrollBehavior });
     });
-  }, [sessionId]);
+  }, [sessionId, hasHistory]);
 
   // Detect scroll settle → fire skip if landed on prev/next card
   useEffect(() => {
@@ -177,37 +178,32 @@ export const ChatInterface = ({
       clearTimeout(scrollTimerRef.current);
       scrollTimerRef.current = window.setTimeout(() => {
         const page = Math.round(el.scrollTop / el.clientHeight);
-        // page 0 = prev, page 1 = current, page 2 = next
-        if (page === 0 && !pendingResetRef.current) {
+        const h = hasHistoryRef.current;
+        const currentPage = h ? 1 : 0;
+        const resetTop = h ? el.clientHeight : 0;
+
+        if (h && page === 0 && !pendingResetRef.current) {
+          // Swiped up → previous track
           pendingResetRef.current = true;
-          // Only fire skipPrev if there's history, otherwise just bounce back
-          if (hasHistoryRef.current) {
-            onSkipPrevRef.current?.();
-          }
+          onSkipPrevRef.current?.();
           setTimeout(() => {
             if (pendingResetRef.current) {
               isResettingRef.current = true;
-              el.scrollTo({ top: el.clientHeight, behavior: 'smooth' });
+              el.scrollTo({ top: resetTop, behavior: 'smooth' });
               requestAnimationFrame(() => { isResettingRef.current = false; pendingResetRef.current = false; });
             }
           }, 400);
-        } else if (page >= 2 && !pendingResetRef.current) {
+        } else if (page > currentPage && !pendingResetRef.current) {
+          // Swiped down → next track
           pendingResetRef.current = true;
-          if (nextTrackRef.current) {
-            // Has next track → skip and bounce back
-            onSkipNextRef.current?.();
-            setTimeout(() => {
-              if (pendingResetRef.current) {
-                isResettingRef.current = true;
-                el.scrollTo({ top: el.clientHeight, behavior: 'smooth' });
-                requestAnimationFrame(() => { isResettingRef.current = false; pendingResetRef.current = false; });
-              }
-            }, 400);
-          } else {
-            // No next track → stop playback and clear queue
-            onFinishQueueRef.current?.();
-            pendingResetRef.current = false;
-          }
+          onSkipNextRef.current?.();
+          setTimeout(() => {
+            if (pendingResetRef.current) {
+              isResettingRef.current = true;
+              el.scrollTo({ top: resetTop, behavior: 'smooth' });
+              requestAnimationFrame(() => { isResettingRef.current = false; pendingResetRef.current = false; });
+            }
+          }, 400);
         }
       }, 80);
     };
@@ -227,7 +223,7 @@ export const ChatInterface = ({
         const el = scrollRef.current;
         if (el) {
           isResettingRef.current = true;
-          el.scrollTo({ top: el.clientHeight, behavior: 'instant' as ScrollBehavior });
+          el.scrollTo({ top: hasHistoryRef.current ? el.clientHeight : 0, behavior: 'instant' as ScrollBehavior });
           requestAnimationFrame(() => {
             isResettingRef.current = false;
             pendingResetRef.current = false;
@@ -299,12 +295,12 @@ export const ChatInterface = ({
         <div
           ref={scrollRef}
           className={`absolute inset-0 snap-y snap-mandatory no-scrollbar ${
-            showHistory || !currentTrack ? 'overflow-hidden' : 'overflow-y-scroll'
+            showHistory ? 'overflow-hidden' : 'overflow-y-scroll'
           }`}
           style={{ overscrollBehaviorY: 'contain' }}
         >
-          {/* Previous card placeholder — always rendered for stable scroll-snap */}
-          <div className="h-full shrink-0 snap-start snap-always" />
+          {/* Previous card — only when there's history */}
+          {hasHistory && <div className="h-full shrink-0 snap-start snap-always" />}
 
           {/* Current track card */}
           <div className="h-full shrink-0 snap-start snap-always flex flex-col items-center justify-center pb-20">
@@ -370,9 +366,9 @@ export const ChatInterface = ({
             </div>
           </div>
 
-          {/* Next track card */}
-          <div className="h-full shrink-0 snap-start snap-always flex flex-col items-center justify-center pb-36">
-            {nextTrack ? (
+          {/* Next track card — only when there's a next track */}
+          {nextTrack && (
+            <div className="h-full shrink-0 snap-start snap-always flex flex-col items-center justify-center pb-36">
               <div className="relative z-10 w-full max-w-xl px-8 pointer-events-none">
                 <RecordPlayer
                   currentTrack={nextTrack}
@@ -382,12 +378,8 @@ export const ChatInterface = ({
                   isAppleMusicAuthorized={isAppleMusicAuthorized}
                 />
               </div>
-            ) : (
-              <div className="text-center text-gray-300 text-sm">
-                <p>Queue empty</p>
-              </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
         {/* Transcript Overlay */}
