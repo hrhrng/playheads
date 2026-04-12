@@ -317,7 +317,16 @@ export const ChatInterface = ({
                 </div>
               )}
               {isAppleMusicAuthorized && (
-                <div className={`max-w-sm mx-auto px-2 mt-4 flex items-center gap-2 transition-opacity duration-200 ${showHistory || !currentTrack ? 'opacity-0 pointer-events-none' : ''}`}>
+                <div
+                  ref={(el) => {
+                    if (el) {
+                      const w = el.offsetWidth;
+                      const pw = el.parentElement?.offsetWidth;
+                      const gpw = el.parentElement?.parentElement?.offsetWidth;
+                      console.log(`[SeekBar] width=${w} parent=${pw} grandparent=${gpw} computed-max=${getComputedStyle(el).maxWidth}`);
+                    }
+                  }}
+                  className={`max-w-sm mx-auto px-2 mt-4 flex items-center gap-2 transition-opacity duration-200 ${showHistory || !currentTrack ? 'opacity-0 pointer-events-none' : ''}`}>
                   <span className="text-xs font-mono text-gray-400 tabular-nums shrink-0">
                     {formatTime(seekDisplayValue)}
                   </span>
