@@ -149,6 +149,8 @@ export const ChatInterface = ({
   showHistoryRef.current = showHistory;
   const hasHistoryRef = useRef(hasHistory);
   hasHistoryRef.current = hasHistory;
+  const nextTrackRef = useRef(nextTrack);
+  nextTrackRef.current = nextTrack;
 
   const nextTrack = queueTracks[1] || null;
 
@@ -187,14 +189,20 @@ export const ChatInterface = ({
           }, 400);
         } else if (page >= 2 && !pendingResetRef.current) {
           pendingResetRef.current = true;
-          onSkipNextRef.current?.();
-          setTimeout(() => {
-            if (pendingResetRef.current) {
-              isResettingRef.current = true;
-              el.scrollTo({ top: el.clientHeight, behavior: 'smooth' });
-              requestAnimationFrame(() => { isResettingRef.current = false; pendingResetRef.current = false; });
-            }
-          }, 400);
+          if (nextTrackRef.current) {
+            // Has next track → skip and bounce back
+            onSkipNextRef.current?.();
+            setTimeout(() => {
+              if (pendingResetRef.current) {
+                isResettingRef.current = true;
+                el.scrollTo({ top: el.clientHeight, behavior: 'smooth' });
+                requestAnimationFrame(() => { isResettingRef.current = false; pendingResetRef.current = false; });
+              }
+            }, 400);
+          } else {
+            // No next track → stay on empty page, stop playback
+            pendingResetRef.current = false;
+          }
         }
       }, 80);
     };
