@@ -6,9 +6,12 @@
  * Others: Clean collapsible with status dot + summary
  */
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useGenUIActions, useStorefront, usePlayTrackById } from '../genui/GenUIContext';
 import { API_BASE } from '../../config/api';
+
+/** Global artwork cache — persists across re-renders and component instances */
+const artworkCache = new Map<string, string>();
 
 interface ToolCallProps {
   id: string;
@@ -51,21 +54,52 @@ function SearchMusicResult({ result, args }: { result: string; args: Record<stri
   const tracks = parseSearchResult(result);
   const queries = (args.queries as string[]) || [];
   const queryText = queries.join(', ');
+  const fetchedRef = useRef(false);
+
+  // Batch fetch artworks for visible tracks on mount (parallel + cached)
+  useEffect(() => {
+    if (fetchedRef.current || tracks.length === 0) return;
+    fetchedRef.current = true;
+
+    const toFetch = tracks.slice(0, 10).filter(t => !artworkCache.has(t.id));
+    if (toFetch.length === 0) {
+      // All cached — load from cache
+      const cached: Record<string, string> = {};
+      for (const t of tracks.slice(0, 10)) {
+        const url = artworkCache.get(t.id);
+        if (url) cached[t.id] = url;
+      }
+      setArtworks(cached);
+      return;
+    }
+
+    // Fetch all in parallel
+    Promise.all(
+      toFetch.map(async (track) => {
+        try {
+          const res = await fetch(`${API_BASE}/apple-music/catalog/songs/${track.id}?storefront=${sf}`);
+          if (!res.ok) return;
+          const data = await res.json();
+          const url = data?.data?.[0]?.attributes?.artwork?.url;
+          if (url) {
+            const sized = url.replace('{w}', '80').replace('{h}', '80');
+            artworkCache.set(track.id, sized);
+          }
+        } catch { /* best effort */ }
+      })
+    ).then(() => {
+      const all: Record<string, string> = {};
+      for (const t of tracks.slice(0, 10)) {
+        const url = artworkCache.get(t.id);
+        if (url) all[t.id] = url;
+      }
+      setArtworks(all);
+    });
+  }, [tracks.length, sf]);
 
   if (tracks.length === 0) {
     return <p className="text-[11px] text-gray-500 py-1">{result}</p>;
   }
-
-  const fetchArtwork = async (trackId: string) => {
-    if (artworks[trackId]) return;
-    try {
-      const res = await fetch(`${API_BASE}/apple-music/catalog/songs/${trackId}?storefront=${sf}`);
-      if (!res.ok) return;
-      const data = await res.json();
-      const url = data?.data?.[0]?.attributes?.artwork?.url;
-      if (url) setArtworks(prev => ({ ...prev, [trackId]: url.replace('{w}', '80').replace('{h}', '80') }));
-    } catch { /* best effort */ }
-  };
 
   const handlePlay = (trackId: string) => {
     if (playById) playById(trackId).catch(console.error);
@@ -89,7 +123,6 @@ function SearchMusicResult({ result, args }: { result: string; args: Record<stri
           <div
             key={track.id}
             className="flex items-center gap-2 py-1.5 px-2 -mx-2 rounded-md hover:bg-gray-50 group/track transition-colors"
-            onMouseEnter={() => fetchArtwork(track.id)}
           >
             <span className="text-[10px] text-gray-400 w-4 text-right tabular-nums shrink-0">
               {i + 1}
