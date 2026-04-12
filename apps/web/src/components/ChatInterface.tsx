@@ -299,7 +299,7 @@ export const ChatInterface = ({
         <div
           ref={scrollRef}
           className={`absolute inset-0 snap-y snap-mandatory no-scrollbar ${
-            showHistory ? 'overflow-hidden' : 'overflow-y-scroll'
+            showHistory || !currentTrack ? 'overflow-hidden' : 'overflow-y-scroll'
           }`}
           style={{ overscrollBehaviorY: 'contain' }}
         >
