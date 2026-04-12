@@ -317,29 +317,20 @@ export const ChatInterface = ({
                 </div>
               )}
               {isAppleMusicAuthorized && (
-                <div
-                  ref={(el) => {
-                    if (el) {
-                      const w = el.offsetWidth;
-                      const pw = el.parentElement?.offsetWidth;
-                      const gpw = el.parentElement?.parentElement?.offsetWidth;
-                      console.log(`[SeekBar] width=${w} parent=${pw} grandparent=${gpw} computed-max=${getComputedStyle(el).maxWidth}`);
-                    }
-                  }}
-                  className={`max-w-sm mx-auto px-2 mt-4 flex items-center gap-2 transition-opacity duration-200 ${showHistory || !currentTrack ? 'opacity-0 pointer-events-none' : ''}`}>
+                <div className={`max-w-sm mx-auto px-2 mt-4 flex items-center gap-2 transition-opacity duration-200 ${showHistory || !currentTrack ? 'opacity-0 pointer-events-none' : ''}`}>
                   <span className="text-xs font-mono text-gray-400 tabular-nums shrink-0">
                     {formatTime(seekDisplayValue)}
                   </span>
                   <div className="relative flex-1 h-5 flex items-center">
-                    <div className="w-full h-1.5 bg-gray-100 rounded-full pointer-events-none">
+                    <div className="w-full h-1.5 bg-gray-100 rounded-full pointer-events-none overflow-hidden">
                       <div
                         className="h-full bg-gray-900 rounded-full"
-                        style={{ width: `${(seekDisplayValue / (playbackTime?.total || 1)) * 100}%` }}
+                        style={{ width: `${Math.min(100, (seekDisplayValue / (playbackTime?.total || 1)) * 100)}%` }}
                       />
                     </div>
                     <div
                       className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow border border-gray-300 pointer-events-none"
-                      style={{ left: `calc(${(seekDisplayValue / (playbackTime?.total || 1)) * 100}% - 6px)` }}
+                      style={{ left: `calc(${Math.min(100, (seekDisplayValue / (playbackTime?.total || 1)) * 100)}% - 6px)` }}
                     />
                     <input
                       type="range"
