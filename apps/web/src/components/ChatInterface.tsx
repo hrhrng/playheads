@@ -57,6 +57,8 @@ interface ChatInterfaceProps {
   onSkipPrev?: () => Promise<void>;
   /** Full queue — queue[0] is now playing, queue[1..] is up next */
   queue?: UnifiedTrack[];
+  /** Play a track by Apple Music ID (provider.play) */
+  playTrackById?: (trackId: string) => Promise<void>;
 }
 
 /**
@@ -87,6 +89,7 @@ export const ChatInterface = ({
   onSkipNext,
   onSkipPrev,
   queue: queueTracks = [],
+  playTrackById,
 }: ChatInterfaceProps) => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -371,6 +374,7 @@ export const ChatInterface = ({
           showHistory={showHistory}
           queueOps={queueOps}
           storefront={musicActions?.storefront}
+          playTrackById={playTrackById}
         />
 
       </div>

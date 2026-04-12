@@ -5,7 +5,7 @@
  * Always renders both states — CSS handles the transition.
  */
 import { useState, useEffect, useCallback } from 'react';
-import { useGenUIActions, useStorefront } from './GenUIContext';
+import { useGenUIActions, useStorefront, usePlayTrackById } from './GenUIContext';
 import { API_BASE } from '../../config/api';
 import type { UnifiedTrack } from '../../providers/types';
 
@@ -116,6 +116,7 @@ export function AlbumCard({
   songId: initialSongId, albumId: initialAlbumId,
 }: AlbumCardProps) {
   const actions = useGenUIActions();
+  const playById = usePlayTrackById();
   const [imageLoaded, setImageLoaded] = useState(false);
   const [hovering, setHovering] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -158,16 +159,21 @@ export function AlbumCard({
     if (next) fetchTracks();
   };
 
-  const handlePlay = (e: React.MouseEvent, trackId?: string, trackName?: string) => {
+  const handlePlay = (e: React.MouseEvent, tid?: string) => {
     e.stopPropagation();
-    const id = trackId || songId;
-    const name = trackName || title;
-    if (!id || !actions) return;
-    actions.addTrack({
-      id, name, artist: subtitle, album: title,
-      artworkUrl: artworkUrl || '', durationSeconds: 0, provider: 'apple-music',
-    });
-    setTimeout(() => actions.skipNext().catch(console.error), PLAY_AFTER_QUEUE_DELAY_MS);
+    const id = tid || songId;
+    if (!id) return;
+    // Use provider's play(trackId) for proper initialization
+    if (playById) {
+      playById(id).catch(console.error);
+    } else if (actions) {
+      // Fallback: add + skipNext
+      actions.addTrack({
+        id, name: title, artist: subtitle, album: title,
+        artworkUrl: artworkUrl || '', durationSeconds: 0, provider: 'apple-music',
+      });
+      setTimeout(() => actions.skipNext().catch(console.error), PLAY_AFTER_QUEUE_DELAY_MS);
+    }
   };
 
   const handleQueue = (e: React.MouseEvent, trackId: string, trackName: string) => {
@@ -272,7 +278,7 @@ export function AlbumCard({
                   {actions && (
                     <div className="flex items-center gap-0.5 opacity-0 group-hover/track:opacity-100 transition-opacity">
                       <button
-                        onClick={(e) => handlePlay(e, track.id, track.name)}
+                        onClick={(e) => handlePlay(e, track.id)}
                         className="w-6 h-6 rounded-full bg-gray-900 text-white flex items-center justify-center hover:scale-110 transition-transform"
                         title="Play"
                       >

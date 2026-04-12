@@ -71,6 +71,7 @@ interface MessageListProps {
   isLoading: boolean;
   queueOps?: QueueOperations | null;
   storefront?: string;
+  playTrackById?: (trackId: string) => Promise<void>;
 }
 
 /**
@@ -147,7 +148,7 @@ function AssistantMessage({
   );
 }
 
-export const MessageList = ({ messages, rawMessages = [], isLoading, queueOps, storefront = 'us' }: MessageListProps): React.JSX.Element => {
+export const MessageList = ({ messages, rawMessages = [], isLoading, queueOps, storefront = 'us', playTrackById }: MessageListProps): React.JSX.Element => {
   const isModernMessage = (message: Message): message is Message & { parts: MessagePart[] } => {
     return 'parts' in message && Array.isArray(message.parts);
   };
@@ -157,7 +158,7 @@ export const MessageList = ({ messages, rawMessages = [], isLoading, queueOps, s
   };
 
   return (
-    <GenUIProvider queueOps={queueOps || null} storefront={storefront}>
+    <GenUIProvider queueOps={queueOps || null} storefront={storefront} playTrackById={playTrackById}>
       <div className="space-y-6 pb-12">
         {messages.map((msg, idx) => (
           <div
