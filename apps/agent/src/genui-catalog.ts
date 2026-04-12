@@ -111,6 +111,46 @@ export const musicCatalog = defineCatalog(schema, {
       description: "Horizontal separator line.",
       props: z.object({}),
     },
+    LyricsCard: {
+      description:
+        "Beautiful lyric quote card with album art background — ideal for sharing. " +
+        "Use search_music first to get a real trackId. Fill lyric with the quote text.",
+      props: z.object({
+        lyric: z.string().describe("The lyric quote text (1-4 lines)"),
+        translation: z.string().nullable().describe("Optional translation of the lyric"),
+        trackName: z.string().describe("Song name"),
+        artist: z.string().describe("Artist name"),
+        trackId: z.string().nullable().describe("Apple Music song ID from search_music"),
+        query: z.string().nullable().describe("Fallback search query"),
+      }),
+      example: { lyric: "一个人走在白茫茫的雾里", translation: "Walking alone in the white fog", trackName: "旋木", artist: "王菲", trackId: "965771855", query: null },
+    },
+    ArtistSpotlight: {
+      description:
+        "Magazine-style artist profile card with image, stats, and bio. " +
+        "Use for artist introductions and spotlights.",
+      props: z.object({
+        name: z.string(),
+        subtitle: z.string().nullable().describe("e.g. 'Chinese Pop Icon' or '华语天后'"),
+        bio: z.string().nullable().describe("1-3 sentence bio"),
+        imageUrl: z.string().nullable().describe("Artist photo URL if available"),
+        stats: z.array(z.object({ label: z.string(), value: z.string() })).nullable().describe("Key stats like albums count, active years"),
+      }),
+      example: { name: "王菲", subtitle: "华语天后", bio: "王菲是华语乐坛最具影响力的女歌手之一。", imageUrl: null, stats: [{ label: "Albums", value: "15" }, { label: "Active", value: "1989-" }] },
+    },
+    MoodBoard: {
+      description:
+        "Mood-based music recommendation card with gradient header and emoji. " +
+        "Place AlbumCard children below for recommendations. " +
+        "Use for 'rainy day music', 'workout playlist', 'chill vibes' etc.",
+      props: z.object({
+        mood: z.string().describe("Mood name, e.g. '雨天听什么'"),
+        description: z.string().nullable().describe("Short mood description"),
+        emoji: z.string().nullable().describe("A single emoji for the mood"),
+        gradient: z.array(z.string()).min(2).max(2).nullable().describe("Two hex colors for header gradient"),
+      }),
+      example: { mood: "雨天听什么", description: "温柔治愈的旋律，陪你度过雨天", emoji: "🌧️", gradient: ["#667eea", "#764ba2"] },
+    },
   },
   actions: {
     play: { description: "Play a track via Apple Music." },

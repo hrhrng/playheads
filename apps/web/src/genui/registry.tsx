@@ -7,6 +7,9 @@ import type { ComponentRenderProps } from "@json-render/react";
 import { useState, type ReactNode } from 'react';
 import { AlbumCard } from "../components/genui/AlbumCard";
 import { AlbumDetail } from "../components/genui/AlbumDetail";
+import { LyricsCard } from "../components/genui/LyricsCard";
+import { ArtistSpotlight } from "../components/genui/ArtistSpotlight";
+import { MoodBoard } from "../components/genui/MoodBoard";
 import { TrackCard } from "../components/genui/TrackCard";
 import { TextBlock } from "../components/genui/TextBlock";
 import { Stat } from "../components/genui/Stat";
@@ -92,4 +95,19 @@ export const registry: Record<string, (ctx: ComponentRenderProps<any>) => ReactN
   },
 
   Divider: () => <Divider />,
+
+  LyricsCard: (ctx: ComponentRenderProps<{ lyric: string; translation?: string; trackName: string; artist: string; trackId?: string; query?: string }>) => {
+    const props = p(ctx);
+    return <LyricsCard lyric={props.lyric} translation={props.translation} trackName={props.trackName} artist={props.artist} trackId={props.trackId ?? undefined} query={props.query ?? undefined} />;
+  },
+
+  ArtistSpotlight: (ctx: ComponentRenderProps<{ name: string; subtitle?: string; bio?: string; imageUrl?: string; stats?: { label: string; value: string }[] }>) => {
+    const props = p(ctx);
+    return <ArtistSpotlight name={props.name} subtitle={props.subtitle ?? undefined} bio={props.bio ?? undefined} imageUrl={props.imageUrl ?? undefined} stats={props.stats ?? undefined} />;
+  },
+
+  MoodBoard: (ctx: ComponentRenderProps<{ mood: string; description?: string; emoji?: string; gradient?: string[] }>) => {
+    const props = p(ctx);
+    return <MoodBoard mood={props.mood} description={props.description ?? undefined} emoji={props.emoji ?? undefined} gradient={props.gradient ?? undefined}>{ctx.children}</MoodBoard>;
+  },
 };
