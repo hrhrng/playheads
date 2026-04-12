@@ -278,7 +278,7 @@ export class AppleMusicProvider implements MusicProvider {
       name: attr.name || attr.title || 'Unknown',
       artist: attr.artistName || 'Unknown',
       album: attr.albumName || '',
-      artworkUrl: (attr.artwork?.url || item.artworkURL || '').replace('{w}', '300').replace('{h}', '300'),
+      artworkUrl: attr.artwork?.url || item.artworkURL || '',
       durationSeconds: mkDuration,
       provider: 'apple-music' as const,
     };
@@ -289,8 +289,9 @@ export class AppleMusicProvider implements MusicProvider {
     if (cached) {
       const merged = {
         ...cached,
-        // Use MusicKit duration if cache has 0 (GenUI tracks don't know duration)
         durationSeconds: cached.durationSeconds || mkDuration,
+        // Prefer MusicKit's template URL ({w}x{h}) over cached fixed-size URL
+        artworkUrl: mkTrack.artworkUrl || cached.artworkUrl,
       };
       // Update cache so localStorage saves correct duration
       this.metadataCache.set(item.id, merged);
