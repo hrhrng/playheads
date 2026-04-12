@@ -10,8 +10,17 @@ import { useState, useEffect, useRef } from 'react';
 import { useGenUIActions, useStorefront, usePlayTrackById } from '../genui/GenUIContext';
 import { API_BASE } from '../../config/api';
 
-/** Global artwork cache — persists across re-renders and component instances */
+/** Global artwork cache — LRU with max 200 entries, cleared on page refresh */
+const ARTWORK_CACHE_MAX = 200;
 const artworkCache = new Map<string, string>();
+function cacheArtwork(id: string, url: string) {
+  if (artworkCache.size >= ARTWORK_CACHE_MAX) {
+    // Delete oldest entry (first key in Map iteration order)
+    const oldest = artworkCache.keys().next().value;
+    if (oldest !== undefined) artworkCache.delete(oldest);
+  }
+  artworkCache.set(id, url);
+}
 
 interface ToolCallProps {
   id: string;
@@ -83,7 +92,7 @@ function SearchMusicResult({ result, args }: { result: string; args: Record<stri
           const url = data?.data?.[0]?.attributes?.artwork?.url;
           if (url) {
             const sized = url.replace('{w}', '80').replace('{h}', '80');
-            artworkCache.set(track.id, sized);
+            cacheArtwork(track.id, sized);
           }
         } catch { /* best effort */ }
       })
