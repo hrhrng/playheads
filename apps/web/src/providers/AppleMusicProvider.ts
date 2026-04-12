@@ -185,13 +185,15 @@ export class AppleMusicProvider implements MusicProvider {
       if (startTime && startTime > 0) {
         this.seekTarget = startTime;
       }
-      // Update playbackTime.total from MusicKit's resolved queue item
-      // (the queue items have durationInMillis even without playing)
-      const nowPlaying = this.musicKit.queue?.items?.[0];
-      if (nowPlaying?.attributes?.durationInMillis) {
-        const total = nowPlaying.attributes.durationInMillis / 1000;
+      // After setQueue, MusicKit items have resolved metadata (durationInMillis).
+      // Re-format the first item to update the metadata cache with real duration,
+      // then update playbackTime so the seek bar shows correct total on restore.
+      const firstItem = this.musicKit.queue?.items?.[0];
+      if (firstItem) {
+        const track = this.formatMusicKitTrack(firstItem); // merges + updates cache
         this.updateState({
-          playbackTime: { current: startTime || 0, total },
+          currentTrack: track,
+          playbackTime: { current: startTime || 0, total: track.durationSeconds },
         });
       }
     } catch (e) {
@@ -269,19 +271,33 @@ export class AppleMusicProvider implements MusicProvider {
   }
 
   formatMusicKitTrack(item: any): UnifiedTrack {
-    // Prefer cached metadata (from agent/search — has full info)
-    const cached = this.metadataCache.get(item.id);
-    if (cached) return cached;
     const attr = item.attributes || item;
-    return {
+    const mkDuration = attr.durationInMillis ? attr.durationInMillis / 1000 : (item.duration || 0);
+    const mkTrack: UnifiedTrack = {
       id: item.id || '',
       name: attr.name || attr.title || 'Unknown',
       artist: attr.artistName || 'Unknown',
       album: attr.albumName || '',
       artworkUrl: (attr.artwork?.url || item.artworkURL || '').replace('{w}', '300').replace('{h}', '300'),
-      durationSeconds: attr.durationInMillis ? attr.durationInMillis / 1000 : (item.duration || 0),
+      durationSeconds: mkDuration,
       provider: 'apple-music' as const,
     };
+
+    // Merge with cached metadata: cache has richer info (from agent/search)
+    // but MusicKit has authoritative duration
+    const cached = this.metadataCache.get(item.id);
+    if (cached) {
+      const merged = {
+        ...cached,
+        // Use MusicKit duration if cache has 0 (GenUI tracks don't know duration)
+        durationSeconds: cached.durationSeconds || mkDuration,
+      };
+      // Update cache so localStorage saves correct duration
+      this.metadataCache.set(item.id, merged);
+      return merged;
+    }
+
+    return mkTrack;
   }
 
   /** Cache full track metadata so formatMusicKitTrack can return rich data. */
