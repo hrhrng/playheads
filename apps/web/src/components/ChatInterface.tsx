@@ -350,9 +350,9 @@ export const ChatInterface = ({
             )}
           </div>
 
-          {/* Next track card — only rendered when there's a next track */}
-          {nextTrack && (
-            <div className="h-full shrink-0 snap-start snap-always flex flex-col items-center justify-center pb-36">
+          {/* Next track card */}
+          <div className="h-full shrink-0 snap-start snap-always flex flex-col items-center justify-center pb-36">
+            {nextTrack ? (
               <div className="relative z-10 w-full max-w-xl px-8 pointer-events-none">
                 <RecordPlayer
                   currentTrack={nextTrack}
@@ -362,8 +362,12 @@ export const ChatInterface = ({
                   isAppleMusicAuthorized={isAppleMusicAuthorized}
                 />
               </div>
-            </div>
-          )}
+            ) : (
+              <div className="text-center text-gray-300 text-sm">
+                <p>Queue empty</p>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Transcript Overlay */}
