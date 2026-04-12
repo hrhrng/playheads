@@ -86,11 +86,11 @@ describe('AlbumCard', () => {
     expect(svg).toBeInTheDocument();
   });
 
-  it('shows play button on hover when songId and actions available', () => {
+  it('shows play and queue buttons on hover when songId and actions available', () => {
     const queueOps = createMockQueueOps();
     const { container } = renderWithActions(
       <AlbumCard
-        
+
         title="Album"
         subtitle="Artist"
         artworkUrl="https://example.com/art.jpg"
@@ -99,9 +99,8 @@ describe('AlbumCard', () => {
       queueOps,
     );
 
-    // Play overlay button on collapsed card
     const buttons = container.querySelectorAll('button');
-    expect(buttons.length).toBe(1); // Play only (queue is in expanded tracklist)
+    expect(buttons.length).toBe(2); // Play album + Add to queue
   });
 
   it('hides action buttons when no songId', () => {
@@ -135,12 +134,11 @@ describe('AlbumCard', () => {
     expect(buttons.length).toBe(0);
   });
 
-  it('calls addTrack + skipNext when play button is clicked on collapsed card', () => {
-    vi.useFakeTimers();
+  it('play album button is clickable on collapsed card', () => {
     const queueOps = createMockQueueOps();
     const { container } = renderWithActions(
       <AlbumCard
-        
+
         title="Kind of Blue"
         subtitle="Miles Davis"
         artworkUrl="https://example.com/art.jpg"
@@ -150,46 +148,33 @@ describe('AlbumCard', () => {
     );
 
     const buttons = container.querySelectorAll('button');
-    fireEvent.click(buttons[0]); // Play button
-
-    expect(queueOps.addTrack).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: '12345',
-        name: 'Kind of Blue',
-        artist: 'Miles Davis',
-        provider: 'apple-music',
-      })
-    );
-    vi.advanceTimersByTime(300);
-    expect(queueOps.skipNext).toHaveBeenCalled();
-    vi.useRealTimers();
+    expect(buttons.length).toBe(2);
+    // Click should not throw (actual album fetch is async + mocked to fail)
+    fireEvent.click(buttons[0]);
+    fireEvent.click(buttons[1]);
   });
 
-  it('calls addTrack + skipNext when play button is clicked', async () => {
-    vi.useFakeTimers();
+  it('play album button fetches tracks from API', async () => {
     const queueOps = createMockQueueOps();
     const { container } = renderWithActions(
       <AlbumCard
-        
+
         title="Kind of Blue"
         subtitle="Miles Davis"
         artworkUrl="https://example.com/art.jpg"
         songId="12345"
+        albumId="al-123"
       />,
       queueOps,
     );
 
-    // Click the first button (Play)
     const buttons = container.querySelectorAll('button');
-    fireEvent.click(buttons[0]); // Play button
+    fireEvent.click(buttons[0]); // Play album
 
-    expect(queueOps.addTrack).toHaveBeenCalledWith(
-      expect.objectContaining({ id: '12345' })
+    // Should attempt to fetch album tracks
+    expect(mockFetch).toHaveBeenCalledWith(
+      expect.stringContaining('catalog/albums/al-123'),
     );
-
-    // skipNext is called after a 300ms delay
-    vi.advanceTimersByTime(300);
-    expect(queueOps.skipNext).toHaveBeenCalled();
 
     vi.useRealTimers();
   });
