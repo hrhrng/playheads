@@ -316,7 +316,7 @@ export const ChatInterface = ({
                   </button>
                 </div>
               )}
-              {isAppleMusicAuthorized && (
+              {isAppleMusicAuthorized && (playbackTime?.total || 0) > 0 && (
                 <div className={`max-w-sm mx-auto px-2 mt-4 flex items-center gap-2 transition-opacity duration-200 ${showHistory || !currentTrack ? 'opacity-0 pointer-events-none' : ''}`}>
                   <span className="text-xs font-mono text-gray-400 tabular-nums shrink-0">
                     {formatTime(seekDisplayValue)}
