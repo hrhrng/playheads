@@ -130,6 +130,7 @@ export function HomeRoute({
         onSkipPrev={skipPrev}
         queue={queue.queue}
         hasHistory={queue.history.length > 0}
+        onFinishQueue={() => queue.finishQueue()}
         playTrackById={playTrackById}
       />
     </AppLayout>
@@ -243,6 +244,7 @@ export function ChatRoute({
         onSkipPrev={skipPrev}
         queue={queue.queue}
         hasHistory={queue.history.length > 0}
+        onFinishQueue={() => queue.finishQueue()}
         playTrackById={playTrackById}
       />
     </AppLayout>

@@ -60,6 +60,7 @@ interface ChatInterfaceProps {
   playTrackById?: (trackId: string) => Promise<void>;
   /** Whether there are previously played tracks (enables swipe-up) */
   hasHistory?: boolean;
+  onFinishQueue?: () => Promise<void>;
 }
 
 /**
@@ -92,6 +93,7 @@ export const ChatInterface = ({
   queue: queueTracks = [],
   playTrackById,
   hasHistory = false,
+  onFinishQueue,
 }: ChatInterfaceProps) => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -147,12 +149,14 @@ export const ChatInterface = ({
   onSkipPrevRef.current = onSkipPrev;
   const showHistoryRef = useRef(showHistory);
   showHistoryRef.current = showHistory;
+  const nextTrack = queueTracks[1] || null;
+
   const hasHistoryRef = useRef(hasHistory);
   hasHistoryRef.current = hasHistory;
   const nextTrackRef = useRef(nextTrack);
   nextTrackRef.current = nextTrack;
-
-  const nextTrack = queueTracks[1] || null;
+  const onFinishQueueRef = useRef(onFinishQueue);
+  onFinishQueueRef.current = onFinishQueue;
 
   // Scroll to first card (current) on mount
   useEffect(() => {
@@ -200,12 +204,9 @@ export const ChatInterface = ({
               }
             }, 400);
           } else {
-            // No next track → skip to advance position (moves current to history), then stop
-            onSkipNextRef.current?.();
-            // skipNext at end of queue may not change track — force stop after delay
-            setTimeout(() => {
-              pendingResetRef.current = false;
-            }, 500);
+            // No next track → stop playback and clear queue
+            onFinishQueueRef.current?.();
+            pendingResetRef.current = false;
           }
         }
       }, 80);

@@ -26,6 +26,7 @@ export interface UsePlayQueueReturn {
   playAtIndex(index: number): Promise<void>;
   playFromHistory(historyIndex: number): Promise<void>;
   skipNext(): Promise<void>;
+  finishQueue(): Promise<void>;
   skipPrev(): Promise<void>;
   setQueue(tracks: UnifiedTrack[]): void;
   clear(): void;
@@ -174,6 +175,16 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
     await p.skipToNext();
   }, []);
 
+  /** End playback and clear the queue. Current track moves to history naturally. */
+  const finishQueue = useCallback(async () => {
+    const p = providerRef.current;
+    if (!p) return;
+    try { (p as any).musicKit?.stop(); } catch { /* ignore */ }
+    // Clear queue so currentTrack becomes null
+    try { await (p as any).musicKit?.setQueue({ songs: [], startPlaying: false }); } catch { /* ignore */ }
+    bump();
+  }, [bump]);
+
   const skipPrev = useCallback(async () => {
     const p = providerRef.current;
     if (!p) return;
@@ -214,6 +225,7 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
     playAtIndex,
     playFromHistory,
     skipNext,
+    finishQueue,
     skipPrev,
     setQueue: setQueueFn,
     clear,
