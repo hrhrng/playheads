@@ -4,7 +4,7 @@
  * Components use useGenUIActions() context for play/queue — no emit wiring needed.
  */
 import type { ComponentRenderProps } from "@json-render/react";
-import type { ReactNode } from "react";
+import { useState, Children, type ReactNode } from 'react';
 import { AlbumCard } from "../components/genui/AlbumCard";
 import { AlbumDetail } from "../components/genui/AlbumDetail";
 import { TrackCard } from "../components/genui/TrackCard";
@@ -21,15 +21,34 @@ function p<T>(ctx: ComponentRenderProps<T>): T {
 export const registry: Record<string, (ctx: ComponentRenderProps<any>) => ReactNode> = {
   Section: (ctx: ComponentRenderProps<{ title?: string; subtitle?: string }>) => {
     const props = p(ctx);
+    const [collapsed, setCollapsed] = useState(false);
+    const childCount = Children.count(ctx.children);
+    const hasTitle = !!(props.title || props.subtitle);
+
     return (
       <div className="space-y-3 animate-genui-slide-in">
-        {(props.title || props.subtitle) && (
-          <div>
-            {props.title && <h3 className="text-sm font-semibold text-gray-900">{props.title}</h3>}
-            {props.subtitle && <p className="text-[11px] text-gray-500 mt-0.5">{props.subtitle}</p>}
+        {hasTitle && (
+          <div
+            className="flex items-center justify-between cursor-pointer group"
+            onClick={() => setCollapsed(!collapsed)}
+          >
+            <div className="flex-1 min-w-0">
+              {props.title && <h3 className="text-sm font-semibold text-gray-900">{props.title}</h3>}
+              {props.subtitle && <p className="text-[11px] text-gray-500 mt-0.5">{props.subtitle}</p>}
+              {collapsed && childCount > 0 && (
+                <p className="text-[10px] text-gray-400 mt-1">{childCount} items</p>
+              )}
+            </div>
+            <svg className={`w-4 h-4 text-gray-400 shrink-0 transition-transform duration-200 ${collapsed ? '' : 'rotate-180'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
           </div>
         )}
-        <div className="space-y-0">{ctx.children}</div>
+        <div className={`grid transition-[grid-template-rows] duration-300 ease-out ${collapsed ? 'grid-rows-[0fr]' : 'grid-rows-[1fr]'}`}>
+          <div className="overflow-hidden">
+            <div className="space-y-0">{ctx.children}</div>
+          </div>
+        </div>
       </div>
     );
   },
