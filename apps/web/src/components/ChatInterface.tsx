@@ -148,15 +148,14 @@ export const ChatInterface = ({
 
   const nextTrack = queueTracks[1] || null;
 
-  // Scroll to middle card (current) on mount
+  // Scroll to first card (current) on mount
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    // Use rAF to ensure layout is computed
     requestAnimationFrame(() => {
-      el.scrollTo({ top: el.clientHeight, behavior: 'instant' as ScrollBehavior });
+      el.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
     });
-  }, [sessionId]); // re-center when session changes
+  }, [sessionId]);
 
   // Detect scroll settle → fire skip if landed on prev/next card
   useEffect(() => {
@@ -168,24 +167,16 @@ export const ChatInterface = ({
       clearTimeout(scrollTimerRef.current);
       scrollTimerRef.current = window.setTimeout(() => {
         const page = Math.round(el.scrollTop / el.clientHeight);
-        if (page === 0 && !pendingResetRef.current) {
-          pendingResetRef.current = true;
-          onSkipPrevRef.current?.();
-          // Quick bounce-back if no prev track (300ms vs 1.5s)
-          setTimeout(() => {
-            if (pendingResetRef.current) {
-              isResettingRef.current = true;
-              el.scrollTo({ top: el.clientHeight, behavior: 'smooth' });
-              requestAnimationFrame(() => { isResettingRef.current = false; pendingResetRef.current = false; });
-            }
-          }, 400);
-        } else if (page >= 2 && !pendingResetRef.current) {
+        // Current track = page 0, Next track = page 1
+        // No prev card — can't swipe up past page 0
+        if (page >= 1 && !pendingResetRef.current) {
           pendingResetRef.current = true;
           onSkipNextRef.current?.();
+          // Scroll back to current card; track change will re-render
           setTimeout(() => {
             if (pendingResetRef.current) {
               isResettingRef.current = true;
-              el.scrollTo({ top: el.clientHeight, behavior: 'smooth' });
+              el.scrollTo({ top: 0, behavior: 'smooth' });
               requestAnimationFrame(() => { isResettingRef.current = false; pendingResetRef.current = false; });
             }
           }, 400);
@@ -208,7 +199,7 @@ export const ChatInterface = ({
         const el = scrollRef.current;
         if (el) {
           isResettingRef.current = true;
-          el.scrollTo({ top: el.clientHeight, behavior: 'instant' as ScrollBehavior });
+          el.scrollTo({ top: 0, behavior: 'instant' as ScrollBehavior });
           requestAnimationFrame(() => {
             isResettingRef.current = false;
             pendingResetRef.current = false;
@@ -229,9 +220,6 @@ export const ChatInterface = ({
       if (e.key === 'ArrowDown') {
         e.preventDefault();
         el.scrollBy({ top: el.clientHeight, behavior: 'smooth' });
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        el.scrollBy({ top: -el.clientHeight, behavior: 'smooth' });
       }
     };
     document.addEventListener('keydown', onKeyDown);
@@ -284,10 +272,7 @@ export const ChatInterface = ({
           }`}
           style={{ overscrollBehaviorY: 'contain' }}
         >
-          {/* Previous card placeholder — enables swipe-down for prev track */}
-          <div className="h-full shrink-0 snap-start snap-always" />
-
-          {/* Current track card */}
+          {/* Current track card (first card — no prev, can't swipe up) */}
           <div className="h-full shrink-0 snap-start snap-always flex flex-col items-center justify-center pb-20">
             <div className="relative z-10 w-full max-w-xl px-6">
               <RecordPlayer
