@@ -423,7 +423,7 @@ export class AppleMusicProvider implements MusicProvider {
     return this.mutationChain;
   }
 
-  /** Batch add multiple songs in a single MusicKit playLater call. */
+  /** Batch add multiple songs to the END of the queue (playLater). */
   async addManyToNativeQueue(songIds: string[]): Promise<void> {
     if (songIds.length === 0) return;
     this.mutationChain = this.mutationChain.then(async () => {
@@ -432,6 +432,22 @@ export class AppleMusicProvider implements MusicProvider {
         await (this.musicKit as any).playLater({ songs: songIds });
       } catch (e) {
         console.error('[AppleMusicProvider] addManyToNativeQueue error:', e);
+        const classified = classifyError(e);
+        if (classified.category === ErrorCategory.AUTH_EXPIRED) this.handleAuthLost();
+      }
+    });
+    return this.mutationChain;
+  }
+
+  /** Batch insert songs right after current track (playNext = head of queue). */
+  async insertNextInQueue(songIds: string[]): Promise<void> {
+    if (songIds.length === 0) return;
+    this.mutationChain = this.mutationChain.then(async () => {
+      if (!this.musicKit) return;
+      try {
+        await (this.musicKit as any).playNext({ songs: songIds });
+      } catch (e) {
+        console.error('[AppleMusicProvider] insertNextInQueue error:', e);
         const classified = classifyError(e);
         if (classified.category === ErrorCategory.AUTH_EXPIRED) this.handleAuthLost();
       }

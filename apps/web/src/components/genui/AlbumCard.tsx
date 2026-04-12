@@ -192,11 +192,8 @@ export function AlbumCard({
           artworkUrl: artworkUrl || '', durationSeconds: (attrs.durationInMillis || 0) / 1000, provider: 'apple-music' as const,
         };
       });
-      actions.addTracks(tracks);
-      // Play first track
-      if (playById) {
-        setTimeout(() => playById(albumTracks[0].id).catch(console.error), 200);
-      }
+      // Insert at head of queue and start playing
+      await actions.playTracks(tracks);
     } catch (err) {
       console.error('[GenUI] play album failed:', err);
     }

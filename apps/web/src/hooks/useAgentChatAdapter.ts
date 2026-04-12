@@ -31,6 +31,8 @@ export interface MusicActions {
 export interface QueueOperations {
   addTrack: (track: UnifiedTrack) => void;
   addTracks: (tracks: UnifiedTrack[]) => void;
+  /** Insert tracks at head of queue and start playing the first one. */
+  playTracks: (tracks: UnifiedTrack[]) => Promise<void>;
   removeTrack: (index: number) => void;
   playAtIndex: (index: number) => Promise<void>;
   skipNext: () => Promise<void>;

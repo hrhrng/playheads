@@ -20,6 +20,8 @@ export interface UsePlayQueueReturn {
   history: UnifiedTrack[];
   addTrack(track: UnifiedTrack): void;
   addTracks(tracks: UnifiedTrack[]): void;
+  /** Insert tracks at head of queue and start playing the first one. */
+  playTracks(tracks: UnifiedTrack[]): Promise<void>;
   removeTrack(index: number): void;
   playAtIndex(index: number): Promise<void>;
   playFromHistory(historyIndex: number): Promise<void>;
@@ -128,6 +130,16 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
     p.addManyToNativeQueue(tracks.map(t => t.id)).catch(console.error);
   }, []);
 
+  /** Insert tracks at head of queue (playNext) and skip to the first one. */
+  const playTracks = useCallback(async (tracks: UnifiedTrack[]) => {
+    const p = providerRef.current;
+    if (!p || tracks.length === 0) return;
+    for (const t of tracks) p.cacheTrackMetadata(t);
+    p.setDisplayTrack(tracks[0]);
+    await p.insertNextInQueue(tracks.map(t => t.id));
+    await p.skipToNext();
+  }, []);
+
   const removeTrack = useCallback((index: number) => {
     const p = providerRef.current;
     if (!p) return;
@@ -197,6 +209,7 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
     history,
     addTrack,
     addTracks,
+    playTracks,
     removeTrack,
     playAtIndex,
     playFromHistory,
