@@ -30,6 +30,7 @@ export interface MusicActions {
  */
 export interface QueueOperations {
   addTrack: (track: UnifiedTrack) => void;
+  addTracks: (tracks: UnifiedTrack[]) => void;
   removeTrack: (index: number) => void;
   playAtIndex: (index: number) => Promise<void>;
   skipNext: () => Promise<void>;

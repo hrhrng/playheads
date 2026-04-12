@@ -19,6 +19,7 @@ export interface UsePlayQueueReturn {
   /** Previously played tracks */
   history: UnifiedTrack[];
   addTrack(track: UnifiedTrack): void;
+  addTracks(tracks: UnifiedTrack[]): void;
   removeTrack(index: number): void;
   playAtIndex(index: number): Promise<void>;
   playFromHistory(historyIndex: number): Promise<void>;
@@ -116,6 +117,17 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
     p.addToNativeQueue(track.id).catch(console.error);
   }, []);
 
+  /** Batch add multiple tracks in a single MusicKit API call. */
+  const addTracks = useCallback((tracks: UnifiedTrack[]) => {
+    const p = providerRef.current;
+    if (!p || tracks.length === 0) return;
+    for (const t of tracks) p.cacheTrackMetadata(t);
+    if (!p.playbackState.currentTrack) {
+      p.setDisplayTrack(tracks[0]);
+    }
+    p.addManyToNativeQueue(tracks.map(t => t.id)).catch(console.error);
+  }, []);
+
   const removeTrack = useCallback((index: number) => {
     const p = providerRef.current;
     if (!p) return;
@@ -184,6 +196,7 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
     queue,
     history,
     addTrack,
+    addTracks,
     removeTrack,
     playAtIndex,
     playFromHistory,

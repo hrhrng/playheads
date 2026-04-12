@@ -16,6 +16,7 @@ function createMockQueueOps(): QueueOperations {
     removeTrack: vi.fn(),
     playAtIndex: vi.fn().mockResolvedValue(undefined),
     skipNext: vi.fn().mockResolvedValue(undefined),
+    addTracks: vi.fn(),
   };
 }
 

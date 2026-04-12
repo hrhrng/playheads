@@ -423,6 +423,22 @@ export class AppleMusicProvider implements MusicProvider {
     return this.mutationChain;
   }
 
+  /** Batch add multiple songs in a single MusicKit playLater call. */
+  async addManyToNativeQueue(songIds: string[]): Promise<void> {
+    if (songIds.length === 0) return;
+    this.mutationChain = this.mutationChain.then(async () => {
+      if (!this.musicKit) return;
+      try {
+        await (this.musicKit as any).playLater({ songs: songIds });
+      } catch (e) {
+        console.error('[AppleMusicProvider] addManyToNativeQueue error:', e);
+        const classified = classifyError(e);
+        if (classified.category === ErrorCategory.AUTH_EXPIRED) this.handleAuthLost();
+      }
+    });
+    return this.mutationChain;
+  }
+
   /** Read MusicKit's native queue from current position onward. */
   getNativeQueue(): UnifiedTrack[] {
     if (!this.musicKit) return [];

@@ -184,19 +184,18 @@ export function AlbumCard({
       const data = await res.json();
       const albumTracks = data?.data?.[0]?.relationships?.tracks?.data || [];
       if (albumTracks.length === 0) return;
-      // Add all tracks to queue
-      for (const t of albumTracks) {
+      // Batch add all tracks in one MusicKit call
+      const tracks = albumTracks.map((t: any) => {
         const attrs = t.attributes || {};
-        actions.addTrack({
+        return {
           id: t.id, name: attrs.name || 'Unknown', artist: attrs.artistName || subtitle, album: title,
-          artworkUrl: artworkUrl || '', durationSeconds: (attrs.durationInMillis || 0) / 1000, provider: 'apple-music',
-        });
-      }
+          artworkUrl: artworkUrl || '', durationSeconds: (attrs.durationInMillis || 0) / 1000, provider: 'apple-music' as const,
+        };
+      });
+      actions.addTracks(tracks);
       // Play first track
       if (playById) {
-        playById(albumTracks[0].id).catch(console.error);
-      } else {
-        setTimeout(() => actions.skipNext().catch(console.error), PLAY_AFTER_QUEUE_DELAY_MS);
+        setTimeout(() => playById(albumTracks[0].id).catch(console.error), 200);
       }
     } catch (err) {
       console.error('[GenUI] play album failed:', err);
@@ -212,13 +211,15 @@ export function AlbumCard({
       if (!res.ok) return;
       const data = await res.json();
       const albumTracks = data?.data?.[0]?.relationships?.tracks?.data || [];
-      for (const t of albumTracks) {
+      if (albumTracks.length === 0) return;
+      const tracks = albumTracks.map((t: any) => {
         const attrs = t.attributes || {};
-        actions.addTrack({
+        return {
           id: t.id, name: attrs.name || 'Unknown', artist: attrs.artistName || subtitle, album: title,
-          artworkUrl: artworkUrl || '', durationSeconds: (attrs.durationInMillis || 0) / 1000, provider: 'apple-music',
-        });
-      }
+          artworkUrl: artworkUrl || '', durationSeconds: (attrs.durationInMillis || 0) / 1000, provider: 'apple-music' as const,
+        };
+      });
+      actions.addTracks(tracks);
     } catch (err) {
       console.error('[GenUI] queue album failed:', err);
     }
