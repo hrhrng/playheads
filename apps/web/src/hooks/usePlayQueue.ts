@@ -175,13 +175,19 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
     await p.skipToNext();
   }, []);
 
-  /** End playback and clear the queue. Current track moves to history naturally. */
+  /** End playback: stop + advance position so current track joins history. */
   const finishQueue = useCallback(async () => {
     const p = providerRef.current;
     if (!p) return;
-    try { (p as any).musicKit?.stop(); } catch { /* ignore */ }
-    // Clear queue so currentTrack becomes null
-    try { await (p as any).musicKit?.setQueue({ songs: [], startPlaying: false }); } catch { /* ignore */ }
+    try {
+      const mk = (p as any).musicKit;
+      if (!mk) return;
+      // Try skipToNextItem first — on last track this stops playback
+      // and advances position (current track becomes part of history)
+      await mk.skipToNextItem();
+      // If still playing (shouldn't be), force stop
+      if (mk.playbackState === 2) await mk.stop();
+    } catch { /* ignore */ }
     bump();
   }, [bump]);
 
