@@ -163,16 +163,64 @@ export function AlbumCard({
     e.stopPropagation();
     const id = tid || songId;
     if (!id) return;
-    // Use provider's play(trackId) for proper initialization
     if (playById) {
       playById(id).catch(console.error);
     } else if (actions) {
-      // Fallback: add + skipNext
       actions.addTrack({
         id, name: title, artist: subtitle, album: title,
         artworkUrl: artworkUrl || '', durationSeconds: 0, provider: 'apple-music',
       });
       setTimeout(() => actions.skipNext().catch(console.error), PLAY_AFTER_QUEUE_DELAY_MS);
+    }
+  };
+
+  /** Play entire album: fetch all tracks → play first + add rest to queue */
+  const handlePlayAlbum = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!albumId || !actions) return;
+    try {
+      const res = await fetch(`${API_BASE}/apple-music/catalog/albums/${albumId}?storefront=${sf}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const albumTracks = data?.data?.[0]?.relationships?.tracks?.data || [];
+      if (albumTracks.length === 0) return;
+      // Add all tracks to queue
+      for (const t of albumTracks) {
+        const attrs = t.attributes || {};
+        actions.addTrack({
+          id: t.id, name: attrs.name || 'Unknown', artist: attrs.artistName || subtitle, album: title,
+          artworkUrl: artworkUrl || '', durationSeconds: (attrs.durationInMillis || 0) / 1000, provider: 'apple-music',
+        });
+      }
+      // Play first track
+      if (playById) {
+        playById(albumTracks[0].id).catch(console.error);
+      } else {
+        setTimeout(() => actions.skipNext().catch(console.error), PLAY_AFTER_QUEUE_DELAY_MS);
+      }
+    } catch (err) {
+      console.error('[GenUI] play album failed:', err);
+    }
+  };
+
+  /** Add entire album to queue */
+  const handleQueueAlbum = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!albumId || !actions) return;
+    try {
+      const res = await fetch(`${API_BASE}/apple-music/catalog/albums/${albumId}?storefront=${sf}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const albumTracks = data?.data?.[0]?.relationships?.tracks?.data || [];
+      for (const t of albumTracks) {
+        const attrs = t.attributes || {};
+        actions.addTrack({
+          id: t.id, name: attrs.name || 'Unknown', artist: attrs.artistName || subtitle, album: title,
+          artworkUrl: artworkUrl || '', durationSeconds: (attrs.durationInMillis || 0) / 1000, provider: 'apple-music',
+        });
+      }
+    } catch (err) {
+      console.error('[GenUI] queue album failed:', err);
     }
   };
 
@@ -223,11 +271,14 @@ export function AlbumCard({
               </svg>
             </div>
           )}
-          {/* Play overlay — only when collapsed */}
-          {canPlay && !expanded && (
-            <div className={`absolute inset-0 bg-black/30 backdrop-blur-[2px] flex items-center justify-center transition-opacity duration-200 ${hovering ? 'opacity-100' : 'opacity-0'}`}>
-              <button onClick={(e) => handlePlay(e)} className="w-9 h-9 rounded-full bg-white text-gray-900 flex items-center justify-center hover:scale-110 transition-transform shadow-md" title="Play">
+          {/* Hover overlay — play album + add to queue */}
+          {(canPlay || albumId) && !expanded && (
+            <div className={`absolute inset-0 bg-black/30 backdrop-blur-[2px] flex items-center justify-center gap-2 transition-opacity duration-200 ${hovering ? 'opacity-100' : 'opacity-0'}`}>
+              <button onClick={handlePlayAlbum} className="w-9 h-9 rounded-full bg-white text-gray-900 flex items-center justify-center hover:scale-110 transition-transform shadow-md" title="Play album">
                 <svg className="w-4 h-4 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+              </button>
+              <button onClick={handleQueueAlbum} className="w-8 h-8 rounded-full bg-white/80 text-gray-700 flex items-center justify-center hover:scale-110 transition-transform shadow-md" title="Add album to queue">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
               </button>
             </div>
           )}
