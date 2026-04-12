@@ -317,7 +317,7 @@ export const ChatInterface = ({
               </div>
             )}
             {isAppleMusicAuthorized && (
-              <div className={`w-full max-w-sm mx-auto px-8 mt-4 flex items-center gap-2 transition-opacity duration-200 ${showHistory || !currentTrack ? 'opacity-0 pointer-events-none' : ''}`}>
+              <div className={`px-8 mt-4 flex items-center gap-2 self-center transition-opacity duration-200 ${showHistory || !currentTrack ? 'opacity-0 pointer-events-none' : ''}`} style={{ width: '100%', maxWidth: 384 }}>
                 <span className="text-xs font-mono text-gray-400 tabular-nums shrink-0">
                   {formatTime(seekDisplayValue)}
                 </span>
