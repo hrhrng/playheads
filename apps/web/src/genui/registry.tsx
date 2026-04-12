@@ -41,14 +41,14 @@ export const registry: Record<string, (ctx: ComponentRenderProps<any>) => ReactN
                 <p className="text-[10px] text-gray-400 mt-1">{props.collapsedHint}</p>
               )}
             </div>
-            <svg className={`w-4 h-4 text-gray-400 shrink-0 transition-transform duration-200 ${collapsed ? '' : 'rotate-180'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+            <svg className={`w-4 h-4 text-gray-400 shrink-0 transition-transform duration-200 ${collapsed ? '-rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
               <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
             </svg>
           </div>
         )}
         <div className={`grid transition-[grid-template-rows] duration-300 ease-out ${collapsed ? 'grid-rows-[0fr]' : 'grid-rows-[1fr]'}`}>
           <div className="overflow-hidden">
-            <div className="space-y-0">{ctx.children}</div>
+            <div className="space-y-1">{ctx.children}</div>
           </div>
         </div>
       </div>
