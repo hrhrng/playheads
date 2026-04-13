@@ -51,43 +51,41 @@ export const musicCatalog = defineCatalog(schema, {
     },
     AlbumCard: {
       description:
-        "Album cover card. IMPORTANT: Before using AlbumCard in a yaml-spec, you MUST call search_music " +
-        "to find the real track. Then fill trackId with the Apple Music song ID from search results, " +
-        "and set title/subtitle from the actual search result. " +
-        "If trackId is provided, artwork is fetched automatically from Apple Music. " +
-        "Only use 'query' as a fallback if you cannot call search_music first.",
+        "Album cover card. REQUIRES trackId — you MUST call search_music BEFORE using this component " +
+        "to obtain a real Apple Music song ID. Do NOT use this component without first searching. " +
+        "Artwork is fetched automatically from the trackId.",
       props: z.object({
         title: z.string().describe("Album title (from search_music results)"),
         subtitle: z.string().describe("Artist name (from search_music results)"),
-        trackId: z.string().nullable().describe("Apple Music song ID from search_music results, e.g. '965771855'"),
+        trackId: z.string().describe("REQUIRED. Apple Music song ID obtained from search_music results, e.g. '965771855'. Must call search_music first."),
         year: z.string().nullable(),
-        query: z.string().nullable().describe("Fallback: Apple Music search query if trackId unavailable"),
+        query: z.string().nullable().describe("Ignored when trackId is present. Do not omit trackId."),
       }),
       example: { title: "天空", subtitle: "王菲", trackId: "965771855", year: "1994", query: null },
     },
     AlbumDetail: {
       description:
         "Album with expandable tracklist. Same as AlbumCard but shows track list on tap. " +
-        "Use search_music first to get a real trackId.",
+        "REQUIRES trackId — you MUST call search_music BEFORE using this component.",
       props: z.object({
         title: z.string().describe("Album title"),
         subtitle: z.string().describe("Artist name"),
-        trackId: z.string().nullable().describe("Apple Music song ID from search_music"),
+        trackId: z.string().describe("REQUIRED. Apple Music song ID obtained from search_music. Must call search_music first."),
         year: z.string().nullable(),
-        query: z.string().nullable().describe("Fallback search query"),
+        query: z.string().nullable().describe("Ignored when trackId is present. Do not omit trackId."),
       }),
       example: { title: "天空", subtitle: "王菲", trackId: "965771855", year: "1994", query: null },
     },
     TrackCard: {
       description:
-        "Compact track row. Use search_music first to get the real track ID. " +
-        "Fill trackId with the Apple Music song ID.",
+        "Compact track row. REQUIRES trackId — you MUST call search_music BEFORE using this component " +
+        "to obtain a real Apple Music song ID.",
       props: z.object({
         title: z.string(),
         artist: z.string(),
         album: z.string().nullable(),
-        trackId: z.string().nullable().describe("Apple Music song ID from search_music"),
-        query: z.string().nullable().describe("Fallback search query"),
+        trackId: z.string().describe("REQUIRED. Apple Music song ID obtained from search_music. Must call search_music first."),
+        query: z.string().nullable().describe("Ignored when trackId is present. Do not omit trackId."),
       }),
     },
     TextBlock: {
@@ -114,15 +112,15 @@ export const musicCatalog = defineCatalog(schema, {
     LyricsCard: {
       description:
         "Beautiful lyric quote card with album art background — ideal for sharing. " +
-        "Use search_music first to get a real trackId. " +
+        "REQUIRES trackId — you MUST call search_music BEFORE using this component. " +
         "IMPORTANT: Only pick 2-4 most iconic lines from the song. Do NOT paste the full lyrics. " +
         "Do NOT include translations. Keep the original language only.",
       props: z.object({
         lines: z.array(z.string()).describe("2-4 iconic lyric lines as an array. Each element is one line. Original language only."),
         trackName: z.string().describe("Song name"),
         artist: z.string().describe("Artist name"),
-        trackId: z.string().nullable().describe("Apple Music song ID from search_music"),
-        query: z.string().nullable().describe("Fallback search query"),
+        trackId: z.string().describe("REQUIRED. Apple Music song ID obtained from search_music. Must call search_music first."),
+        query: z.string().nullable().describe("Ignored when trackId is present. Do not omit trackId."),
       }),
       example: { lines: ["等到风景都看透", "也许你会陪我看细水长流"], trackName: "红豆", artist: "王菲", trackId: "965771855", query: null },
     },
