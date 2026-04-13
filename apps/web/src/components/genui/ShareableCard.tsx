@@ -1,6 +1,6 @@
 /**
  * ShareableCard — wraps GenUI content with a capture region and save button.
- * Generates a shareable PNG via html2canvas.
+ * Uses modern-screenshot for pixel-perfect capture.
  */
 import { useRef, useState, useCallback, type ReactNode } from 'react';
 
@@ -18,34 +18,24 @@ export function ShareableCard({ children }: ShareableCardProps) {
 
     setIsExporting(true);
     try {
-      const { default: html2canvas } = await import('html2canvas');
+      const { domToPng } = await import('modern-screenshot');
 
-      // Prefer data-capture element inside the card (e.g. LyricsCard),
-      // otherwise capture the whole card
       const target = el.querySelector('[data-capture]') as HTMLElement || el;
-
       el.classList.add('genui-export-mode');
 
-      const canvas = await html2canvas(target, {
-        useCORS: true,
+      const dataUrl = await domToPng(target, {
         scale: 2,
-        backgroundColor: null,
-        logging: false,
+        fetch: { requestInit: { mode: 'cors' } },
       });
 
       el.classList.remove('genui-export-mode');
 
-      canvas.toBlob((blob) => {
-        if (!blob) return;
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `playheads-${Date.now()}.png`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      }, 'image/png');
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = `playheads-${Date.now()}.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
     } catch (e) {
       console.error('[GenUI] Screenshot failed:', e);
     } finally {
@@ -56,12 +46,10 @@ export function ShareableCard({ children }: ShareableCardProps) {
   return (
     <div className="w-full max-w-[calc(100vw-48px)] animate-genui-slide-in">
       <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm">
-        {/* Capture region */}
         <div ref={captureRef} className="bg-white">
           <div className="p-4">
             {children}
           </div>
-          {/* Branding footer (included in screenshot) */}
           <div className="px-4 pb-3 pt-1 flex items-center justify-between border-t border-gray-100">
             <span className="text-[10px] text-gray-300 uppercase tracking-widest font-semibold">
               Playheads
@@ -69,7 +57,6 @@ export function ShareableCard({ children }: ShareableCardProps) {
           </div>
         </div>
       </div>
-      {/* Save button (outside capture region) */}
       <div className="flex justify-end mt-2 pr-1">
         <button
           onClick={handleSave}
