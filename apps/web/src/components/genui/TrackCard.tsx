@@ -66,7 +66,7 @@ export function TrackCard({
       } catch (e) { if ((e as Error).name !== 'AbortError') console.warn('[GenUI] track enrichment failed:', e); }
     })();
     return () => { controller.abort(); };
-  }, [query, enriched.artworkUrl]);
+  }, [trackId, query, enriched.artworkUrl, sf]);
 
   const { artworkUrl, songId } = enriched;
   const canPlay = !!songId && !!actions;
