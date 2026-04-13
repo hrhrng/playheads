@@ -74,9 +74,9 @@ export const registry: Record<string, (ctx: ComponentRenderProps<any>) => ReactN
     return <AlbumDetail title={props.title} subtitle={props.subtitle} query={props.query ?? undefined} year={props.year ?? undefined} />;
   },
 
-  TrackCard: (ctx: ComponentRenderProps<{ title: string; artist: string; album?: string; query?: string }>) => {
+  TrackCard: (ctx: ComponentRenderProps<{ title: string; artist: string; album?: string; trackId?: string; query?: string }>) => {
     const props = p(ctx);
-    return <TrackCard title={props.title} artist={props.artist} album={props.album ?? undefined} query={props.query ?? undefined} />;
+    return <TrackCard title={props.title} artist={props.artist} album={props.album ?? undefined} trackId={props.trackId ?? undefined} query={props.query ?? undefined} />;
   },
 
   TextBlock: (ctx: ComponentRenderProps<{ content: string; style?: string }>) => {
