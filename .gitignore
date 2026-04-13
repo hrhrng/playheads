@@ -20,7 +20,6 @@ __pycache__/
 dist/
 build/
 coverage/
-package-lock.json
 
 # Swift
 .build/
