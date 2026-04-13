@@ -126,45 +126,50 @@ export function useMusicProvider({
   const finishRestore = (queueHook as any).finishRestore as () => void;
 
   // ── Queue restore from localStorage (no autoplay) ──────────────
-  const initialRestoreDone = useRef(false);
+  const restoreStarted = useRef(false);   // re-entry guard
+  const initialRestoreDone = useRef(false); // persist gate — true only after async restore finishes
   const QUEUE_STORAGE_KEY = 'playheads_queue';
   const QUEUE_POS_KEY = 'playheads_queue_position';
   const PLAYBACK_POS_KEY = 'playheads_playback_pos';
 
   useEffect(() => {
-    if (!provider || isInitializing || initialRestoreDone.current) return;
-    initialRestoreDone.current = true;
+    if (!provider || isInitializing || restoreStarted.current) return;
+    restoreStarted.current = true;
 
-    try {
-      const raw = localStorage.getItem(QUEUE_STORAGE_KEY);
-      if (raw) {
-        const tracks = JSON.parse(raw);
-        if (Array.isArray(tracks) && tracks.length > 0) {
-          // Restore saved position (default 0)
-          let savedQueuePos = 0;
-          try {
-            savedQueuePos = parseInt(localStorage.getItem(QUEUE_POS_KEY) || '0', 10) || 0;
-          } catch { /* ignore */ }
-          savedQueuePos = Math.max(0, Math.min(savedQueuePos, tracks.length - 1));
+    (async () => {
+      try {
+        const raw = localStorage.getItem(QUEUE_STORAGE_KEY);
+        if (raw) {
+          const tracks = JSON.parse(raw);
+          if (Array.isArray(tracks) && tracks.length > 0) {
+            // Restore saved position (default 0)
+            let savedQueuePos = 0;
+            try {
+              savedQueuePos = parseInt(localStorage.getItem(QUEUE_POS_KEY) || '0', 10) || 0;
+            } catch { /* ignore */ }
+            savedQueuePos = Math.max(0, Math.min(savedQueuePos, tracks.length - 1));
 
-          console.log('[useMusicProvider] restore:', tracks.length, 'tracks, pos=', savedQueuePos);
-          // Cache metadata so MusicKit items display correctly
-          queueHook.setQueue(tracks);
+            console.log('[useMusicProvider] restore:', tracks.length, 'tracks, pos=', savedQueuePos);
+            // Cache metadata so MusicKit items display correctly
+            queueHook.setQueue(tracks);
 
-          // Restore playback time for display (visual only — no seek)
-          let savedPos = 0;
-          try {
-            savedPos = parseFloat(localStorage.getItem(PLAYBACK_POS_KEY) || '0') || 0;
-          } catch { /* ignore */ }
-          provider.setDisplayTrack(tracks[savedQueuePos], savedPos);
+            // Restore playback time for display (visual only — no seek)
+            let savedPos = 0;
+            try {
+              savedPos = parseFloat(localStorage.getItem(PLAYBACK_POS_KEY) || '0') || 0;
+            } catch { /* ignore */ }
+            provider.setDisplayTrack(tracks[savedQueuePos], savedPos);
 
-          // Prime MusicKit queue from saved position onward
-          const upcomingIds = tracks.slice(savedQueuePos).map((t: any) => t.id);
-          provider.setQueueWithoutPlaying(upcomingIds, savedPos);
+            // Prime MusicKit queue from saved position onward — await so
+            // persist effect doesn't see an empty MusicKit queue.
+            const upcomingIds = tracks.slice(savedQueuePos).map((t: any) => t.id);
+            await provider.setQueueWithoutPlaying(upcomingIds, savedPos);
+          }
         }
-      }
-    } catch { /* ignore corrupt localStorage */ }
-    finishRestore();
+      } catch { /* ignore corrupt localStorage */ }
+      initialRestoreDone.current = true;
+      finishRestore();
+    })();
   }, [provider, isInitializing]);
 
   // ── Persist queue + position to localStorage ──────────────────
