@@ -23,14 +23,13 @@ export function ShareableCard({ children }: ShareableCardProps) {
       // Prefer data-capture element inside the card (e.g. LyricsCard),
       // otherwise capture the whole card
       const target = el.querySelector('[data-capture]') as HTMLElement || el;
-      const bgColor = target.hasAttribute('data-capture') ? '#000000' : '#ffffff';
 
       el.classList.add('genui-export-mode');
 
       const canvas = await html2canvas(target, {
         useCORS: true,
         scale: 2,
-        backgroundColor: bgColor,
+        backgroundColor: null,
         logging: false,
       });
 
