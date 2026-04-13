@@ -41,6 +41,7 @@ interface RouteComponentProps {
   skipNext?: () => Promise<void>;
   skipPrev?: () => Promise<void>;
   queue: UsePlayQueueReturn;
+  playTrackById?: (trackId: string) => Promise<void>;
 }
 
 /**
@@ -71,6 +72,7 @@ export function HomeRoute({
   skipNext,
   skipPrev,
   queue,
+  playTrackById,
 }: RouteComponentProps) {
   const navigate = useNavigate();
 
@@ -127,6 +129,9 @@ export function HomeRoute({
         onSkipNext={skipNext}
         onSkipPrev={skipPrev}
         queue={queue.queue}
+        hasHistory={queue.history.length > 0}
+        onFinishQueue={() => queue.finishQueue()}
+        playTrackById={playTrackById}
       />
     </AppLayout>
   );
@@ -161,6 +166,7 @@ export function ChatRoute({
   skipNext,
   skipPrev,
   queue,
+  playTrackById,
 }: RouteComponentProps) {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -237,6 +243,9 @@ export function ChatRoute({
         onSkipNext={skipNext}
         onSkipPrev={skipPrev}
         queue={queue.queue}
+        hasHistory={queue.history.length > 0}
+        onFinishQueue={() => queue.finishQueue()}
+        playTrackById={playTrackById}
       />
     </AppLayout>
   );

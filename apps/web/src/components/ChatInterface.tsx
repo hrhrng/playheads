@@ -57,6 +57,10 @@ interface ChatInterfaceProps {
   onSkipPrev?: () => Promise<void>;
   /** Full queue — queue[0] is now playing, queue[1..] is up next */
   queue?: UnifiedTrack[];
+  playTrackById?: (trackId: string) => Promise<void>;
+  /** Whether there are previously played tracks (enables swipe-up) */
+  hasHistory?: boolean;
+  onFinishQueue?: () => Promise<void>;
 }
 
 /**
@@ -87,6 +91,9 @@ export const ChatInterface = ({
   onSkipNext,
   onSkipPrev,
   queue: queueTracks = [],
+  playTrackById,
+  hasHistory = false,
+  onFinishQueue,
 }: ChatInterfaceProps) => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -100,6 +107,7 @@ export const ChatInterface = ({
   // Use chat hook for state and methods
   const {
     messages,
+    rawMessages,
     input,
     isLoading,
     isLoadingHistory,
@@ -141,18 +149,25 @@ export const ChatInterface = ({
   onSkipPrevRef.current = onSkipPrev;
   const showHistoryRef = useRef(showHistory);
   showHistoryRef.current = showHistory;
-
   const nextTrack = queueTracks[1] || null;
 
-  // Scroll to middle card (current) on mount
+  const hasHistoryRef = useRef(hasHistory);
+  hasHistoryRef.current = hasHistory;
+  const nextTrackRef = useRef(nextTrack);
+  nextTrackRef.current = nextTrack;
+  const onFinishQueueRef = useRef(onFinishQueue);
+  onFinishQueueRef.current = onFinishQueue;
+
+  // Scroll to first card (current) on mount
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    // Use rAF to ensure layout is computed
     requestAnimationFrame(() => {
-      el.scrollTo({ top: el.clientHeight, behavior: 'instant' as ScrollBehavior });
+      el.scrollTo({ top: hasHistory ? el.clientHeight : 0, behavior: 'instant' as ScrollBehavior });
     });
-  }, [sessionId]); // re-center when session changes
+    // Only on mount/session change — NOT on hasHistory change (would yank user back mid-scroll)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId]);
 
   // Detect scroll settle → fire skip if landed on prev/next card
   useEffect(() => {
@@ -164,27 +179,32 @@ export const ChatInterface = ({
       clearTimeout(scrollTimerRef.current);
       scrollTimerRef.current = window.setTimeout(() => {
         const page = Math.round(el.scrollTop / el.clientHeight);
-        if (page === 0 && !pendingResetRef.current) {
+        const h = hasHistoryRef.current;
+        const currentPage = h ? 1 : 0;
+        const resetTop = h ? el.clientHeight : 0;
+
+        if (h && page === 0 && !pendingResetRef.current) {
+          // Swiped up → previous track
           pendingResetRef.current = true;
           onSkipPrevRef.current?.();
-          // Fallback: reset after 1.5s if track doesn't change
           setTimeout(() => {
             if (pendingResetRef.current) {
               isResettingRef.current = true;
-              el.scrollTo({ top: el.clientHeight, behavior: 'instant' as ScrollBehavior });
+              el.scrollTo({ top: resetTop, behavior: 'smooth' });
               requestAnimationFrame(() => { isResettingRef.current = false; pendingResetRef.current = false; });
             }
-          }, 1500);
-        } else if (page >= 2 && !pendingResetRef.current) {
+          }, 400);
+        } else if (page > currentPage && !pendingResetRef.current) {
+          // Swiped down → next track
           pendingResetRef.current = true;
           onSkipNextRef.current?.();
           setTimeout(() => {
             if (pendingResetRef.current) {
               isResettingRef.current = true;
-              el.scrollTo({ top: el.clientHeight, behavior: 'instant' as ScrollBehavior });
+              el.scrollTo({ top: resetTop, behavior: 'smooth' });
               requestAnimationFrame(() => { isResettingRef.current = false; pendingResetRef.current = false; });
             }
-          }, 1500);
+          }, 400);
         }
       }, 80);
     };
@@ -204,7 +224,7 @@ export const ChatInterface = ({
         const el = scrollRef.current;
         if (el) {
           isResettingRef.current = true;
-          el.scrollTo({ top: el.clientHeight, behavior: 'instant' as ScrollBehavior });
+          el.scrollTo({ top: hasHistoryRef.current ? el.clientHeight : 0, behavior: 'instant' as ScrollBehavior });
           requestAnimationFrame(() => {
             isResettingRef.current = false;
             pendingResetRef.current = false;
@@ -280,8 +300,8 @@ export const ChatInterface = ({
           }`}
           style={{ overscrollBehaviorY: 'contain' }}
         >
-          {/* Previous card placeholder — enables swipe-down for prev track */}
-          <div className="h-full shrink-0 snap-start snap-always" />
+          {/* Previous card — only when there's history */}
+          {hasHistory && <div className="h-full shrink-0 snap-start snap-always" />}
 
           {/* Current track card */}
           <div className="h-full shrink-0 snap-start snap-always flex flex-col items-center justify-center pb-20">
@@ -295,58 +315,59 @@ export const ChatInterface = ({
                 onLinkApple={onLinkApple}
               />
               <MiniLyrics lyrics={lyrics} onClick={() => setShowLyrics(true)} />
-            </div>
-            {/* Seek bar — directly below album art, moves with swipe */}
-            {!isAppleMusicAuthorized && onLinkApple && (
-              <div className={`w-full max-w-sm px-8 mt-4 flex justify-center transition-opacity duration-200 ${showHistory || !currentTrack ? 'opacity-0 pointer-events-none' : ''}`}>
-                <button
-                  onClick={onLinkApple}
-                  className="text-sm text-pink-500 hover:text-pink-600 transition-colors font-medium flex items-center gap-1.5"
-                >
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M9 18V5l12-2v13" />
-                    <circle cx="6" cy="18" r="3" />
-                    <circle cx="18" cy="16" r="3" />
-                  </svg>
-                  Connect Apple Music for full playback
-                </button>
-              </div>
-            )}
-            {isAppleMusicAuthorized && (
-              <div className={`w-full max-w-sm px-8 mt-4 flex items-center gap-2 transition-opacity duration-200 ${showHistory || !currentTrack ? 'opacity-0 pointer-events-none' : ''}`}>
-                <span className="text-xs font-mono text-gray-400 tabular-nums shrink-0">
-                  {formatTime(seekDisplayValue)}
-                </span>
-                <div className="relative flex-1 h-5 flex items-center">
-                  <div className="w-full h-1.5 bg-gray-100 rounded-full pointer-events-none">
+
+              {/* Seek bar — inside same max-w-xl container as album art */}
+              {!isAppleMusicAuthorized && onLinkApple && (
+                <div className={`mt-4 flex justify-center transition-opacity duration-200 ${showHistory || !currentTrack ? 'opacity-0 pointer-events-none' : ''}`}>
+                  <button
+                    onClick={onLinkApple}
+                    className="text-sm text-pink-500 hover:text-pink-600 transition-colors font-medium flex items-center gap-1.5"
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M9 18V5l12-2v13" />
+                      <circle cx="6" cy="18" r="3" />
+                      <circle cx="18" cy="16" r="3" />
+                    </svg>
+                    Connect Apple Music for full playback
+                  </button>
+                </div>
+              )}
+              {isAppleMusicAuthorized && (playbackTime?.total || 0) > 0 && (
+                <div className={`max-w-sm mx-auto px-2 mt-4 flex items-center gap-2 transition-opacity duration-200 ${showHistory || !currentTrack ? 'opacity-0 pointer-events-none' : ''}`}>
+                  <span className="text-xs font-mono text-gray-400 tabular-nums shrink-0">
+                    {formatTime(seekDisplayValue)}
+                  </span>
+                  <div className="relative flex-1 h-5 flex items-center">
+                    <div className="w-full h-1.5 bg-gray-100 rounded-full pointer-events-none overflow-hidden">
+                      <div
+                        className="h-full bg-gray-900 rounded-full"
+                        style={{ width: `${Math.min(100, (seekDisplayValue / (playbackTime?.total || 1)) * 100)}%` }}
+                      />
+                    </div>
                     <div
-                      className="h-full bg-gray-900 rounded-full"
-                      style={{ width: `${(seekDisplayValue / (playbackTime?.total || 1)) * 100}%` }}
+                      className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow border border-gray-300 pointer-events-none"
+                      style={{ left: `calc(${Math.min(100, (seekDisplayValue / (playbackTime?.total || 1)) * 100)}% - 6px)` }}
+                    />
+                    <input
+                      type="range"
+                      min={0}
+                      max={playbackTime?.total || 1}
+                      step={0.1}
+                      value={seekDisplayValue}
+                      onChange={(e) => { setSeekDragging(true); setSeekDragValue(parseFloat(e.target.value)); }}
+                      onPointerUp={(e) => { onSeek?.(parseFloat((e.target as HTMLInputElement).value)); setSeekDragging(false); }}
+                      className="absolute inset-0 w-full opacity-0 cursor-pointer"
                     />
                   </div>
-                  <div
-                    className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow border border-gray-300 pointer-events-none"
-                    style={{ left: `calc(${(seekDisplayValue / (playbackTime?.total || 1)) * 100}% - 6px)` }}
-                  />
-                  <input
-                    type="range"
-                    min={0}
-                    max={playbackTime?.total || 1}
-                    step={0.1}
-                    value={seekDisplayValue}
-                    onChange={(e) => { setSeekDragging(true); setSeekDragValue(parseFloat(e.target.value)); }}
-                    onPointerUp={(e) => { onSeek?.(parseFloat((e.target as HTMLInputElement).value)); setSeekDragging(false); }}
-                    className="absolute inset-0 w-full opacity-0 cursor-pointer"
-                  />
+                  <span className="text-xs font-mono text-gray-400 tabular-nums shrink-0">
+                    {formatTime(playbackTime?.total || 0)}
+                  </span>
                 </div>
-                <span className="text-xs font-mono text-gray-400 tabular-nums shrink-0">
-                  {formatTime(playbackTime?.total || 0)}
-                </span>
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
-          {/* Next track card */}
+          {/* Next track card — only when there's a next track */}
           {nextTrack && (
             <div className="h-full shrink-0 snap-start snap-always flex flex-col items-center justify-center pb-36">
               <div className="relative z-10 w-full max-w-xl px-8 pointer-events-none">
@@ -365,8 +386,12 @@ export const ChatInterface = ({
         {/* Transcript Overlay */}
         <TranscriptOverlay
           messages={messages}
+          rawMessages={rawMessages}
           isLoading={isLoading}
           showHistory={showHistory}
+          queueOps={queueOps}
+          storefront={musicActions?.storefront}
+          playTrackById={playTrackById}
         />
 
       </div>

@@ -19,10 +19,14 @@ export interface UsePlayQueueReturn {
   /** Previously played tracks */
   history: UnifiedTrack[];
   addTrack(track: UnifiedTrack): void;
+  addTracks(tracks: UnifiedTrack[]): void;
+  /** Insert tracks at head of queue and start playing the first one. */
+  playTracks(tracks: UnifiedTrack[]): Promise<void>;
   removeTrack(index: number): void;
   playAtIndex(index: number): Promise<void>;
   playFromHistory(historyIndex: number): Promise<void>;
   skipNext(): Promise<void>;
+  finishQueue(): Promise<void>;
   skipPrev(): Promise<void>;
   setQueue(tracks: UnifiedTrack[]): void;
   clear(): void;
@@ -116,6 +120,27 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
     p.addToNativeQueue(track.id).catch(console.error);
   }, []);
 
+  /** Batch add multiple tracks in a single MusicKit API call. */
+  const addTracks = useCallback((tracks: UnifiedTrack[]) => {
+    const p = providerRef.current;
+    if (!p || tracks.length === 0) return;
+    for (const t of tracks) p.cacheTrackMetadata(t);
+    if (!p.playbackState.currentTrack) {
+      p.setDisplayTrack(tracks[0]);
+    }
+    p.addManyToNativeQueue(tracks.map(t => t.id)).catch(console.error);
+  }, []);
+
+  /** Insert tracks at head of queue (playNext) and skip to the first one. */
+  const playTracks = useCallback(async (tracks: UnifiedTrack[]) => {
+    const p = providerRef.current;
+    if (!p || tracks.length === 0) return;
+    for (const t of tracks) p.cacheTrackMetadata(t);
+    p.setDisplayTrack(tracks[0]);
+    await p.insertNextInQueue(tracks.map(t => t.id));
+    await p.skipToNext();
+  }, []);
+
   const removeTrack = useCallback((index: number) => {
     const p = providerRef.current;
     if (!p) return;
@@ -149,6 +174,28 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
     if (!p) return;
     await p.skipToNext();
   }, []);
+
+  /** End playback: stop + remove current item so it moves to "history" (items before position). */
+  const finishQueue = useCallback(async () => {
+    const p = providerRef.current;
+    if (!p) return;
+    try {
+      const mk = (p as any).musicKit;
+      if (!mk) return;
+      await mk.stop();
+      // Remove the current (last) item from the queue.
+      // MusicKit shifts position, effectively making all remaining items "history".
+      const pos = mk.queue?.position ?? -1;
+      if (pos >= 0) {
+        await mk.queue.remove(pos);
+      }
+    } catch (e) {
+      console.warn('[finishQueue] error:', e);
+    }
+    // Clear display track
+    (p as any).updateState({ currentTrack: null, isPlaying: false });
+    bump();
+  }, [bump]);
 
   const skipPrev = useCallback(async () => {
     const p = providerRef.current;
@@ -184,10 +231,13 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
     queue,
     history,
     addTrack,
+    addTracks,
+    playTracks,
     removeTrack,
     playAtIndex,
     playFromHistory,
     skipNext,
+    finishQueue,
     skipPrev,
     setQueue: setQueueFn,
     clear,

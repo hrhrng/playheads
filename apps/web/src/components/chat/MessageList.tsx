@@ -1,120 +1,219 @@
 /**
  * MessageList - Chat message list component
+ *
+ * Supports both regular text/tool messages and json-render GenUI specs
+ * streamed via YAML. Assistant messages are checked for json-render data
+ * parts using useJsonRenderMessage().
+ *
  * @module components/chat/MessageList
  */
 
+import { Renderer, JSONUIProvider, type ComponentRegistry, type Spec } from '@json-render/react';
+import { useJsonRenderMessage, type DataPart } from '@json-render/react';
+import type { UIMessage } from 'ai';
+import { useMemo } from 'react';
 import { ToolCall } from './ToolCall';
 import { ThinkingProcess } from './ThinkingProcess';
 import { MarkdownMessage } from './MarkdownMessage';
+import { GenUIErrorBoundary } from '../genui/GenUIErrorBoundary';
+import { GenUIProvider } from '../genui/GenUIContext';
+import { ShareableCard } from '../genui/ShareableCard';
+import { registry } from '../../genui/registry';
 import type { Message, MessagePart } from '../../types';
 
+/**
+ * Normalize a json-render spec:
+ * 1. Every element gets `props: {}` and `children: []` if missing
+ * 2. If `root` doesn't exist in `elements`, synthesize a wrapper that
+ *    references all top-level elements as children
+ */
+function normalizeSpec(spec: Spec | null): Spec | null {
+  if (!spec?.elements) return spec;
+  const elements: Record<string, unknown> = {};
+  for (const [key, el] of Object.entries(spec.elements)) {
+    const element = el as unknown as Record<string, unknown> | null;
+    if (!element) continue;
+    elements[key] = {
+      ...element,
+      props: element.props ?? {},
+      children: element.children ?? [],
+    };
+  }
+
+  // If root element doesn't exist, synthesize one wrapping all top-level elements
+  const root = spec.root;
+  if (root && !elements[root]) {
+    // Collect all element keys that are NOT referenced as children of others
+    const referencedAsChild = new Set<string>();
+    for (const el of Object.values(elements)) {
+      const children = (el as Record<string, unknown>).children;
+      if (Array.isArray(children)) {
+        for (const c of children) {
+          if (typeof c === 'string') referencedAsChild.add(c);
+        }
+      }
+    }
+    const topLevel = Object.keys(elements).filter(k => !referencedAsChild.has(k));
+    elements[root] = {
+      type: 'Section',
+      props: { title: null, subtitle: null },
+      children: topLevel,
+    };
+  }
+
+  return { ...spec, elements: elements as Spec['elements'] };
+}
+import type { QueueOperations } from '../../hooks/useAgentChatAdapter';
+
 interface MessageListProps {
-  /** Array of messages to display */
   messages: Message[];
-  /** Whether a new message is currently loading */
+  rawMessages?: UIMessage[];
   isLoading: boolean;
+  queueOps?: QueueOperations | null;
+  storefront?: string;
+  playTrackById?: (trackId: string) => Promise<void>;
 }
 
 /**
- * MessageList - 紧凑简洁的消息列表
- *
- * 设计理念：
- * - Agent消息grouped在一个统一的container里
- * - text 部分保持大字体
- * - tool_call 和 thinking 紧凑展示在同一个block
+ * Renders a single assistant message bubble.
+ * Extracts json-render spec from raw parts if available.
  */
-export const MessageList = ({ messages, isLoading }: MessageListProps): React.JSX.Element => {
-  /**
-   * Type guard to check if message uses modern parts format
-   */
+function AssistantMessage({
+  msg,
+  rawMsg,
+  isStreaming,
+}: {
+  msg: Message & { parts: MessagePart[] };
+  rawMsg?: UIMessage;
+  isStreaming: boolean;
+}) {
+  // Extract json-render spec from raw UIMessage parts
+  const rawParts = (rawMsg?.parts || []) as DataPart[];
+  const { spec: rawSpec, text, hasSpec } = useJsonRenderMessage(rawParts);
+
+  // Normalize spec: ensure every element has props and children
+  const spec = useMemo(() => normalizeSpec(rawSpec), [rawSpec]);
+
+  // Render all parts (tool calls, thinking) + GenUI spec if present
+  return (
+    <div className="space-y-3">
+      {/* Tool calls and thinking — always render from mapped parts */}
+      {msg.parts.map((part, pIdx) => {
+        if (part.type === 'text') {
+          // If we have a spec, use the text extracted by json-render (strips yaml fence)
+          // Otherwise use the raw text part
+          if (hasSpec) return null; // text rendered separately below
+          return (
+            <div key={`text-${pIdx}`} className="text-gray-800 text-[15px] leading-relaxed">
+              <MarkdownMessage content={part.content} />
+            </div>
+          );
+        } else if (part.type === 'tool_call') {
+          return (
+            <ToolCall
+              key={`tool-${part.id}-${pIdx}`}
+              id={part.id}
+              tool_name={part.tool_name}
+              args={part.args}
+              result={part.result}
+              status={part.status}
+            />
+          );
+        } else if (part.type === 'thinking') {
+          return (
+            <ThinkingProcess key={`thinking-${pIdx}`} content={part.content} />
+          );
+        }
+        return null;
+      })}
+
+      {/* GenUI spec — rendered after tool calls */}
+      {hasSpec && spec && (
+        <>
+          {text && (
+            <div className="text-gray-800 text-[15px] leading-relaxed">
+              <MarkdownMessage content={text} />
+            </div>
+          )}
+          <GenUIErrorBoundary>
+            <ShareableCard>
+              <JSONUIProvider registry={registry as unknown as ComponentRegistry} initialState={(spec as any)?.state ?? {}}>
+                <Renderer spec={spec} registry={registry as unknown as ComponentRegistry} loading={isStreaming} />
+              </JSONUIProvider>
+            </ShareableCard>
+          </GenUIErrorBoundary>
+        </>
+      )}
+    </div>
+  );
+}
+
+export const MessageList = ({ messages, rawMessages = [], isLoading, queueOps, storefront = 'us', playTrackById }: MessageListProps): React.JSX.Element => {
   const isModernMessage = (message: Message): message is Message & { parts: MessagePart[] } => {
     return 'parts' in message && Array.isArray(message.parts);
   };
 
-  /**
-   * Type guard to check if message uses legacy content format
-   */
   const isLegacyMessage = (message: Message): message is Message & { content: string } => {
     return 'content' in message && typeof message.content === 'string';
   };
 
   return (
-    <div className="space-y-6 pb-12">
-      {messages.map((msg, idx) => (
-        <div
-          key={idx}
-          className={`flex flex-col w-full ${
-            msg.role === 'user' ? 'items-end' : 'items-start'
-          }`}
-        >
-          {/* Unified message container */}
-          <div className={`max-w-[90%] ${msg.role === 'user' ? 'ml-auto' : ''}`}>
-            {isModernMessage(msg) ? (
-              // New format: render parts in chronological order
-              <div className="space-y-3">
-                {msg.parts.map((part, pIdx) => {
-                  // Render each part in order
-                  if (part.type === 'text') {
-                    return msg.role === 'user' ? (
-                      <div
-                        key={`text-${pIdx}`}
-                        className="inline-block ml-auto bg-gray-100 rounded-2xl rounded-br-md px-4 py-2.5 text-[15px] leading-relaxed text-gray-800"
-                      >
-                        <MarkdownMessage content={part.content} />
-                      </div>
-                    ) : (
-                      <div
-                        key={`text-${pIdx}`}
-                        className="text-gray-800 text-[15px] leading-relaxed"
-                      >
-                        <MarkdownMessage content={part.content} />
-                      </div>
-                    );
-                  } else if (part.type === 'tool_call') {
-                    return (
-                      <ToolCall
-                        key={`tool-${part.id}-${pIdx}`}
-                        id={part.id}
-                        tool_name={part.tool_name}
-                        args={part.args}
-                        result={part.result}
-                        status={part.status}
-                      />
-                    );
-                  } else if (part.type === 'thinking') {
-                    return (
-                      <ThinkingProcess
-                        key={`thinking-${pIdx}`}
-                        content={part.content}
-                      />
-                    );
-                  }
-                  return null;
-                })}
-              </div>
-            ) : isLegacyMessage(msg) ? (
-              // Old format: backward compatibility
-              <div
-                className={`text-[15px] leading-relaxed ${
-                  msg.role === 'user'
-                    ? 'inline-block ml-auto bg-gray-100 rounded-2xl rounded-br-md px-4 py-2.5 text-gray-800'
-                    : 'text-gray-800'
-                }`}
-              >
-                {msg.content}
-              </div>
-            ) : null}
+    <GenUIProvider queueOps={queueOps || null} storefront={storefront} playTrackById={playTrackById}>
+      <div className="space-y-6 pb-12">
+        {messages.map((msg, idx) => (
+          <div
+            key={idx}
+            className={`flex flex-col w-full ${
+              msg.role === 'user' ? 'items-end' : 'items-start'
+            }`}
+          >
+            <div className={`max-w-[90%] ${msg.role === 'user' ? 'ml-auto' : ''}`}>
+              {isModernMessage(msg) ? (
+                msg.role === 'user' ? (
+                  // User message
+                  <div className="space-y-3">
+                    {msg.parts.map((part, pIdx) =>
+                      part.type === 'text' ? (
+                        <div
+                          key={`text-${pIdx}`}
+                          className="inline-block ml-auto bg-gray-100 rounded-2xl rounded-br-md px-4 py-2.5 text-[15px] leading-relaxed text-gray-800"
+                        >
+                          <MarkdownMessage content={part.content} />
+                        </div>
+                      ) : null
+                    )}
+                  </div>
+                ) : (
+                  // Assistant message — may contain json-render spec
+                  <AssistantMessage
+                    msg={msg}
+                    rawMsg={rawMessages[idx]}
+                    isStreaming={isLoading && idx === messages.length - 1}
+                  />
+                )
+              ) : isLegacyMessage(msg) ? (
+                <div
+                  className={`text-[15px] leading-relaxed ${
+                    msg.role === 'user'
+                      ? 'inline-block ml-auto bg-gray-100 rounded-2xl rounded-br-md px-4 py-2.5 text-gray-800'
+                      : 'text-gray-800'
+                  }`}
+                >
+                  {msg.content}
+                </div>
+              ) : null}
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
 
-      {isLoading && (
-        <div className="flex items-start">
-          <span className="text-sm text-blue-600 font-medium animate-pulse tracking-widest">
-            ON AIR...
-          </span>
-        </div>
-      )}
-    </div>
+        {isLoading && (
+          <div className="flex items-start">
+            <span className="text-sm text-blue-600 font-medium animate-pulse tracking-widest">
+              ON AIR...
+            </span>
+          </div>
+        )}
+      </div>
+    </GenUIProvider>
   );
 };

@@ -165,6 +165,7 @@ function App() {
             skipNext={() => queue.skipNext()}
             skipPrev={() => queue.skipPrev()}
             queue={queue}
+            playTrackById={(id: string) => provider?.play(id) ?? Promise.resolve()}
           />
         } />
 
@@ -195,6 +196,7 @@ function App() {
             skipNext={() => queue.skipNext()}
             skipPrev={() => queue.skipPrev()}
             queue={queue}
+            playTrackById={(id: string) => provider?.play(id) ?? Promise.resolve()}
           />
         } />
       </Routes>

@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { useAgentChatAdapter, type MusicActions, type QueueOperations } from './useAgentChatAdapter';
 import { useChatStore } from '../store/chatStore';
 import { API_BASE } from '../config/api';
+import type { UIMessage } from 'ai';
 import type { Message } from '../types/chat';
 
 interface UseChatParams {
@@ -28,6 +29,8 @@ interface UseChatParams {
 
 interface UseChatReturn {
   messages: Message[];
+  /** Raw UIMessages from AI SDK — needed by json-render */
+  rawMessages: UIMessage[];
   input: string;
   isLoading: boolean;
   isLoadingHistory: boolean;
@@ -72,6 +75,7 @@ export function useChat({
 
   // Messages come from the adapter when connected, empty otherwise
   const messages = hasSession ? adapter.messages : [];
+  const rawMessages = hasSession ? adapter.rawMessages : [];
   const isLoading = hasSession ? adapter.isLoading : false;
 
   // No separate history loading needed - useAgentChat auto-loads from DO SQLite
@@ -128,6 +132,7 @@ export function useChat({
 
   return {
     messages,
+    rawMessages,
     input,
     isLoading,
     isLoadingHistory,

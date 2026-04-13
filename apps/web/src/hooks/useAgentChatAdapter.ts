@@ -30,6 +30,9 @@ export interface MusicActions {
  */
 export interface QueueOperations {
   addTrack: (track: UnifiedTrack) => void;
+  addTracks: (tracks: UnifiedTrack[]) => void;
+  /** Insert tracks at head of queue and start playing the first one. */
+  playTracks: (tracks: UnifiedTrack[]) => Promise<void>;
   removeTrack: (index: number) => void;
   playAtIndex: (index: number) => Promise<void>;
   skipNext: () => Promise<void>;
@@ -51,6 +54,8 @@ interface UseAgentChatAdapterParams {
 
 interface UseAgentChatAdapterReturn {
   messages: Message[];
+  /** Raw UIMessages from AI SDK — needed by json-render's useJsonRenderMessage */
+  rawMessages: UIMessage[];
   sendMessage: (text: string) => void;
   isLoading: boolean;
   clearHistory: () => void;
@@ -215,6 +220,7 @@ export function useAgentChatAdapter({
 
   return {
     messages,
+    rawMessages: uiMessages,
     sendMessage,
     isLoading,
     clearHistory,

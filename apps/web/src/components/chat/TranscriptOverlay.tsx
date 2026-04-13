@@ -5,24 +5,28 @@
 
 import { useAutoScroll } from '../../hooks/useChatHelpers';
 import { MessageList } from './MessageList';
+import type { UIMessage } from 'ai';
 import type { Message } from '../../types';
+import type { QueueOperations } from '../../hooks/useAgentChatAdapter';
 
 interface TranscriptOverlayProps {
-  /** Array of chat messages */
   messages: Message[];
-  /** Whether content is currently loading */
+  rawMessages?: UIMessage[];
   isLoading: boolean;
-  /** Whether to show the history overlay */
   showHistory: boolean;
+  queueOps?: QueueOperations | null;
+  storefront?: string;
+  playTrackById?: (trackId: string) => Promise<void>;
 }
 
-/**
- * TranscriptOverlay - overlay showing chat transcript
- */
 export const TranscriptOverlay = ({
   messages,
+  rawMessages,
   isLoading,
-  showHistory
+  showHistory,
+  queueOps,
+  storefront,
+  playTrackById,
 }: TranscriptOverlayProps): React.JSX.Element => {
   const endRef = useAutoScroll(messages);
 
@@ -34,7 +38,7 @@ export const TranscriptOverlay = ({
     >
       <div className="w-full px-6 overflow-y-auto no-scrollbar pb-44 pt-8">
       <div className="max-w-xl mx-auto">
-        <MessageList messages={messages} isLoading={isLoading} />
+        <MessageList messages={messages} rawMessages={rawMessages} isLoading={isLoading} queueOps={queueOps} storefront={storefront} playTrackById={playTrackById} />
         <div ref={endRef} />
       </div>
       </div>

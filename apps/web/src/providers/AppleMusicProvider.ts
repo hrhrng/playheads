@@ -185,6 +185,17 @@ export class AppleMusicProvider implements MusicProvider {
       if (startTime && startTime > 0) {
         this.seekTarget = startTime;
       }
+      // After setQueue, MusicKit items have resolved metadata (durationInMillis).
+      // Re-format the first item to update the metadata cache with real duration,
+      // then update playbackTime so the seek bar shows correct total on restore.
+      const firstItem = this.musicKit.queue?.items?.[0];
+      if (firstItem) {
+        const track = this.formatMusicKitTrack(firstItem); // merges + updates cache
+        this.updateState({
+          currentTrack: track,
+          playbackTime: { current: startTime || 0, total: track.durationSeconds },
+        });
+      }
     } catch (e) {
       console.error('[AppleMusicProvider] setQueueWithoutPlaying error:', e);
     }
@@ -260,19 +271,34 @@ export class AppleMusicProvider implements MusicProvider {
   }
 
   formatMusicKitTrack(item: any): UnifiedTrack {
-    // Prefer cached metadata (from agent/search — has full info)
-    const cached = this.metadataCache.get(item.id);
-    if (cached) return cached;
     const attr = item.attributes || item;
-    return {
+    const mkDuration = attr.durationInMillis ? attr.durationInMillis / 1000 : (item.duration || 0);
+    const mkTrack: UnifiedTrack = {
       id: item.id || '',
       name: attr.name || attr.title || 'Unknown',
       artist: attr.artistName || 'Unknown',
       album: attr.albumName || '',
-      artworkUrl: (attr.artwork?.url || item.artworkURL || '').replace('{w}', '300').replace('{h}', '300'),
-      durationSeconds: attr.durationInMillis ? attr.durationInMillis / 1000 : (item.duration || 0),
+      artworkUrl: attr.artwork?.url || item.artworkURL || '',
+      durationSeconds: mkDuration,
       provider: 'apple-music' as const,
     };
+
+    // Merge with cached metadata: cache has richer info (from agent/search)
+    // but MusicKit has authoritative duration
+    const cached = this.metadataCache.get(item.id);
+    if (cached) {
+      const merged = {
+        ...cached,
+        durationSeconds: cached.durationSeconds || mkDuration,
+        // Prefer MusicKit's template URL ({w}x{h}) over cached fixed-size URL
+        artworkUrl: mkTrack.artworkUrl || cached.artworkUrl,
+      };
+      // Update cache so localStorage saves correct duration
+      this.metadataCache.set(item.id, merged);
+      return merged;
+    }
+
+    return mkTrack;
   }
 
   /** Cache full track metadata so formatMusicKitTrack can return rich data. */
@@ -416,6 +442,38 @@ export class AppleMusicProvider implements MusicProvider {
         await (this.musicKit as any).playLater({ songs: [songId] });
       } catch (e) {
         console.error('[AppleMusicProvider] addToNativeQueue error:', e);
+        const classified = classifyError(e);
+        if (classified.category === ErrorCategory.AUTH_EXPIRED) this.handleAuthLost();
+      }
+    });
+    return this.mutationChain;
+  }
+
+  /** Batch add multiple songs to the END of the queue (playLater). */
+  async addManyToNativeQueue(songIds: string[]): Promise<void> {
+    if (songIds.length === 0) return;
+    this.mutationChain = this.mutationChain.then(async () => {
+      if (!this.musicKit) return;
+      try {
+        await (this.musicKit as any).playLater({ songs: songIds });
+      } catch (e) {
+        console.error('[AppleMusicProvider] addManyToNativeQueue error:', e);
+        const classified = classifyError(e);
+        if (classified.category === ErrorCategory.AUTH_EXPIRED) this.handleAuthLost();
+      }
+    });
+    return this.mutationChain;
+  }
+
+  /** Batch insert songs right after current track (playNext = head of queue). */
+  async insertNextInQueue(songIds: string[]): Promise<void> {
+    if (songIds.length === 0) return;
+    this.mutationChain = this.mutationChain.then(async () => {
+      if (!this.musicKit) return;
+      try {
+        await (this.musicKit as any).playNext({ songs: songIds });
+      } catch (e) {
+        console.error('[AppleMusicProvider] insertNextInQueue error:', e);
         const classified = classifyError(e);
         if (classified.category === ErrorCategory.AUTH_EXPIRED) this.handleAuthLost();
       }
