@@ -118,14 +118,13 @@ export const musicCatalog = defineCatalog(schema, {
         "IMPORTANT: Only pick 2-4 most iconic lines from the song. Do NOT paste the full lyrics. " +
         "Do NOT include translations. Keep the original language only.",
       props: z.object({
-        lyric: z.string().describe("2-4 iconic lyric lines ONLY, not the full song. Original language, no translation."),
-        translation: z.string().nullable().describe("NOT USED — always set to null"),
+        lines: z.array(z.string()).describe("2-4 iconic lyric lines as an array. Each element is one line. Original language only."),
         trackName: z.string().describe("Song name"),
         artist: z.string().describe("Artist name"),
         trackId: z.string().nullable().describe("Apple Music song ID from search_music"),
         query: z.string().nullable().describe("Fallback search query"),
       }),
-      example: { lyric: "一个人走在白茫茫的雾里", translation: "Walking alone in the white fog", trackName: "旋木", artist: "王菲", trackId: "965771855", query: null },
+      example: { lines: ["等到风景都看透", "也许你会陪我看细水长流"], trackName: "红豆", artist: "王菲", trackId: "965771855", query: null },
     },
     ArtistSpotlight: {
       description:

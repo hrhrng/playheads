@@ -1,25 +1,23 @@
 /**
- * LyricsCard — large lyric quote with album art background.
- * Uses data-capture attribute so ShareableCard targets this region for screenshots.
+ * LyricsCard — lyric quote with album art background.
+ * Receives lyrics as an array of lines.
  */
 import { useState, useEffect } from 'react';
 import { useStorefront } from './GenUIContext';
 import { API_BASE } from '../../config/api';
 
 interface LyricsCardProps {
-  lyric: string;
-  translation?: string;
+  lines: string[];
   trackName: string;
   artist: string;
   trackId?: string;
   query?: string;
 }
 
-export function LyricsCard({ lyric, translation, trackName, artist, trackId, query }: LyricsCardProps) {
+export function LyricsCard({ lines, trackName, artist, trackId, query }: LyricsCardProps) {
   const sf = useStorefront();
   const [artworkUrl, setArtworkUrl] = useState<string | null>(null);
 
-  // Reset artwork when track changes
   useEffect(() => {
     setArtworkUrl(null);
   }, [trackId, query]);
@@ -53,7 +51,7 @@ export function LyricsCard({ lyric, translation, trackName, artist, trackId, que
   }, [trackId, query, sf, artworkUrl]);
 
   return (
-    <div data-capture className="relative rounded-2xl overflow-hidden animate-genui-card-in max-w-md">
+    <div data-capture className="relative rounded-2xl overflow-hidden animate-genui-card-in w-full" style={{ maxWidth: 448 }}>
       <div className="relative min-h-[320px] flex flex-col justify-end p-6">
         {artworkUrl ? (
           <>
@@ -65,14 +63,11 @@ export function LyricsCard({ lyric, translation, trackName, artist, trackId, que
         )}
 
         <div className="relative z-10 space-y-3" style={{ textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>
-          <p className="text-xl font-semibold text-white leading-relaxed whitespace-pre-line break-words">
-            {lyric}
-          </p>
-          {translation && (
-            <p className="text-sm text-white/60 leading-relaxed whitespace-pre-line">
-              {translation}
-            </p>
-          )}
+          <div className="space-y-1">
+            {lines.map((line, i) => (
+              <p key={i} className="text-lg font-semibold text-white leading-snug">{line}</p>
+            ))}
+          </div>
           <div className="flex items-center gap-2 pt-2">
             <div className="w-[3px] h-8 bg-white/30 rounded-full" />
             <div>

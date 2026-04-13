@@ -96,9 +96,9 @@ export const registry: Record<string, (ctx: ComponentRenderProps<any>) => ReactN
 
   Divider: () => <Divider />,
 
-  LyricsCard: (ctx: ComponentRenderProps<{ lyric: string; translation?: string; trackName: string; artist: string; trackId?: string; query?: string }>) => {
+  LyricsCard: (ctx: ComponentRenderProps<{ lines: string[]; trackName: string; artist: string; trackId?: string; query?: string }>) => {
     const props = p(ctx);
-    return <LyricsCard lyric={props.lyric} translation={props.translation} trackName={props.trackName} artist={props.artist} trackId={props.trackId ?? undefined} query={props.query ?? undefined} />;
+    return <LyricsCard lines={props.lines || []} trackName={props.trackName} artist={props.artist} trackId={props.trackId ?? undefined} query={props.query ?? undefined} />;
   },
 
   ArtistSpotlight: (ctx: ComponentRenderProps<{ name: string; subtitle?: string; bio?: string; imageUrl?: string; stats?: { label: string; value: string }[] }>) => {
