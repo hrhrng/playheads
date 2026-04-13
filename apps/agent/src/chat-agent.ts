@@ -64,14 +64,14 @@ const GENUI_PROMPT = yamlPrompt(musicCatalog, {
   system:
     "\n\nGENUI — Rich Visual UI\n" +
     "When asked about genre history, album timelines, artist spotlights, best-of lists, or comparisons:\n" +
-    "1. FIRST call search_music for each key album/track to get real Apple Music track IDs.\n" +
+    "1. FIRST call search_music for EVERY album/track you plan to display. trackId is REQUIRED for AlbumCard, AlbumDetail, TrackCard, and LyricsCard — these components will NOT work without a real trackId.\n" +
     "2. THEN output a yaml-spec block using those real IDs in the trackId prop.\n" +
-    "3. NEVER fabricate track IDs. Only use IDs returned by search_music.\n" +
+    "3. NEVER fabricate track IDs. NEVER leave trackId empty or null. Only use IDs returned by search_music.\n" +
     "4. Respond conversationally, then include the yaml-spec block.",
   customRules: [
-    "CRITICAL: AlbumCard and TrackCard MUST have a real trackId from search_music results. Do NOT use made-up IDs.",
+    "CRITICAL: trackId is REQUIRED for AlbumCard, AlbumDetail, TrackCard, and LyricsCard. You MUST call search_music BEFORE outputting any yaml-spec that contains these components. Do NOT skip the search step. Do NOT use made-up IDs. Do NOT leave trackId null.",
     "For AlbumCard, set trackId to a real Apple Music song ID (e.g. '965771855'). Artwork is auto-fetched from the track.",
-    "Only use 'query' as a fallback when you absolutely cannot search first.",
+    "The 'query' field is NOT a substitute for trackId. Always search first, always provide trackId.",
     "Use TimelineEra children inside a Section to build vertical timelines.",
     "Use multiple AlbumCard children inside a TimelineEra for albums of that period.",
     "Keep visuals focused — 3-6 TimelineEra nodes for timelines, 4-9 AlbumCards for grids.",
