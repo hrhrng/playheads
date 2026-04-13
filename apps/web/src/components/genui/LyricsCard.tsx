@@ -51,29 +51,28 @@ export function LyricsCard({ lines, trackName, artist, trackId, query }: LyricsC
   }, [trackId, query, sf, artworkUrl]);
 
   return (
-    <div data-capture className="relative rounded-2xl overflow-hidden animate-genui-card-in w-full" style={{ maxWidth: 448 }}>
-      <div className="relative min-h-[320px] flex flex-col justify-end p-6">
-        {artworkUrl ? (
-          <>
-            <img src={artworkUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
-            <div className="absolute inset-0 bg-black/50" />
-          </>
-        ) : (
-          <div className="absolute inset-0 bg-gradient-to-br from-gray-700 to-gray-900" />
-        )}
+    <div data-capture className="relative rounded-2xl overflow-hidden animate-genui-card-in" style={{ width: 400 }}>
+      {/* Album art — fills entire card */}
+      {artworkUrl ? (
+        <img src={artworkUrl} alt="" className="w-full aspect-square object-cover" />
+      ) : (
+        <div className="w-full aspect-square bg-gradient-to-br from-gray-700 to-gray-900" />
+      )}
+      {/* Gradient overlay on bottom half */}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
 
-        <div className="relative z-10 space-y-3" style={{ textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>
-          <div className="space-y-1">
-            {lines.map((line, i) => (
-              <p key={i} className="text-lg font-semibold text-white leading-snug">{line}</p>
-            ))}
-          </div>
-          <div className="flex items-center gap-2 pt-2">
-            <div className="w-[3px] h-8 bg-white/30 rounded-full" />
-            <div>
-              <p className="text-sm font-medium text-white/90">{trackName}</p>
-              <p className="text-xs text-white/50">{artist}</p>
-            </div>
+      {/* Lyrics floating at bottom */}
+      <div className="absolute bottom-0 left-0 right-0 p-5 space-y-3" style={{ textShadow: '0 1px 6px rgba(0,0,0,0.7)' }}>
+        <div className="space-y-1">
+          {lines.map((line, i) => (
+            <p key={i} className="text-[17px] font-semibold text-white leading-snug">{line}</p>
+          ))}
+        </div>
+        <div className="flex items-center gap-2 pt-1">
+          <div className="w-[3px] h-7 bg-white/30 rounded-full" />
+          <div>
+            <p className="text-[13px] font-medium text-white/90">{trackName}</p>
+            <p className="text-[11px] text-white/50">{artist}</p>
           </div>
         </div>
       </div>
