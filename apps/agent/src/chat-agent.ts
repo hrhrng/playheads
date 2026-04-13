@@ -8,7 +8,7 @@
  * Ported from apps/backend/agent.py
  */
 import { AIChatAgent } from "@cloudflare/ai-chat";
-import { streamText, convertToModelMessages, stepCountIs, tool, createUIMessageStream, createUIMessageStreamResponse, type ModelMessage } from "ai";
+import { streamText, convertToModelMessages, stepCountIs, tool, createUIMessageStream, createUIMessageStreamResponse, type SystemModelMessage } from "ai";
 import { z } from "zod";
 import { createMusicTools } from "./tools";
 import { pipeYamlRender } from "@json-render/yaml";
@@ -160,7 +160,7 @@ function buildWebSearchTool(env: Env, dbOverride?: { providerType: string; apiKe
   return undefined;
 }
 
-function buildStateMessage(state: PlaybackState): ModelMessage {
+function buildStateMessage(state: PlaybackState): SystemModelMessage {
   const lines: string[] = [];
 
   if (state.currentTrack) {
@@ -294,9 +294,6 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
     console.log(`[MusicChatAgent] card=${card?.id || "unknown"} thinking=${!!providerOptions} maxOut=${maxOutputTokens} search=${effectiveSearchProvider || "none"}`);
 
     const convertedMessages = await convertToModelMessages(this.messages);
-    // Append dynamic playback state as trailing system message (keeps system prefix stable for caching)
-    convertedMessages.push(buildStateMessage(globalState));
-
     const agentMessages = this.messages;
     const agentEnv = this.env;
 
@@ -306,13 +303,16 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
           model: model as Parameters<typeof streamText>[0]["model"],
           ...(maxOutputTokens ? { maxOutputTokens } : {}),
           providerOptions: providerOptions as Parameters<typeof streamText>[0]["providerOptions"],
-          system: {
-            role: "system" as const,
-            content: STATIC_SYSTEM,
-            providerOptions: {
-              anthropic: { cacheControl: { type: "ephemeral" } },
+          system: [
+            {
+              role: "system" as const,
+              content: STATIC_SYSTEM,
+              providerOptions: {
+                anthropic: { cacheControl: { type: "ephemeral" } },
+              },
             },
-          },
+            buildStateMessage(globalState),
+          ],
           messages: convertedMessages,
           tools,
           stopWhen: stepCountIs(10),
