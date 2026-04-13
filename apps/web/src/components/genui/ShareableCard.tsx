@@ -20,13 +20,17 @@ export function ShareableCard({ children }: ShareableCardProps) {
     try {
       const { default: html2canvas } = await import('html2canvas');
 
-      // Hide interactive buttons for clean screenshot
+      // Prefer data-capture element inside the card (e.g. LyricsCard),
+      // otherwise capture the whole card
+      const target = el.querySelector('[data-capture]') as HTMLElement || el;
+      const bgColor = target.hasAttribute('data-capture') ? '#000000' : '#ffffff';
+
       el.classList.add('genui-export-mode');
 
-      const canvas = await html2canvas(el, {
+      const canvas = await html2canvas(target, {
         useCORS: true,
         scale: 2,
-        backgroundColor: '#ffffff',
+        backgroundColor: bgColor,
         logging: false,
       });
 
