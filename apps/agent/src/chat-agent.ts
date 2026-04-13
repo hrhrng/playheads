@@ -184,7 +184,6 @@ function buildSystemPrompt(state: PlaybackState): string {
       "Use multiple AlbumCard children inside a TimelineEra for albums of that period.",
       "Keep visuals focused — 3-6 TimelineEra nodes for timelines, 4-9 AlbumCards for grids.",
       "Do NOT add call-to-action text like '点选播放' or 'Click to play' in Section subtitles. Keep subtitles factual and concise.",
-      "Do NOT use repeat, $item, $state, or state sections. List all elements flat in the elements map with explicit props. Keep it simple.",
     ],
   });
 
