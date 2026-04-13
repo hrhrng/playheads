@@ -8,7 +8,7 @@
  * Ported from apps/backend/agent.py
  */
 import { AIChatAgent } from "@cloudflare/ai-chat";
-import { streamText, convertToModelMessages, stepCountIs, tool, createUIMessageStream, createUIMessageStreamResponse } from "ai";
+import { streamText, convertToModelMessages, stepCountIs, tool, createUIMessageStream, createUIMessageStreamResponse, type ModelMessage } from "ai";
 import { z } from "zod";
 import { createMusicTools } from "./tools";
 import { pipeYamlRender } from "@json-render/yaml";
@@ -22,10 +22,7 @@ import type { Env, PlaybackState } from "./types";
 // System Prompt (ported from agent.py:298-322)
 // ---------------------------------------------------------------------------
 
-const SYSTEM_PROMPT_TEMPLATE = `You are a friendly music DJ assistant called "Playhead DJ". You help users discover and play music.
-
-Current State:
-{state_context}
+const SYSTEM_PROMPT_STATIC = `You are a friendly music DJ assistant called "Playhead DJ". You help users discover and play music.
 
 Available Tools:
 - search_music(query) — search Apple Music catalog. Returns track list with IDs.
@@ -60,6 +57,29 @@ IMPORTANT:
 - When asked to build a playlist, use web_search for ideas, then search_music + add_to_queue for each track.
 
 Be conversational and fun! Keep responses concise.`;
+
+// Hoist GENUI prompt to module level — musicCatalog is constant
+const GENUI_PROMPT = yamlPrompt(musicCatalog, {
+  mode: "inline",
+  system:
+    "\n\nGENUI — Rich Visual UI\n" +
+    "When asked about genre history, album timelines, artist spotlights, best-of lists, or comparisons:\n" +
+    "1. FIRST call search_music for each key album/track to get real Apple Music track IDs.\n" +
+    "2. THEN output a yaml-spec block using those real IDs in the trackId prop.\n" +
+    "3. NEVER fabricate track IDs. Only use IDs returned by search_music.\n" +
+    "4. Respond conversationally, then include the yaml-spec block.",
+  customRules: [
+    "CRITICAL: AlbumCard and TrackCard MUST have a real trackId from search_music results. Do NOT use made-up IDs.",
+    "For AlbumCard, set trackId to a real Apple Music song ID (e.g. '965771855'). Artwork is auto-fetched from the track.",
+    "Only use 'query' as a fallback when you absolutely cannot search first.",
+    "Use TimelineEra children inside a Section to build vertical timelines.",
+    "Use multiple AlbumCard children inside a TimelineEra for albums of that period.",
+    "Keep visuals focused — 3-6 TimelineEra nodes for timelines, 4-9 AlbumCards for grids.",
+    "Do NOT add call-to-action text like '点选播放', '快来听', 'add 红豆', '试试加到队列' in subtitles or conversational text after the yaml-spec. Keep responses clean and concise.",
+  ],
+});
+
+const STATIC_SYSTEM = SYSTEM_PROMPT_STATIC + "\n\n" + GENUI_PROMPT;
 
 /**
  * Build a web_search tool.
@@ -140,7 +160,7 @@ function buildWebSearchTool(env: Env, dbOverride?: { providerType: string; apiKe
   return undefined;
 }
 
-function buildSystemPrompt(state: PlaybackState): string {
+function buildStateContext(state: PlaybackState): ModelMessage {
   const lines: string[] = [];
 
   if (state.currentTrack) {
@@ -164,30 +184,7 @@ function buildSystemPrompt(state: PlaybackState): string {
     lines.push("Playlist is empty.");
   }
 
-  const basePrompt = SYSTEM_PROMPT_TEMPLATE.replace("{state_context}", lines.join("\n"));
-
-  // Append json-render YAML catalog prompt so the LLM knows how to compose visual UIs
-  const genuiPrompt = yamlPrompt(musicCatalog, {
-    mode: "inline",
-    system:
-      "\n\nGENUI — Rich Visual UI\n" +
-      "When asked about genre history, album timelines, artist spotlights, best-of lists, or comparisons:\n" +
-      "1. FIRST call search_music for each key album/track to get real Apple Music track IDs.\n" +
-      "2. THEN output a yaml-spec block using those real IDs in the trackId prop.\n" +
-      "3. NEVER fabricate track IDs. Only use IDs returned by search_music.\n" +
-      "4. Respond conversationally, then include the yaml-spec block.",
-    customRules: [
-      "CRITICAL: AlbumCard and TrackCard MUST have a real trackId from search_music results. Do NOT use made-up IDs.",
-      "For AlbumCard, set trackId to a real Apple Music song ID (e.g. '965771855'). Artwork is auto-fetched from the track.",
-      "Only use 'query' as a fallback when you absolutely cannot search first.",
-      "Use TimelineEra children inside a Section to build vertical timelines.",
-      "Use multiple AlbumCard children inside a TimelineEra for albums of that period.",
-      "Keep visuals focused — 3-6 TimelineEra nodes for timelines, 4-9 AlbumCards for grids.",
-      "Do NOT add call-to-action text like '点选播放', '快来听', 'add 红豆', '试试加到队列' in subtitles or conversational text after the yaml-spec. Keep responses clean and concise.",
-    ],
-  });
-
-  return basePrompt + "\n\n" + genuiPrompt;
+  return { role: "user" as const, content: "[Current Playback State]\n" + lines.join("\n") };
 }
 
 // ---------------------------------------------------------------------------
@@ -297,6 +294,9 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
     console.log(`[MusicChatAgent] card=${card?.id || "unknown"} thinking=${!!providerOptions} maxOut=${maxOutputTokens} search=${effectiveSearchProvider || "none"}`);
 
     const convertedMessages = await convertToModelMessages(this.messages);
+    // Append dynamic playback state as a user message (keeps system prefix 100% stable for caching)
+    convertedMessages.push(buildStateContext(globalState));
+
     const agentMessages = this.messages;
     const agentEnv = this.env;
 
@@ -306,7 +306,13 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
           model: model as Parameters<typeof streamText>[0]["model"],
           ...(maxOutputTokens ? { maxOutputTokens } : {}),
           providerOptions: providerOptions as Parameters<typeof streamText>[0]["providerOptions"],
-          system: buildSystemPrompt(globalState),
+          system: {
+            role: "system" as const,
+            content: STATIC_SYSTEM,
+            providerOptions: {
+              anthropic: { cacheControl: { type: "ephemeral" } },
+            },
+          },
           messages: convertedMessages,
           tools,
           stopWhen: stepCountIs(10),
@@ -327,8 +333,22 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
               } catch { /* not JSON */ }
             }
           },
-          onFinish: async ({ text }) => {
-            console.log("[MusicChatAgent] onFinish sessionId=%s textLen=%d", sessionId, text?.length || 0);
+          onFinish: async ({ text, usage }) => {
+            console.log(JSON.stringify({
+              event: "streamText.onFinish",
+              sessionId,
+              textLen: text?.length || 0,
+              usage: {
+                inputTokens: usage.inputTokens,
+                outputTokens: usage.outputTokens,
+                cacheReadTokens: (usage as Record<string, unknown>).inputTokenDetails
+                  ? ((usage as Record<string, unknown>).inputTokenDetails as Record<string, unknown>)?.cacheReadTokens
+                  : undefined,
+                cacheWriteTokens: (usage as Record<string, unknown>).inputTokenDetails
+                  ? ((usage as Record<string, unknown>).inputTokenDetails as Record<string, unknown>)?.cacheWriteTokens
+                  : undefined,
+              },
+            }));
             if (!sessionId) return;
 
             const now = Date.now();
