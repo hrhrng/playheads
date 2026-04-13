@@ -53,8 +53,8 @@ export function LyricsCard({ lyric, translation, trackName, artist, trackId, que
   }, [trackId, query, sf, artworkUrl]);
 
   return (
-    <div data-capture className="relative rounded-2xl overflow-hidden animate-genui-card-in" style={{ maxWidth: 480, aspectRatio: '9/16' }}>
-      <div className="relative h-full flex flex-col justify-end p-6">
+    <div data-capture className="relative rounded-2xl overflow-hidden animate-genui-card-in max-w-md">
+      <div className="relative min-h-[320px] flex flex-col justify-end p-6">
         {artworkUrl ? (
           <>
             <img src={artworkUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
@@ -65,7 +65,7 @@ export function LyricsCard({ lyric, translation, trackName, artist, trackId, que
         )}
 
         <div className="relative z-10 space-y-3" style={{ textShadow: '0 1px 4px rgba(0,0,0,0.5)' }}>
-          <p className="text-xl font-semibold text-white leading-relaxed whitespace-pre-line">
+          <p className="text-xl font-semibold text-white leading-relaxed whitespace-pre-line break-words">
             {lyric}
           </p>
           {translation && (
