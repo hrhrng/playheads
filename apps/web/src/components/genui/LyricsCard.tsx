@@ -64,7 +64,7 @@ export function LyricsCard({ lines, trackName, artist, trackId, query }: LyricsC
       {/* Lyrics floating at bottom */}
       <div className="absolute bottom-0 left-0 right-0 p-5 space-y-3" style={{ textShadow: '0 1px 6px rgba(0,0,0,0.7)' }}>
         <div className="space-y-1">
-          {lines.map((line, i) => (
+          {lines.slice(0, 4).map((line, i) => (
             <p key={i} className="text-[17px] font-semibold text-white leading-snug">{line}</p>
           ))}
         </div>
