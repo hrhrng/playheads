@@ -177,6 +177,9 @@ export function useMusicProvider({
     if (!initialRestoreDone.current || !provider) return;
     try {
       const snap = provider.getQueueSnapshot();
+      // Skip writing an empty queue — preserves the saved data so the
+      // next page load can retry restoring (e.g. after a MusicKit failure).
+      if (snap.items.length === 0) return;
       localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(snap.items));
       localStorage.setItem(QUEUE_POS_KEY, String(snap.position));
     } catch { /* ignore */ }
