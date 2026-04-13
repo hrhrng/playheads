@@ -8,7 +8,7 @@
  * Ported from apps/backend/agent.py
  */
 import { AIChatAgent } from "@cloudflare/ai-chat";
-import { streamText, convertToModelMessages, stepCountIs, tool, createUIMessageStream, createUIMessageStreamResponse, type SystemModelMessage } from "ai";
+import { streamText, convertToModelMessages, stepCountIs, tool, createUIMessageStream, createUIMessageStreamResponse, type ModelMessage } from "ai";
 import { z } from "zod";
 import { createMusicTools } from "./tools";
 import { pipeYamlRender } from "@json-render/yaml";
@@ -160,7 +160,7 @@ function buildWebSearchTool(env: Env, dbOverride?: { providerType: string; apiKe
   return undefined;
 }
 
-function buildStateMessage(state: PlaybackState): SystemModelMessage {
+function buildStateContext(state: PlaybackState): ModelMessage {
   const lines: string[] = [];
 
   if (state.currentTrack) {
@@ -184,7 +184,7 @@ function buildStateMessage(state: PlaybackState): SystemModelMessage {
     lines.push("Playlist is empty.");
   }
 
-  return { role: "system" as const, content: "Current State:\n" + lines.join("\n") };
+  return { role: "user" as const, content: "[Current Playback State]\n" + lines.join("\n") };
 }
 
 // ---------------------------------------------------------------------------
@@ -294,6 +294,9 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
     console.log(`[MusicChatAgent] card=${card?.id || "unknown"} thinking=${!!providerOptions} maxOut=${maxOutputTokens} search=${effectiveSearchProvider || "none"}`);
 
     const convertedMessages = await convertToModelMessages(this.messages);
+    // Append dynamic playback state as a user message (keeps system prefix 100% stable for caching)
+    convertedMessages.push(buildStateContext(globalState));
+
     const agentMessages = this.messages;
     const agentEnv = this.env;
 
@@ -303,16 +306,13 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
           model: model as Parameters<typeof streamText>[0]["model"],
           ...(maxOutputTokens ? { maxOutputTokens } : {}),
           providerOptions: providerOptions as Parameters<typeof streamText>[0]["providerOptions"],
-          system: [
-            {
-              role: "system" as const,
-              content: STATIC_SYSTEM,
-              providerOptions: {
-                anthropic: { cacheControl: { type: "ephemeral" } },
-              },
+          system: {
+            role: "system" as const,
+            content: STATIC_SYSTEM,
+            providerOptions: {
+              anthropic: { cacheControl: { type: "ephemeral" } },
             },
-            buildStateMessage(globalState),
-          ],
+          },
           messages: convertedMessages,
           tools,
           stopWhen: stepCountIs(10),
