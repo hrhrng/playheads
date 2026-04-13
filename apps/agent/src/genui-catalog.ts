@@ -138,19 +138,6 @@ export const musicCatalog = defineCatalog(schema, {
       }),
       example: { name: "王菲", subtitle: "华语天后", bio: "王菲是华语乐坛最具影响力的女歌手之一。", imageUrl: null, stats: [{ label: "Albums", value: "15" }, { label: "Active", value: "1989-" }] },
     },
-    MoodBoard: {
-      description:
-        "Mood-based music recommendation card with gradient header and emoji. " +
-        "Place AlbumCard children below for recommendations. " +
-        "Use for 'rainy day music', 'workout playlist', 'chill vibes' etc.",
-      props: z.object({
-        mood: z.string().describe("Mood name, e.g. '雨天听什么'"),
-        description: z.string().nullable().describe("Short mood description"),
-        emoji: z.string().nullable().describe("A single emoji for the mood"),
-        gradient: z.array(z.string()).min(2).max(2).nullable().describe("Two hex colors for header gradient"),
-      }),
-      example: { mood: "雨天听什么", description: "温柔治愈的旋律，陪你度过雨天", emoji: "🌧️", gradient: ["#667eea", "#764ba2"] },
-    },
   },
   actions: {
     play: { description: "Play a track via Apple Music." },
