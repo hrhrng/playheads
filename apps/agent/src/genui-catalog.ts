@@ -114,10 +114,12 @@ export const musicCatalog = defineCatalog(schema, {
     LyricsCard: {
       description:
         "Beautiful lyric quote card with album art background — ideal for sharing. " +
-        "Use search_music first to get a real trackId. Fill lyric with the quote text.",
+        "Use search_music first to get a real trackId. " +
+        "IMPORTANT: Only pick 2-4 most iconic lines from the song. Do NOT paste the full lyrics. " +
+        "Do NOT include translations. Keep the original language only.",
       props: z.object({
-        lyric: z.string().describe("The lyric quote text (1-4 lines)"),
-        translation: z.string().nullable().describe("Optional translation of the lyric"),
+        lyric: z.string().describe("2-4 iconic lyric lines ONLY, not the full song. Original language, no translation."),
+        translation: z.string().nullable().describe("NOT USED — always set to null"),
         trackName: z.string().describe("Song name"),
         artist: z.string().describe("Artist name"),
         trackId: z.string().nullable().describe("Apple Music song ID from search_music"),

@@ -19,6 +19,11 @@ export function LyricsCard({ lyric, translation, trackName, artist, trackId, que
   const sf = useStorefront();
   const [artworkUrl, setArtworkUrl] = useState<string | null>(null);
 
+  // Reset artwork when track changes
+  useEffect(() => {
+    setArtworkUrl(null);
+  }, [trackId, query]);
+
   useEffect(() => {
     if (artworkUrl) return;
     const controller = new AbortController();
@@ -48,8 +53,8 @@ export function LyricsCard({ lyric, translation, trackName, artist, trackId, que
   }, [trackId, query, sf, artworkUrl]);
 
   return (
-    <div data-capture className="relative rounded-2xl overflow-hidden animate-genui-card-in">
-      <div className="relative min-h-[280px] flex flex-col justify-end p-6">
+    <div data-capture className="relative rounded-2xl overflow-hidden animate-genui-card-in" style={{ maxWidth: 480, aspectRatio: '9/16' }}>
+      <div className="relative h-full flex flex-col justify-end p-6">
         {artworkUrl ? (
           <>
             <img src={artworkUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
