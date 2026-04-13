@@ -137,7 +137,7 @@ function AssistantMessage({
           )}
           <GenUIErrorBoundary>
             <ShareableCard>
-              <JSONUIProvider registry={registry as unknown as ComponentRegistry}>
+              <JSONUIProvider registry={registry as unknown as ComponentRegistry} initialState={(spec as any)?.state ?? {}}>
                 <Renderer spec={spec} registry={registry as unknown as ComponentRegistry} loading={isStreaming} />
               </JSONUIProvider>
             </ShareableCard>
