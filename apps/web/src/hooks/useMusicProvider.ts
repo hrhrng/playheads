@@ -151,14 +151,16 @@ export function useMusicProvider({
           // Cache metadata so MusicKit items display correctly
           queueHook.setQueue(tracks);
 
-          // Restore playback time for display (visual only — no seek)
           let savedPos = 0;
           try {
             savedPos = parseFloat(localStorage.getItem(PLAYBACK_POS_KEY) || '0') || 0;
           } catch { /* ignore */ }
-          provider.setDisplayTrack(tracks[savedQueuePos], savedPos);
 
-          // Prime MusicKit queue from saved position onward
+          // Prime MusicKit queue from saved position onward.
+          // setQueueWithoutPlaying sets currentTrack atomically once MusicKit
+          // resolves the tracks — don't call setDisplayTrack separately, or the
+          // player will show a track before the sidebar queue is populated
+          // (and stay inconsistent if MusicKit fails to resolve the IDs).
           const upcomingIds = tracks.slice(savedQueuePos).map((t: any) => t.id);
           provider.setQueueWithoutPlaying(upcomingIds, savedPos);
         }
