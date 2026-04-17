@@ -216,7 +216,8 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
   const finishRestore = useCallback(() => {
     console.log('[usePlayQueue] finishRestore: restore complete, sync re-enabled');
     isRestoringRef.current = false;
-  }, []);
+    bump();
+  }, [bump]);
 
   const clear = useCallback(() => {
     // No direct MusicKit "clear queue" API — stop playback instead
