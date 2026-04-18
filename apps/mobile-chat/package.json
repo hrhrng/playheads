@@ -1,0 +1,24 @@
+{
+  "name": "@playheads/mobile-chat",
+  "version": "0.1.0",
+  "private": true,
+  "description": "React Native JS module hosted inside the SwiftUI iOS app for the chat + GenUI surface. Talks to the agent worker at playheads.ai/api.",
+  "scripts": {
+    "start": "react-native start",
+    "tsc": "tsc --noEmit"
+  },
+  "dependencies": {
+    "react": "18.3.1",
+    "react-native": "0.76.5"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.25.0",
+    "@babel/preset-env": "^7.25.0",
+    "@babel/runtime": "^7.25.0",
+    "@react-native/babel-preset": "0.76.5",
+    "@react-native/metro-config": "0.76.5",
+    "@react-native/typescript-config": "0.76.5",
+    "@types/react": "^18.3.12",
+    "typescript": "^5.7.3"
+  }
+}

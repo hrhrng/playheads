@@ -153,7 +153,7 @@ struct ContentView: View {
     @ViewBuilder
     private var bottomLayer: some View {
         if let t = currentTrack {
-            BottomStack(track: t)
+            BottomStack(track: t, onChatTap: { chatOpen = true })
                 .id("bt-\(t.id)")
                 .transition(.opacity)
         } else {
@@ -388,11 +388,12 @@ struct MetaBlock: View {
 
 struct BottomStack: View {
     let track: MoodTrack
+    var onChatTap: () -> Void = {}
 
     var body: some View {
         VStack(spacing: 14) {
             ProgressRow(track: track)
-            ChatPill(track: track)
+            ChatPill(track: track, onTap: onChatTap)
         }
     }
 }
@@ -506,6 +507,7 @@ struct ProgressRow: View {
 
 struct ChatPill: View {
     let track: MoodTrack
+    var onTap: () -> Void = {}
     @State private var blink = false
 
     var body: some View {
@@ -524,12 +526,57 @@ struct ChatPill: View {
         .background(.ultraThinMaterial, in: Capsule())
         .overlay(Capsule().fill(track.chipBg))
         .overlay(Capsule().stroke(track.ruleColor, lineWidth: 1))
+        .contentShape(Capsule())
+        .onTapGesture {
+            UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.6)
+            onTap()
+        }
         .onAppear {
             withAnimation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true)) {
                 blink = true
             }
         }
     }
+}
+
+// MARK: - Chat sheet host (React Native bridge drops in here)
+
+struct ChatSheet: View {
+    let track: MoodTrack?
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        ChatHostRepresentable(track: track)
+            .ignoresSafeArea()
+    }
+}
+
+/// Hosts the React Native `RCTRootView` (registered JS module name: `MobileChat`).
+/// When RN is wired up (Podfile + bridge), replace the placeholder view with the real
+/// `RCTRootView`. See `apps/mobile-chat/README.md` for integration steps.
+struct ChatHostRepresentable: UIViewControllerRepresentable {
+    let track: MoodTrack?
+
+    func makeUIViewController(context: Context) -> UIViewController {
+        let vc = UIViewController()
+        vc.view.backgroundColor = .clear
+        let label = UILabel()
+        label.text = "Chat / GenUI\n(React Native host — not yet wired)"
+        label.numberOfLines = 0
+        label.textAlignment = .center
+        label.textColor = UIColor(white: 1, alpha: 0.75)
+        label.font = .systemFont(ofSize: 15, weight: .regular)
+        label.translatesAutoresizingMaskIntoConstraints = false
+        vc.view.addSubview(label)
+        NSLayoutConstraint.activate([
+            label.centerXAnchor.constraint(equalTo: vc.view.centerXAnchor),
+            label.centerYAnchor.constraint(equalTo: vc.view.centerYAnchor),
+            label.widthAnchor.constraint(lessThanOrEqualTo: vc.view.widthAnchor, constant: -32)
+        ])
+        return vc
+    }
+
+    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {}
 }
 
 struct DebugStrip: View {

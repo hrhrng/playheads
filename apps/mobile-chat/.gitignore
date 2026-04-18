@@ -1,0 +1,4 @@
+node_modules/
+.metro-cache/
+*.log
+.DS_Store
