@@ -424,7 +424,8 @@ struct BottomStack: View {
     var body: some View {
         VStack(spacing: 14) {
             ProgressRow(track: track)
-            ChatPill(track: track, namespace: namespace, onTap: onChatTap)
+            ChatBar(track: track, mode: .pill(onTap: onChatTap))
+                .matchedGeometryEffect(id: "composer", in: namespace)
         }
     }
 }
@@ -522,13 +523,26 @@ struct ProgressRow: View {
                 }
             } label: {
                 ZStack {
-                    Circle()
-                        .fill(track.ink)
-                        .frame(width: 42, height: 42)
-                    Image(systemName: showingPause ? "pause.fill" : "play.fill")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(track.coverBtnBase)
-                        .offset(x: showingPause ? 0 : 1)
+                    if #available(iOS 26.0, *) {
+                        Circle()
+                            .fill(Color.clear)
+                            .glassEffect(.regular, in: Circle())
+                            .overlay(Circle().fill(Color.black.opacity(0.18)))
+                            .overlay(Circle().strokeBorder(.white.opacity(0.12), lineWidth: 1))
+                            .frame(width: 42, height: 42)
+                        Image(systemName: showingPause ? "pause.fill" : "play.fill")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(track.ink)
+                            .offset(x: showingPause ? 0 : 1)
+                    } else {
+                        Circle()
+                            .fill(track.ink)
+                            .frame(width: 42, height: 42)
+                        Image(systemName: showingPause ? "pause.fill" : "play.fill")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(track.coverBtnBase)
+                            .offset(x: showingPause ? 0 : 1)
+                    }
                 }
             }
             .buttonStyle(.plain)
@@ -542,41 +556,118 @@ struct ProgressRow: View {
     }
 }
 
-struct ChatPill: View {
+// MARK: - ChatBar (single component for collapsed pill + expanded composer)
+
+struct ChatBar: View {
+    enum Mode {
+        case pill(onTap: () -> Void)            // collapsed on feed — caret + hint
+        case composer(
+            text: Binding<String>,
+            focused: FocusState<Bool>.Binding,
+            onSubmit: () -> Void
+        )                                        // expanded inside sheet — TextField
+    }
+
     let track: MoodTrack
-    let namespace: Namespace.ID
-    var onTap: () -> Void = {}
-    @State private var blink = false
+    let mode: Mode
+    var onASR: () -> Void = {}
+    var onVoice: () -> Void = {}
+
+    private var isEmpty: Bool {
+        if case let .composer(text, _, _) = mode {
+            return text.wrappedValue.trimmingCharacters(in: .whitespaces).isEmpty
+        }
+        return true
+    }
 
     var body: some View {
-        HStack(spacing: 6) {
-            Rectangle()
-                .fill(track.ink3)
-                .frame(width: 1, height: 14)
-                .opacity(blink ? 0 : 0.7)
+        let inner = HStack(spacing: 8) {
+            content
+            Spacer(minLength: 0)
+            trailingButtons
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+
+        let bar = Group {
+            if #available(iOS 26.0, *) {
+                inner.glassEffect(.regular, in: Capsule())
+            } else {
+                inner.background(.ultraThinMaterial, in: Capsule())
+            }
+        }
+        .overlay(Capsule().fill(track.chipBg))
+        .overlay(Capsule().stroke(track.ruleColor, lineWidth: 1))
+        .animation(.easeOut(duration: 0.15), value: isEmpty)
+
+        // Only attach a whole-bar tap gesture in pill mode — if we attach it
+        // in composer mode it swallows the TextField's tap and breaks focus.
+        if case let .pill(onTap) = mode {
+            bar
+                .contentShape(Capsule())
+                .onTapGesture {
+                    UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.6)
+                    onTap()
+                }
+        } else {
+            bar
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch mode {
+        case .pill:
             Text(track.chatHint)
                 .font(.system(size: 14.5, weight: .regular, design: .serif))
                 .foregroundStyle(track.ink3)
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 12)
-        .background(.ultraThinMaterial, in: Capsule())
-        .overlay(Capsule().fill(track.chipBg))
-        .overlay(Capsule().stroke(track.ruleColor, lineWidth: 1))
-        .matchedGeometryEffect(id: "composer", in: namespace)
-        .contentShape(Capsule())
-        .onTapGesture {
-            UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.6)
-            onTap()
-        }
-        .onAppear {
-            withAnimation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true)) {
-                blink = true
-            }
+        case let .composer(text, focused, onSubmit):
+            TextField(track.chatHint, text: text, axis: .vertical)
+                .textFieldStyle(.plain)
+                .lineLimit(1...4)
+                .font(.system(size: 14.5, weight: .regular, design: .serif))
+                .foregroundStyle(track.ink)
+                .tint(track.ink)
+                .focused(focused)
+                .submitLabel(.send)
+                .onSubmit(onSubmit)
         }
     }
+
+    @ViewBuilder
+    private var trailingButtons: some View {
+        if isEmpty {
+            iconButton("mic", action: onASR)
+            iconButton("waveform", action: onVoice)
+        } else {
+            Button {
+                if case let .composer(_, _, onSubmit) = mode { onSubmit() }
+            } label: {
+                Image(systemName: "arrow.up.circle.fill")
+                    .font(.system(size: 26))
+                    .foregroundStyle(track.ink)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .transition(.scale.combined(with: .opacity))
+        }
+    }
+
+    private func iconButton(_ system: String, action: @escaping () -> Void) -> some View {
+        Button {
+            UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.6)
+            action()
+        } label: {
+            Image(systemName: system)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(track.ink3)
+                .frame(width: 30, height: 30)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
 }
+
 
 // MARK: - Chat overlay (custom sheet clone with hero morph)
 
@@ -591,8 +682,6 @@ struct ChatOverlay: View {
     @State private var dragOffset: CGFloat = 0   // + = dragging down
 
     enum Detent { case medium, large }
-
-    private var placeholder: String { track?.chatHint ?? "Start a vibe…" }
 
     private func height(for d: Detent, screen: CGFloat) -> CGFloat {
         switch d {
@@ -635,12 +724,26 @@ struct ChatOverlay: View {
     @ViewBuilder
     private func sheet(height: CGFloat, screen: CGFloat) -> some View {
         VStack(spacing: 0) {
-            // Grab handle
-            Capsule()
-                .fill(.white.opacity(0.32))
-                .frame(width: 36, height: 5)
-                .padding(.top, 8)
-                .padding(.bottom, 10)
+            // Top bar: collapse button (left) + grab handle (centered)
+            ZStack {
+                Capsule()
+                    .fill(.white.opacity(0.32))
+                    .frame(width: 36, height: 5)
+
+                HStack {
+                    Button(action: dismiss) {
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.72))
+                            .frame(width: 30, height: 30)
+                            .contentShape(Rectangle())
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal, 12)
+            }
+            .padding(.top, 8)
+            .padding(.bottom, 10)
 
             // Header
             if let t = track {
@@ -662,10 +765,17 @@ struct ChatOverlay: View {
             // Composer — morphs from the pill. Bottom padding matches the pill's
             // exact on-screen position (safeArea.bottom + 4) so the morph lands
             // at the same y.
-            composer
+            if let t = track {
+                ChatBar(
+                    track: t,
+                    mode: .composer(text: $text, focused: $focused, onSubmit: send),
+                    onASR: startASR,
+                    onVoice: startVoiceMode
+                )
                 .matchedGeometryEffect(id: "composer", in: namespace)
                 .padding(.horizontal, 18)
                 .padding(.bottom, bottomSafeInset + 4)
+            }
         }
         .frame(height: height)
         .frame(maxWidth: .infinity)
@@ -674,56 +784,37 @@ struct ChatOverlay: View {
         .transition(.move(edge: .bottom))
     }
 
-    private var composer: some View {
-        HStack(spacing: 10) {
-            TextField(placeholder, text: $text, axis: .vertical)
-                .textFieldStyle(.plain)
-                .lineLimit(1...4)
-                .font(.system(size: 15, design: .serif))
-                .foregroundStyle(.white.opacity(0.95))
-                .tint(.white)
-                .focused($focused)
-                .submitLabel(.send)
-                .onSubmit(send)
-
-            if !text.trimmingCharacters(in: .whitespaces).isEmpty {
-                Button(action: send) {
-                    Image(systemName: "arrow.up")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(.black)
-                        .frame(width: 30, height: 30)
-                        .background(Circle().fill(.white))
-                }
-                .transition(.scale.combined(with: .opacity))
-            }
-        }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 12)
-        .background(.ultraThinMaterial, in: Capsule())
-        .overlay(Capsule().stroke(.white.opacity(0.12), lineWidth: 1))
-        .animation(.easeOut(duration: 0.15), value: text.isEmpty)
+    private func startASR() {
+        // TODO: Speech framework → stream transcript into `text`.
     }
 
-    private var sheetBackground: some View {
+    private func startVoiceMode() {
+        // TODO: push a voice-mode surface (realtime API).
+    }
+
+    private var sheetShape: UnevenRoundedRectangle {
         UnevenRoundedRectangle(
             cornerRadii: .init(topLeading: 28, topTrailing: 28),
             style: .continuous
         )
-        .fill(.ultraThinMaterial)
-        .overlay(
-            UnevenRoundedRectangle(
-                cornerRadii: .init(topLeading: 28, topTrailing: 28),
-                style: .continuous
-            )
-            .fill(Color.black.opacity(0.22))
-        )
-        .overlay(
-            UnevenRoundedRectangle(
-                cornerRadii: .init(topLeading: 28, topTrailing: 28),
-                style: .continuous
-            )
-            .strokeBorder(.white.opacity(0.08), lineWidth: 1)
-        )
+    }
+
+    @ViewBuilder
+    private var sheetBackground: some View {
+        Group {
+            if #available(iOS 26.0, *) {
+                sheetShape
+                    .fill(Color.clear)
+                    .glassEffect(.regular, in: sheetShape)
+                    .overlay(sheetShape.fill(Color.black.opacity(0.3)))
+                    .overlay(sheetShape.strokeBorder(.white.opacity(0.10), lineWidth: 1))
+            } else {
+                sheetShape
+                    .fill(.ultraThinMaterial)
+                    .overlay(sheetShape.fill(Color.black.opacity(0.22)))
+                    .overlay(sheetShape.strokeBorder(.white.opacity(0.08), lineWidth: 1))
+            }
+        }
         .ignoresSafeArea(edges: .bottom)
         .shadow(color: .black.opacity(0.35), radius: 30, y: -4)
     }
