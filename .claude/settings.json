@@ -31,18 +31,6 @@
         ]
       }
     ]
-    // ,
-    // "Stop": [
-    //   {
-    //     "hooks": [
-    //       {
-    //         "type": "agent",
-    //         "prompt": "Review all code changes in this session. If there is no change, exit. Otherwise, run typecheck (npx tsc --noEmit in apps/web) and review the git diff for bugs, type errors, race conditions, and missing edge cases. Report any issues found.",
-    //         "timeout": 120
-    //       }
-    //     ]
-    //   }
-    // ]
   },
   "permissions": {
     "allow": [
