@@ -317,9 +317,15 @@ final class PlaybackController: ObservableObject {
         }
     }
 
-    func load(song: Song, trackId: String, autoPlayIfPossible: Bool = true) async {
+    // Loading intent — the caller tells us what to do with the transport after
+    // the new item is queued. `preload` never starts audio; `continueIfPlaying`
+    // keeps the previous playing/paused state (what "I just swiped" should do);
+    // `forcePlay` always plays (auto-advance or explicit user tap).
+    enum LoadPolicy { case preload, continueIfPlaying, forcePlay }
+
+    func load(song: Song, trackId: String, policy: LoadPolicy = .continueIfPlaying) async {
         if currentSongId == trackId {
-            if autoPlayIfPossible && !isPlaying { player.play() }
+            if policy == .forcePlay && !isPlaying { player.play() }
             return
         }
 
@@ -350,26 +356,28 @@ final class PlaybackController: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
-                guard let self else { return }
-                self.isPlaying = false
-                self.trackEnded.send(())
+                // Don't flip isPlaying here — the periodic time observer will
+                // sync it once the player actually transitions to paused. If we
+                // flip it early, subscribers that want to chain into the next
+                // track (auto-advance with forcePlay) see the right state.
+                self?.trackEnded.send(())
             }
         }
 
         player.replaceCurrentItem(with: item)
-        if wasPlaying || autoPlayIfPossible {
-            player.play()
+        let shouldPlay: Bool
+        switch policy {
+        case .preload: shouldPlay = false
+        case .continueIfPlaying: shouldPlay = wasPlaying
+        case .forcePlay: shouldPlay = true
         }
+        if shouldPlay { player.play() }
         lastError = nil
     }
 
-    func togglePlayPause() {
-        if isPlaying {
-            player.pause()
-        } else {
-            player.play()
-        }
-    }
+    func play() { player.play() }
+    func pause() { player.pause() }
+    func toggle() { isPlaying ? pause() : play() }
 
     func seek(toFraction fraction: Double, completion: (() -> Void)? = nil) {
         guard duration > 0 else { completion?(); return }

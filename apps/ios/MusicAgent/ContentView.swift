@@ -6,6 +6,7 @@ struct ContentView: View {
     @ObservedObject private var palette = PaletteStore.shared
     @State private var currentId: String?
     @State private var chatOpen: Bool = false
+    @Namespace private var chatNS
 
     private var currentTrack: MoodTrack? {
         guard !viewModel.tracks.isEmpty else { return nil }
@@ -26,14 +27,32 @@ struct ContentView: View {
                 innerFeed(topPad: proxy.safeAreaInsets.top + 56,
                           bottomPad: max(proxy.safeAreaInsets.bottom, 12) + 110)
 
-                // 3. Transparent chrome overlay
+                // 3. Transparent chrome overlay. Pill is hidden while chat is
+                //    open so its matchedGeometryEffect partner (composer in
+                //    ChatOverlay) is the single source — SwiftUI morphs.
                 VStack(spacing: 0) {
                     headerLayer
                         .padding(.horizontal, 18)
                     Spacer(minLength: 0)
-                    bottomLayer
-                        .padding(.horizontal, 18)
-                        .padding(.bottom, 4)
+                    if !chatOpen {
+                        bottomLayer
+                            .padding(.horizontal, 18)
+                            .padding(.bottom, 4)
+                            .transition(.opacity)
+                    }
+                }
+
+                // 4. Chat overlay — custom sheet clone (grab handle, detents,
+                //    drag-to-dismiss, rubber-band overdrag) with the pill
+                //    morphing into the composer at the bottom.
+                if chatOpen {
+                    ChatOverlay(
+                        track: currentTrack,
+                        namespace: chatNS,
+                        bottomSafeInset: proxy.safeAreaInsets.bottom,
+                        isOpen: $chatOpen
+                    )
+                    .zIndex(5)
                 }
 
                 // DEBUG overlay
@@ -48,12 +67,6 @@ struct ContentView: View {
         .foregroundStyle(currentTrack?.ink ?? .white)
         .animation(.easeInOut(duration: 0.45), value: currentId)
         .background(Color.pageBg)
-        .sheet(isPresented: $chatOpen) {
-            ChatSheet(track: currentTrack)
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
-                .presentationBackground(.ultraThinMaterial)
-        }
         .task { await viewModel.load() }
         .onAppear {
             if currentId == nil { currentId = viewModel.tracks.first?.id }
@@ -62,15 +75,18 @@ struct ContentView: View {
             if currentId == nil { currentId = newFirst }
         }
         .onChange(of: currentId) { _, newId in
-            loadCurrent(id: newId, autoPlay: true)
+            // Swipe between cards: carry playing/paused intent forward.
+            loadCurrent(id: newId, policy: .continueIfPlaying)
             extractPalette(id: newId)
         }
         .onReceive(playback.trackEnded) { _ in
             advanceToNext()
         }
         .onReceive(viewModel.$tracks) { newTracks in
+            // Initial metadata fetch resolved — preload current track so it's
+            // ready to play the instant user taps play (but don't auto-start).
             guard newTracks.contains(where: { $0.song != nil }) else { return }
-            loadCurrent(id: currentId, autoPlay: false, in: newTracks)
+            loadCurrent(id: currentId, policy: .preload, in: newTracks)
             for track in newTracks where track.song != nil {
                 if let url = track.artworkURL {
                     Task { await palette.load(trackId: track.id, url: url) }
@@ -90,17 +106,23 @@ struct ContentView: View {
         guard let id = currentId,
               let idx = viewModel.tracks.firstIndex(where: { $0.id == id }) else { return }
         let nextIdx = idx + 1 < viewModel.tracks.count ? idx + 1 : 0
+        let nextTrack = viewModel.tracks[nextIdx]
+        // Load with forcePlay BEFORE the currentId change so onChange's idempotent
+        // load is a no-op (same trackId). Then animate scroll.
+        if let song = nextTrack.song {
+            Task { await playback.load(song: song, trackId: nextTrack.id, policy: .forcePlay) }
+        }
         withAnimation(.easeInOut(duration: 0.45)) {
-            currentId = viewModel.tracks[nextIdx].id
+            currentId = nextTrack.id
         }
     }
 
-    private func loadCurrent(id: String?, autoPlay: Bool, in tracks: [MoodTrack]? = nil) {
+    private func loadCurrent(id: String?, policy: PlaybackController.LoadPolicy, in tracks: [MoodTrack]? = nil) {
         let list = tracks ?? viewModel.tracks
         guard let id,
               let track = list.first(where: { $0.id == id }),
               let song = track.song else { return }
-        Task { await playback.load(song: song, trackId: id, autoPlayIfPossible: autoPlay) }
+        Task { await playback.load(song: song, trackId: id, policy: policy) }
     }
 
     // MARK: Fixed background with cross-fade
@@ -153,9 +175,17 @@ struct ContentView: View {
     @ViewBuilder
     private var bottomLayer: some View {
         if let t = currentTrack {
-            BottomStack(track: t, onChatTap: { chatOpen = true })
-                .id("bt-\(t.id)")
-                .transition(.opacity)
+            BottomStack(
+                track: t,
+                namespace: chatNS,
+                onChatTap: {
+                    withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) {
+                        chatOpen = true
+                    }
+                }
+            )
+            .id("bt-\(t.id)")
+            .transition(.opacity)
         } else {
             Color.clear.frame(height: 0)
         }
@@ -388,12 +418,13 @@ struct MetaBlock: View {
 
 struct BottomStack: View {
     let track: MoodTrack
+    let namespace: Namespace.ID
     var onChatTap: () -> Void = {}
 
     var body: some View {
         VStack(spacing: 14) {
             ProgressRow(track: track)
-            ChatPill(track: track, onTap: onChatTap)
+            ChatPill(track: track, namespace: namespace, onTap: onChatTap)
         }
     }
 }
@@ -483,7 +514,13 @@ struct ProgressRow: View {
                 }
             }
 
-            Button { playback.togglePlayPause() } label: {
+            Button {
+                if isActive {
+                    playback.toggle()
+                } else if let song = track.song {
+                    Task { await playback.load(song: song, trackId: track.id, policy: .forcePlay) }
+                }
+            } label: {
                 ZStack {
                     Circle()
                         .fill(track.ink)
@@ -507,6 +544,7 @@ struct ProgressRow: View {
 
 struct ChatPill: View {
     let track: MoodTrack
+    let namespace: Namespace.ID
     var onTap: () -> Void = {}
     @State private var blink = false
 
@@ -526,6 +564,7 @@ struct ChatPill: View {
         .background(.ultraThinMaterial, in: Capsule())
         .overlay(Capsule().fill(track.chipBg))
         .overlay(Capsule().stroke(track.ruleColor, lineWidth: 1))
+        .matchedGeometryEffect(id: "composer", in: namespace)
         .contentShape(Capsule())
         .onTapGesture {
             UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.6)
@@ -539,15 +578,204 @@ struct ChatPill: View {
     }
 }
 
-// MARK: - Chat sheet host (React Native bridge drops in here)
+// MARK: - Chat overlay (custom sheet clone with hero morph)
 
-struct ChatSheet: View {
+struct ChatOverlay: View {
     let track: MoodTrack?
-    @Environment(\.dismiss) private var dismiss
+    let namespace: Namespace.ID
+    let bottomSafeInset: CGFloat
+    @Binding var isOpen: Bool
+    @State private var text: String = ""
+    @FocusState private var focused: Bool
+    @State private var detent: Detent = .medium
+    @State private var dragOffset: CGFloat = 0   // + = dragging down
+
+    enum Detent { case medium, large }
+
+    private var placeholder: String { track?.chatHint ?? "Start a vibe…" }
+
+    private func height(for d: Detent, screen: CGFloat) -> CGFloat {
+        switch d {
+        case .medium: return screen * 0.55
+        case .large:  return screen * 0.92
+        }
+    }
 
     var body: some View {
-        ChatHostRepresentable(track: track)
-            .ignoresSafeArea()
+        GeometryReader { geo in
+            let screen = geo.size.height
+            let rest = height(for: detent, screen: screen)
+            let maxH = height(for: .large, screen: screen)
+
+            // Rubber-band overdrag above max; clamp min at 140.
+            let raw = rest - dragOffset
+            let effH: CGFloat = raw > maxH
+                ? maxH + pow(raw - maxH, 0.7)
+                : max(140, raw)
+
+            let scrim = min(0.48, effH / screen * 0.55)
+
+            ZStack(alignment: .bottom) {
+                Color.black.opacity(scrim)
+                    .ignoresSafeArea()
+                    .onTapGesture { dismiss() }
+
+                sheet(height: effH, screen: screen)
+            }
+        }
+        .ignoresSafeArea()
+        .onChange(of: focused) { _, isFocused in
+            // User tapped the composer — bring up keyboard + expand to large.
+            if isFocused && detent != .large {
+                setDetent(.large)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func sheet(height: CGFloat, screen: CGFloat) -> some View {
+        VStack(spacing: 0) {
+            // Grab handle
+            Capsule()
+                .fill(.white.opacity(0.32))
+                .frame(width: 36, height: 5)
+                .padding(.top, 8)
+                .padding(.bottom, 10)
+
+            // Header
+            if let t = track {
+                VStack(spacing: 2) {
+                    Text(t.songName)
+                        .font(.system(size: 13, weight: .semibold, design: .serif))
+                        .foregroundStyle(.white.opacity(0.92))
+                    Text(t.artist)
+                        .font(.system(size: 11, design: .serif))
+                        .foregroundStyle(.white.opacity(0.55))
+                }
+                .padding(.bottom, 8)
+            }
+
+            // Message area — RN host drops here.
+            ChatHostRepresentable(track: track)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            // Composer — morphs from the pill. Bottom padding matches the pill's
+            // exact on-screen position (safeArea.bottom + 4) so the morph lands
+            // at the same y.
+            composer
+                .matchedGeometryEffect(id: "composer", in: namespace)
+                .padding(.horizontal, 18)
+                .padding(.bottom, bottomSafeInset + 4)
+        }
+        .frame(height: height)
+        .frame(maxWidth: .infinity)
+        .background(sheetBackground)
+        .highPriorityGesture(dragGesture(screen: screen))
+        .transition(.move(edge: .bottom))
+    }
+
+    private var composer: some View {
+        HStack(spacing: 10) {
+            TextField(placeholder, text: $text, axis: .vertical)
+                .textFieldStyle(.plain)
+                .lineLimit(1...4)
+                .font(.system(size: 15, design: .serif))
+                .foregroundStyle(.white.opacity(0.95))
+                .tint(.white)
+                .focused($focused)
+                .submitLabel(.send)
+                .onSubmit(send)
+
+            if !text.trimmingCharacters(in: .whitespaces).isEmpty {
+                Button(action: send) {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(.black)
+                        .frame(width: 30, height: 30)
+                        .background(Circle().fill(.white))
+                }
+                .transition(.scale.combined(with: .opacity))
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 12)
+        .background(.ultraThinMaterial, in: Capsule())
+        .overlay(Capsule().stroke(.white.opacity(0.12), lineWidth: 1))
+        .animation(.easeOut(duration: 0.15), value: text.isEmpty)
+    }
+
+    private var sheetBackground: some View {
+        UnevenRoundedRectangle(
+            cornerRadii: .init(topLeading: 28, topTrailing: 28),
+            style: .continuous
+        )
+        .fill(.ultraThinMaterial)
+        .overlay(
+            UnevenRoundedRectangle(
+                cornerRadii: .init(topLeading: 28, topTrailing: 28),
+                style: .continuous
+            )
+            .fill(Color.black.opacity(0.22))
+        )
+        .overlay(
+            UnevenRoundedRectangle(
+                cornerRadii: .init(topLeading: 28, topTrailing: 28),
+                style: .continuous
+            )
+            .strokeBorder(.white.opacity(0.08), lineWidth: 1)
+        )
+        .ignoresSafeArea(edges: .bottom)
+        .shadow(color: .black.opacity(0.35), radius: 30, y: -4)
+    }
+
+    private func dragGesture(screen: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 8)
+            .onChanged { v in
+                dragOffset = v.translation.height
+            }
+            .onEnded { v in
+                let predicted = v.predictedEndTranslation.height
+                let currentH = height(for: detent, screen: screen) - dragOffset
+
+                if detent == .medium && predicted > 180 {
+                    dismiss(); return
+                }
+                if detent == .large && predicted > 200 {
+                    setDetent(.medium); return
+                }
+                if predicted < -160 && detent == .medium {
+                    setDetent(.large); return
+                }
+                // Snap to nearest.
+                let candidates: [Detent] = [.medium, .large]
+                let nearest = candidates.min(by: {
+                    abs(height(for: $0, screen: screen) - currentH) <
+                    abs(height(for: $1, screen: screen) - currentH)
+                }) ?? .medium
+                setDetent(nearest)
+            }
+    }
+
+    private func setDetent(_ d: Detent) {
+        withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) {
+            detent = d
+            dragOffset = 0
+        }
+    }
+
+    private func send() {
+        let msg = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !msg.isEmpty else { return }
+        // TODO: forward to RN bridge / agent-worker SSE.
+        text = ""
+    }
+
+    private func dismiss() {
+        focused = false
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) {
+            isOpen = false
+            dragOffset = 0
+        }
     }
 }
 
