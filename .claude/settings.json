@@ -30,17 +30,27 @@
           }
         ]
       }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "agent",
-            "prompt": "Review all code changes in this session. Run typecheck (npx tsc --noEmit) and check for bugs, type errors, unnecessary abstractions, and missing edge cases. Report any issues found.",
-            "timeout": 120
-          }
-        ]
-      }
+    ]
+    // ,
+    // "Stop": [
+    //   {
+    //     "hooks": [
+    //       {
+    //         "type": "agent",
+    //         "prompt": "Review all code changes in this session. If there is no change, exit. Otherwise, run typecheck (npx tsc --noEmit in apps/web) and review the git diff for bugs, type errors, race conditions, and missing edge cases. Report any issues found.",
+    //         "timeout": 120
+    //       }
+    //     ]
+    //   }
+    // ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git status:*)",
+      "Read"
     ]
   }
 }

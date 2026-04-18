@@ -9,9 +9,15 @@ This implementation uses SwiftUI.
 3. Name it "MusicAgent".
 4. Replace the created files with the files in this directory.
    - `MusicAgentApp.swift` -> Entry point.
-   - `ContentView.swift` -> Main UI.
-   - `Theme.swift` -> Colors.
+   - `ContentView.swift` -> Main UI (vertical mood-feed).
+   - `Theme.swift` -> Mood palettes (Amber / Rain / Forest / Neon).
+   - `Track.swift` -> `MoodTrack` model + `MockFeed` with mocked `trackId`s.
 
 ## Design
 
-Follows the Yellow/Black monorepo aesthetic.
+Implements `preview/mobile-moods-mixed.html` from the Playheads Design System.
+Full-screen vertical feed of "album moods": each page's background is a heavy
+blurred cluster of the cover's own colors, with a gradient cover, song + artist,
+3-line lyrics (middle highlighted), progress bar, and a chat pill.
+
+Requires iOS 17+ (uses `scrollTargetBehavior(.paging)`).

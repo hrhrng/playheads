@@ -27,6 +27,11 @@ DerivedData/
 *.xcodeproj/project.xcworkspace/
 *.xcworkspace/xcuserdata/
 
-*.p8apps/admin/.wrangler/
+*.p8
+*.P8
+AuthKey_*
 apps/admin/.wrangler/
 .claude/worktrees/
+
+# iOS (xcodegen-generated)
+apps/ios/MusicAgent.xcodeproj/
