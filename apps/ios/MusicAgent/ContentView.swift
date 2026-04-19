@@ -596,65 +596,60 @@ struct ProgressRow: View {
     private var isScrubbing: Bool { dragFraction != nil }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 16) {
-            VStack(alignment: .leading, spacing: 8) {
-                GeometryReader { geo in
-                    let barHeight: CGFloat = isScrubbing ? 7 : 3
-                    let thumbSize: CGFloat = 14
-                    ZStack(alignment: .leading) {
-                        Capsule()
-                            .fill(track.ruleColor)
-                            .frame(height: barHeight)
-                        Capsule()
-                            .fill(track.ink.opacity(0.92))
-                            .frame(width: max(barHeight, geo.size.width * displayFraction), height: barHeight)
-                            .animation(isScrubbing ? nil : .linear(duration: 0.35), value: displayFraction)
-                        if isScrubbing {
-                            Circle()
-                                .fill(track.ink)
-                                .frame(width: thumbSize, height: thumbSize)
-                                .shadow(color: .black.opacity(0.35), radius: 4, y: 1)
-                                .offset(x: max(0, geo.size.width * displayFraction) - thumbSize / 2)
-                        }
-                    }
-                    .frame(maxHeight: .infinity, alignment: .center)
-                    .contentShape(Rectangle())
-                    .gesture(
-                        DragGesture(minimumDistance: 0)
-                            .onChanged { v in
-                                guard liveDuration > 0 else { return }
-                                if dragFraction == nil {
-                                    UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.7)
-                                }
-                                let f = min(1, max(0, v.location.x / geo.size.width))
-                                dragFraction = f
+        HStack(alignment: .center, spacing: 12) {
+            Text(currentLabel)
+                .font(.system(size: 12, weight: .regular, design: .serif))
+                .monospacedDigit()
+                .foregroundStyle(track.ink3)
+
+            GeometryReader { geo in
+                let barHeight: CGFloat = isScrubbing ? 6 : 3
+                let thumbSize: CGFloat = 10
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(track.ruleColor)
+                        .frame(height: barHeight)
+                    Capsule()
+                        .fill(track.ink.opacity(0.92))
+                        .frame(width: max(barHeight, geo.size.width * displayFraction), height: barHeight)
+                        .animation(isScrubbing ? nil : .linear(duration: 0.35), value: displayFraction)
+                    // Always-visible thumb at the end of the fill.
+                    Circle()
+                        .fill(track.ink)
+                        .frame(width: thumbSize, height: thumbSize)
+                        .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
+                        .offset(x: max(0, geo.size.width * displayFraction) - thumbSize / 2)
+                }
+                .frame(maxHeight: .infinity, alignment: .center)
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { v in
+                            guard liveDuration > 0 else { return }
+                            if dragFraction == nil {
+                                UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.7)
                             }
-                            .onEnded { _ in
-                                if let f = dragFraction {
-                                    UIImpactFeedbackGenerator(style: .light).impactOccurred(intensity: 0.5)
-                                    playback.seek(toFraction: f) {
-                                        dragFraction = nil
-                                    }
-                                } else {
+                            let f = min(1, max(0, v.location.x / geo.size.width))
+                            dragFraction = f
+                        }
+                        .onEnded { _ in
+                            if let f = dragFraction {
+                                UIImpactFeedbackGenerator(style: .light).impactOccurred(intensity: 0.5)
+                                playback.seek(toFraction: f) {
                                     dragFraction = nil
                                 }
+                            } else {
+                                dragFraction = nil
                             }
-                    )
-                }
-                .frame(height: 22)
-
-                HStack {
-                    Text(currentLabel)
-                        .font(.system(size: 11, weight: .regular, design: .serif))
-                        .monospacedDigit()
-                        .foregroundStyle(track.ink3)
-                    Spacer()
-                    Text(totalLabel)
-                        .font(.system(size: 11, weight: .regular, design: .serif))
-                        .monospacedDigit()
-                        .foregroundStyle(track.ink3)
-                }
+                        }
+                )
             }
+            .frame(height: 22)
+
+            Text(totalLabel)
+                .font(.system(size: 12, weight: .regular, design: .serif))
+                .monospacedDigit()
+                .foregroundStyle(track.ink3)
 
             Button {
                 if isActive {
