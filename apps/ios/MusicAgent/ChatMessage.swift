@@ -3,45 +3,114 @@ import Foundation
 enum MessageRole: String {
     case user
     case agent
+    case system
 }
 
+/// Mirrors what `apps/mobile-chat/App.tsx` emits via `ChatBridge.updateMessages`:
+/// a single agent reply may carry text (post-YAML-strip), reasoning, a
+/// json-render spec, or any combo. User messages are plain text.
 struct ChatMessage: Identifiable, Equatable {
-    let id: UUID
+    let id: String
     let role: MessageRole
     var text: String
-    let createdAt: Date
+    var reasoning: String?
+    var spec: Spec?
+    /// `submitted` / `streaming` / `ready` / `error` — passes through for
+    /// rendering spinners / stop buttons. Not strongly typed yet.
+    var status: String?
 
-    init(role: MessageRole, text: String) {
-        self.id = UUID()
+    init(id: String, role: MessageRole, text: String, reasoning: String? = nil, spec: Spec? = nil, status: String? = nil) {
+        self.id = id
         self.role = role
         self.text = text
-        self.createdAt = Date()
+        self.reasoning = reasoning
+        self.spec = spec
+        self.status = status
+    }
+
+    /// Decode a UIMessage dict that RN assembled from `useAgentChat` +
+    /// `@json-render/react`. Shape:
+    /// ```
+    /// { id, role: 'user'|'agent', text, reasoning?, spec?, status? }
+    /// ```
+    init?(uiMessageDict dict: [String: Any]) {
+        guard
+            let id = dict["id"] as? String,
+            let roleRaw = dict["role"] as? String,
+            let role = MessageRole(rawValue: roleRaw == "assistant" ? "agent" : roleRaw)
+        else { return nil }
+
+        self.id = id
+        self.role = role
+        self.text = (dict["text"] as? String) ?? ""
+        let r = dict["reasoning"] as? String
+        self.reasoning = (r?.isEmpty == false) ? r : nil
+        self.spec = Spec(specDict: dict["spec"])
+        self.status = dict["status"] as? String
     }
 }
 
-/// Owns the chat history for the open session. SwiftUI sends user messages in;
-/// the store appends and (for now) fakes an agent reply so the RN list has both
-/// sides to render while the real `/api/chat` wiring is next.
+struct PendingCommand: Equatable {
+    let text: String
+    let nonce: String
+}
+
+/// Singleton so the RN bridge (ObjC-land) has a fixed address to deposit
+/// messages into without needing an injection ceremony. SwiftUI observes.
 @MainActor
 final class ConversationStore: ObservableObject {
+    static let shared = ConversationStore()
+
     @Published private(set) var messages: [ChatMessage] = []
+    /// Set by the native composer; flows to RN via `ChatHostRepresentable`'s
+    /// `appProperties` so `useAgentChat.sendMessage` can be called on the
+    /// JS side. Nonce ensures the same text twice still triggers a send.
+    @Published var pendingUserMessage: PendingCommand?
+
+    /// Dev-only cursor into MockScenario cases so the sheet's ladybug button
+    /// can step through fixtures.
+    @Published private(set) var mockIndex: Int = -1
+    var mockLabel: String {
+        guard mockIndex >= 0, mockIndex < MockScenario.allCases.count else { return "mock" }
+        return MockScenario.allCases[mockIndex].label
+    }
+
+    /// Active streaming simulation so switching scenarios cancels the
+    /// previous run instead of interleaving chars.
+    private var streamingTask: Task<Void, Never>?
+
+    private init() {}
+
+    func replace(messages: [ChatMessage]) {
+        self.messages = messages
+    }
+
+    /// Mutate a message in place by id. Used by the streaming simulator to
+    /// append text / reasoning / spec elements as they "arrive".
+    func update(id: String, _ mutate: (inout ChatMessage) -> Void) {
+        guard let idx = messages.firstIndex(where: { $0.id == id }) else { return }
+        var m = messages[idx]
+        mutate(&m)
+        messages[idx] = m
+    }
+
+    func cycleMockScenario() {
+        mockIndex = (mockIndex + 1) % MockScenario.allCases.count
+        let scenario = MockScenario.allCases[mockIndex]
+        streamingTask?.cancel()
+        streamingTask = Task { [weak self] in
+            await self?.streamMock(scenario)
+        }
+    }
 
     func sendUser(_ raw: String) {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        messages.append(ChatMessage(role: .user, text: trimmed))
-        scheduleMockReply()
+        pendingUserMessage = PendingCommand(text: trimmed, nonce: UUID().uuidString)
     }
 
-    private func scheduleMockReply() {
-        Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(500))
-            await MainActor.run {
-                self?.messages.append(ChatMessage(
-                    role: .agent,
-                    text: "Listening… this track sits in a late-70s AOR pocket—warm analog guitars, a wide stereo image, and a vocal mixed just above the bed."
-                ))
-            }
-        }
+    func handleMusicAction(_ payload: NSDictionary) {
+        // TODO: route to PlaybackController / queue ops. Web does this inside
+        // useAgentChatAdapter.ts's onData — we get the same payload here.
     }
 }

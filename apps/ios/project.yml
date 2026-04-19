@@ -22,6 +22,7 @@ targets:
       path: MusicAgent/MusicAgent.entitlements
       properties:
         com.apple.developer.musickit: true
+        com.apple.developer.applesignin: [Default]
     info:
       path: MusicAgent/Info.plist
       properties:

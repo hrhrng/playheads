@@ -162,16 +162,37 @@ importers:
 
   apps/mobile-chat:
     dependencies:
+      '@cloudflare/ai-chat':
+        specifier: ^0.1.0
+        version: 0.1.8(@ai-sdk/react@3.0.118(react@19.2.5)(zod@4.3.6))(agents@0.2.35(@ai-sdk/openai@3.0.41(zod@4.3.6))(@ai-sdk/react@3.0.118(react@19.2.5)(zod@4.3.6))(@cloudflare/workers-types@4.20260313.1)(ai@6.0.116(zod@4.3.6))(react@19.2.5)(typescript@5.9.3)(zod@4.3.6))(ai@6.0.116(zod@4.3.6))(react@19.2.5)(zod@4.3.6)
+      '@json-render/react':
+        specifier: ^0.17.0
+        version: 0.17.0(react@19.2.5)(zod@4.3.6)
+      agents:
+        specifier: ^0.2.27
+        version: 0.2.35(@ai-sdk/openai@3.0.41(zod@4.3.6))(@ai-sdk/react@3.0.118(react@19.2.5)(zod@4.3.6))(@cloudflare/workers-types@4.20260313.1)(ai@6.0.116(zod@4.3.6))(react@19.2.5)(typescript@5.9.3)(zod@4.3.6)
+      ai:
+        specifier: ^6.0.0
+        version: 6.0.116(zod@4.3.6)
       react:
         specifier: 19.2.5
         version: 19.2.5
       react-native:
         specifier: 0.85.1
         version: 0.85.1(@babel/core@7.29.0)(@react-native-community/cli@20.1.3(typescript@5.9.3))(@react-native/metro-config@0.85.1(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.5)
+      react-native-url-polyfill:
+        specifier: ^2.0.0
+        version: 2.0.0(react-native@0.85.1(@babel/core@7.29.0)(@react-native-community/cli@20.1.3(typescript@5.9.3))(@react-native/metro-config@0.85.1(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.5))
+      web-streams-polyfill:
+        specifier: ^4.0.0
+        version: 4.2.0
     devDependencies:
       '@babel/core':
         specifier: ^7.25.0
         version: 7.29.0
+      '@babel/plugin-transform-export-namespace-from':
+        specifier: ^7.25.0
+        version: 7.27.1(@babel/core@7.29.0)
       '@babel/preset-env':
         specifier: ^7.25.0
         version: 7.29.2(@babel/core@7.29.0)
@@ -2304,6 +2325,16 @@ packages:
   '@json-render/yaml@0.17.0':
     resolution: {integrity: sha512-kDk0gUDFR4kwSI4rVanupqnL82Fq/TsSxvT+okfCxA2zh9oF71pEv1Pt0pRKUoGzqR9M8zexmm8MUMOH86s1OQ==}
 
+  '@modelcontextprotocol/sdk@1.23.0':
+    resolution: {integrity: sha512-MCGd4K9aZKvuSqdoBkdMvZNcYXCkZRYVs/Gh92mdV5IHbctX9H9uIvd4X93+9g8tBbXv08sxc/QHXTzf8y65bA==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@cfworker/json-schema': ^4.1.1
+      zod: ^3.25 || ^4.0
+    peerDependenciesMeta:
+      '@cfworker/json-schema':
+        optional: true
+
   '@modelcontextprotocol/sdk@1.26.0':
     resolution: {integrity: sha512-Y5RmPncpiDtTXDbLKswIJzTqu2hyBKxTNsgKqKclDbhIgg1wgtf1fRuvxgTnRfcnxtvvgbIEcqUOzZrJ6iSReg==}
     engines: {node: '>=18'}
@@ -2883,6 +2914,29 @@ packages:
   agent-base@7.1.4:
     resolution: {integrity: sha512-MnA+YT8fwfJPgBx3m60MNqakm30XOkyIoH1y6huTQvC0PwZG7ki8NacLBcrPbNoo8vEZy7Jpuk7+jMO+CUovTQ==}
     engines: {node: '>= 14'}
+
+  agents@0.2.35:
+    resolution: {integrity: sha512-e6Ift6X0sFceYgFBIZGK4jQ+vyFq9caSF80ilsAVHzfFHvqb21013UrgGzZac4X+fzAP103YBSgS7C57tjAj8w==}
+    hasBin: true
+    peerDependencies:
+      '@ai-sdk/openai': '>=2.0.0'
+      '@ai-sdk/react': '>=1.0.0'
+      ai: '>=5.0.0'
+      react: ^19.0.0
+      viem: '>=2.0.0'
+      x402: ^0.7.1
+      zod: ^3.25.0 || ^4.0.0
+    peerDependenciesMeta:
+      '@ai-sdk/openai':
+        optional: true
+      '@ai-sdk/react':
+        optional: true
+      ai:
+        optional: true
+      viem:
+        optional: true
+      x402:
+        optional: true
 
   agents@0.7.6:
     resolution: {integrity: sha512-wR5L+3t+kIN1aog7AqAs5RBKfW4GhYtdSEE2thNvWefaZXrEZXDzN8NVaO2CMVEwNWAG+edqEfxzMOViMOlUJQ==}
@@ -4013,6 +4067,12 @@ packages:
 
   exponential-backoff@3.1.3:
     resolution: {integrity: sha512-ZgEeZXj30q+I0EN+CbSSpIyPaJ5HVQD18Z1m+u1FXbAeT94mr1zw50q4q6jiiC447Nl/YTcIYSAftiGqetwXCA==}
+
+  express-rate-limit@7.5.1:
+    resolution: {integrity: sha512-7iN8iPMDzOMHPUYllBEsQdWVB6fPDMPqwjBaFrgr4Jgr/+okjvzAy+UHlYYL/Vs0OsOrMkwS6PJDkFlJwoxUnw==}
+    engines: {node: '>= 16'}
+    peerDependencies:
+      express: '>= 4.11'
 
   express-rate-limit@8.3.1:
     resolution: {integrity: sha512-D1dKN+cmyPWuvB+G2SREQDzPY1agpBIcTa9sJxOPMCNeH3gwzhqJRDWCXW3gg0y//+LQ/8j52JbMROWyrKdMdw==}
@@ -5347,10 +5407,18 @@ packages:
     resolution: {integrity: sha512-CiyeOxFT/JZyN5m0z9PfXw4SCBJ6Sygz1Dpl0wqjlhDEGGBP1GnsUVEL0p63hoG1fcj3fHynXi9NYO4nWOL+qQ==}
     engines: {node: '>= 0.8'}
 
+  partyserver@0.1.5:
+    resolution: {integrity: sha512-kaE3GYaYWFc70EJQDQEhyYbO2Wczz/NgsFXerfjRo0t2s7ZxL1XggWT+HkMrdEyqbZOv3b66CV93WG0Lcg/ThQ==}
+    peerDependencies:
+      '@cloudflare/workers-types': ^4.20240729.0
+
   partyserver@0.3.3:
     resolution: {integrity: sha512-jSGWNZ5lJj9czq+97y9N02HyZZtQH8wmgJRkTQahfGnzgL5+R12dMX3E+p7BscB2cVj6LZLv1uHpKL057rjJmw==}
     peerDependencies:
       '@cloudflare/workers-types': ^4.20240729.0
+
+  partysocket@1.1.10:
+    resolution: {integrity: sha512-ACfn0P6lQuj8/AqB4L5ZDFcIEbpnIteNNObrlxqV1Ge80GTGhjuJ2sNKwNQlFzhGi4kI7fP/C1Eqh8TR78HjDQ==}
 
   partysocket@1.1.16:
     resolution: {integrity: sha512-d7xFv+ZC7x0p/DAHWJ5FhxQhimIx+ucyZY+kxL0cKddLBmK9c4p2tEA/L+dOOrWm6EYrRwrBjKQV0uSzOY9x1w==}
@@ -5593,6 +5661,11 @@ packages:
     peerDependencies:
       '@types/react': '>=18'
       react: '>=18'
+
+  react-native-url-polyfill@2.0.0:
+    resolution: {integrity: sha512-My330Do7/DvKnEvwQc0WdcBnFPploYKp9CYlefDXzIdEaA+PAhDYllkvGeEroEzvc4Kzzj2O4yVdz8v6fjRvhA==}
+    peerDependencies:
+      react-native: '*'
 
   react-native@0.85.1:
     resolution: {integrity: sha512-1K2TIvu2M1C8gqkPevi/MuLan16mQvEdURiTlwHgrb6S2vvkDyik6TrkkXMlMMhz9hF5RT8wFyDUdlpGFlkpXg==}
@@ -6580,6 +6653,14 @@ packages:
   web-namespaces@2.0.1:
     resolution: {integrity: sha512-bKr1DkiNa2krS7qxNtdrtHAmzuYGFQLiQ13TsorsdT6ULTkPLKuu5+GsFpDlg6JFjUTwX2DyhMPG2be8uPrqsQ==}
 
+  web-streams-polyfill@4.2.0:
+    resolution: {integrity: sha512-0rYDzGOh9EZpig92umN5g5D/9A1Kff7k0/mzPSSCY8jEQeYkgRMoY7LhbXtUCWzLCMX0TUE9aoHkjFNB7D9pfA==}
+    engines: {node: '>= 8'}
+
+  webidl-conversions@5.0.0:
+    resolution: {integrity: sha512-VlZwKPCkYKxQgeSbH5EyngOmRp7Ww7I9rQLERETtf5ofd9pGeswWiOtogpEO850jziPRarreGxn5QIiTqpb2wA==}
+    engines: {node: '>=8'}
+
   webidl-conversions@7.0.0:
     resolution: {integrity: sha512-VwddBukDzu71offAQR975unBIGqfKZpM+8ZX6ySk8nYhVoo5CYaZyzt3YBvYtRtO+aoGlqxPg/B87NGVZ/fu6g==}
     engines: {node: '>=12'}
@@ -6598,6 +6679,10 @@ packages:
   whatwg-mimetype@5.0.0:
     resolution: {integrity: sha512-sXcNcHOC51uPGF0P/D4NVtrkjSU2fNsm9iog4ZvZJsL3rjoDAzXZhkm2MWt1y+PUdggKAYVoMAIYcs78wJ51Cw==}
     engines: {node: '>=20'}
+
+  whatwg-url-without-unicode@8.0.0-3:
+    resolution: {integrity: sha512-HoKuzZrUlgpz35YO27XgD28uh/WJH4B0+3ttFqRo//lmq+9T/mIOJ6kqmINI9HpUpz1imRC/nR/lxKpJiv0uig==}
+    engines: {node: '>=10'}
 
   whatwg-url@14.2.0:
     resolution: {integrity: sha512-De72GdQZzNTUBBChsXueQUnPKDkg/5A5zp7pFDuQAj5UFoENpiACU0wlCvzpAGnTkj++ihpKwKyYewn/XNUbKw==}
@@ -6821,6 +6906,12 @@ packages:
     peerDependencies:
       typescript: ^4.9.4 || ^5.0.2
       zod: ^3
+
+  zod-to-ts@2.0.0:
+    resolution: {integrity: sha512-aHsUgIl+CQutKAxtRNeZslLCLXoeuSq+j5HU7q3kvi/c2KIAo6q4YjT7/lwFfACxLB923ELHYMkHmlxiqFy4lw==}
+    peerDependencies:
+      typescript: ^5.0.0
+      zod: ^3.25.0 || ^4.0.0
 
   zod@3.25.76:
     resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
@@ -7875,6 +7966,14 @@ snapshots:
       react: 19.2.4
       zod: 4.3.6
 
+  '@cloudflare/ai-chat@0.1.8(@ai-sdk/react@3.0.118(react@19.2.5)(zod@4.3.6))(agents@0.2.35(@ai-sdk/openai@3.0.41(zod@4.3.6))(@ai-sdk/react@3.0.118(react@19.2.5)(zod@4.3.6))(@cloudflare/workers-types@4.20260313.1)(ai@6.0.116(zod@4.3.6))(react@19.2.5)(typescript@5.9.3)(zod@4.3.6))(ai@6.0.116(zod@4.3.6))(react@19.2.5)(zod@4.3.6)':
+    dependencies:
+      '@ai-sdk/react': 3.0.118(react@19.2.5)(zod@4.3.6)
+      agents: 0.2.35(@ai-sdk/openai@3.0.41(zod@4.3.6))(@ai-sdk/react@3.0.118(react@19.2.5)(zod@4.3.6))(@cloudflare/workers-types@4.20260313.1)(ai@6.0.116(zod@4.3.6))(react@19.2.5)(typescript@5.9.3)(zod@4.3.6)
+      ai: 6.0.116(zod@4.3.6)
+      react: 19.2.5
+      zod: 4.3.6
+
   '@cloudflare/ai-chat@0.1.8(@ai-sdk/react@3.0.118(react@19.2.5)(zod@4.3.6))(agents@0.7.6)(ai@6.0.116(zod@4.3.6))(react@19.2.5)(zod@4.3.6)':
     dependencies:
       '@ai-sdk/react': 3.0.118(react@19.2.5)(zod@4.3.6)
@@ -8565,6 +8664,13 @@ snapshots:
     transitivePeerDependencies:
       - zod
 
+  '@json-render/react@0.17.0(react@19.2.5)(zod@4.3.6)':
+    dependencies:
+      '@json-render/core': 0.17.0(zod@4.3.6)
+      react: 19.2.5
+    transitivePeerDependencies:
+      - zod
+
   '@json-render/yaml@0.17.0(zod@4.3.6)':
     dependencies:
       '@json-render/core': 0.17.0(zod@4.3.6)
@@ -8572,6 +8678,26 @@ snapshots:
       yaml: 2.8.2
     transitivePeerDependencies:
       - zod
+
+  '@modelcontextprotocol/sdk@1.23.0(@cfworker/json-schema@4.1.1)(zod@4.3.6)':
+    dependencies:
+      ajv: 8.18.0
+      ajv-formats: 3.0.1(ajv@8.18.0)
+      content-type: 1.0.5
+      cors: 2.8.6
+      cross-spawn: 7.0.6
+      eventsource: 3.0.7
+      eventsource-parser: 3.0.6
+      express: 5.2.1
+      express-rate-limit: 7.5.1(express@5.2.1)
+      pkce-challenge: 5.0.1
+      raw-body: 3.0.2
+      zod: 4.3.6
+      zod-to-json-schema: 3.25.1(zod@4.3.6)
+    optionalDependencies:
+      '@cfworker/json-schema': 4.1.1
+    transitivePeerDependencies:
+      - supports-color
 
   '@modelcontextprotocol/sdk@1.26.0(@cfworker/json-schema@4.1.1)(zod@4.3.6)':
     dependencies:
@@ -9301,6 +9427,30 @@ snapshots:
   acorn@8.16.0: {}
 
   agent-base@7.1.4: {}
+
+  agents@0.2.35(@ai-sdk/openai@3.0.41(zod@4.3.6))(@ai-sdk/react@3.0.118(react@19.2.5)(zod@4.3.6))(@cloudflare/workers-types@4.20260313.1)(ai@6.0.116(zod@4.3.6))(react@19.2.5)(typescript@5.9.3)(zod@4.3.6):
+    dependencies:
+      '@cfworker/json-schema': 4.1.1
+      '@modelcontextprotocol/sdk': 1.23.0(@cfworker/json-schema@4.1.1)(zod@4.3.6)
+      cron-schedule: 6.0.0
+      json-schema: 0.4.0
+      json-schema-to-typescript: 15.0.4
+      mimetext: 3.0.28
+      nanoid: 5.1.7
+      partyserver: 0.1.5(@cloudflare/workers-types@4.20260313.1)
+      partysocket: 1.1.10
+      react: 19.2.5
+      yargs: 18.0.0
+      zod: 4.3.6
+      zod-to-ts: 2.0.0(typescript@5.9.3)(zod@4.3.6)
+    optionalDependencies:
+      '@ai-sdk/openai': 3.0.41(zod@4.3.6)
+      '@ai-sdk/react': 3.0.118(react@19.2.5)(zod@4.3.6)
+      ai: 6.0.116(zod@4.3.6)
+    transitivePeerDependencies:
+      - '@cloudflare/workers-types'
+      - supports-color
+      - typescript
 
   agents@0.7.6(@ai-sdk/openai@3.0.41(zod@4.3.6))(@ai-sdk/react@3.0.118(react@19.2.4)(zod@4.3.6))(@cloudflare/ai-chat@0.1.8)(@cloudflare/workers-types@4.20260313.1)(ai@6.0.116(zod@4.3.6))(react@19.2.4)(zod@4.3.6):
     dependencies:
@@ -10676,6 +10826,10 @@ snapshots:
   expect-type@1.3.0: {}
 
   exponential-backoff@3.1.3: {}
+
+  express-rate-limit@7.5.1(express@5.2.1):
+    dependencies:
+      express: 5.2.1
 
   express-rate-limit@8.3.1(express@5.2.1):
     dependencies:
@@ -12427,10 +12581,19 @@ snapshots:
 
   parseurl@1.3.3: {}
 
+  partyserver@0.1.5(@cloudflare/workers-types@4.20260313.1):
+    dependencies:
+      '@cloudflare/workers-types': 4.20260313.1
+      nanoid: 5.1.7
+
   partyserver@0.3.3(@cloudflare/workers-types@4.20260313.1):
     dependencies:
       '@cloudflare/workers-types': 4.20260313.1
       nanoid: 5.1.7
+
+  partysocket@1.1.10:
+    dependencies:
+      event-target-polyfill: 0.0.4
 
   partysocket@1.1.16(react@19.2.4):
     dependencies:
@@ -12674,6 +12837,11 @@ snapshots:
       vfile: 6.0.3
     transitivePeerDependencies:
       - supports-color
+
+  react-native-url-polyfill@2.0.0(react-native@0.85.1(@babel/core@7.29.0)(@react-native-community/cli@20.1.3(typescript@5.9.3))(@react-native/metro-config@0.85.1(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.5)):
+    dependencies:
+      react-native: 0.85.1(@babel/core@7.29.0)(@react-native-community/cli@20.1.3(typescript@5.9.3))(@react-native/metro-config@0.85.1(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.5)
+      whatwg-url-without-unicode: 8.0.0-3
 
   react-native@0.85.1(@babel/core@7.29.0)(@react-native-community/cli@20.1.3(typescript@5.9.3))(@react-native/metro-config@0.85.1(@babel/core@7.29.0))(@types/react@19.2.14)(react@19.2.5):
     dependencies:
@@ -13848,6 +14016,10 @@ snapshots:
 
   web-namespaces@2.0.1: {}
 
+  web-streams-polyfill@4.2.0: {}
+
+  webidl-conversions@5.0.0: {}
+
   webidl-conversions@7.0.0: {}
 
   webidl-conversions@8.0.1: {}
@@ -13857,6 +14029,12 @@ snapshots:
   whatwg-mimetype@4.0.0: {}
 
   whatwg-mimetype@5.0.0: {}
+
+  whatwg-url-without-unicode@8.0.0-3:
+    dependencies:
+      buffer: 5.7.1
+      punycode: 2.3.1
+      webidl-conversions: 5.0.0
 
   whatwg-url@14.2.0:
     dependencies:
@@ -14099,6 +14277,11 @@ snapshots:
     dependencies:
       typescript: 5.9.3
       zod: 3.25.76
+
+  zod-to-ts@2.0.0(typescript@5.9.3)(zod@4.3.6):
+    dependencies:
+      typescript: 5.9.3
+      zod: 4.3.6
 
   zod@3.25.76: {}
 

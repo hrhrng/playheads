@@ -814,7 +814,9 @@ struct ChatOverlay: View {
     let namespace: Namespace.ID
     let bottomSafeInset: CGFloat
     @Binding var isOpen: Bool
-    @StateObject private var store = ConversationStore()
+    @ObservedObject private var store = ConversationStore.shared
+    @ObservedObject private var settings = DebugSettings.shared
+    @ObservedObject private var auth = AuthStore.shared
     @State private var text: String = ""
     @FocusState private var focused: Bool
     @State private var detent: Detent = .medium
@@ -881,6 +883,32 @@ struct ChatOverlay: View {
                                 .contentShape(Rectangle())
                         }
                         Spacer()
+                        #if DEBUG
+                        Button(action: cycleEnv) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "network")
+                                Text(settings.environment.label)
+                                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                            }
+                            .foregroundStyle(envColor(for: settings.environment))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.black.opacity(0.22))
+                            .clipShape(Capsule())
+                        }
+                        Button(action: cycleMock) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "ladybug")
+                                Text(store.mockLabel)
+                                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                            }
+                            .foregroundStyle(.white.opacity(0.55))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.black.opacity(0.22))
+                            .clipShape(Capsule())
+                        }
+                        #endif
                     }
                     .padding(.horizontal, 12)
                 }
@@ -902,27 +930,41 @@ struct ChatOverlay: View {
             .contentShape(Rectangle())
             .gesture(dragGesture(screen: screen))
 
-            // RN owns only the message-list rendering. Everything else —
-            // composer, send, network — is SwiftUI. Messages flow into RN via
-            // appProperties on the root view.
-            ChatHostRepresentable(track: track, store: store)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            if auth.state.isSignedIn {
+                // RN is headless — runs useAgentChat and @json-render/react in
+                // the background, pushing parsed messages into ConversationStore
+                // via ChatBridge. SwiftUI renders everything natively above it.
+                ZStack(alignment: .top) {
+                    ChatMessagesView(store: store, track: track)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    ChatHostRepresentable(track: track, store: store)
+                        .frame(width: 0, height: 0)
+                        .accessibilityHidden(true)
+                        // Rebuild RN root when env / user flips so useAgent
+                        // re-hosts against the right base URL + identity.
+                        .id("\(settings.environment.rawValue):\(auth.state.user?.id ?? "anon")")
+                }
 
-            // Composer — morphs from the pill. Bottom padding matches the pill's
-            // exact on-screen position (safeArea.bottom + 4) so the morph lands
-            // at the same y.
-            if let t = track {
-                ChatBar(
-                    track: t,
-                    mode: .composer(text: $text, focused: $focused, onSubmit: send),
-                    onASR: startASR,
-                    onVoice: startVoiceMode
-                )
-                .matchedGeometryEffect(id: "composer", in: namespace)
-                .padding(.horizontal, 18)
-                .padding(.bottom, bottomSafeInset + 4)
+                // Composer — morphs from the pill. Bottom padding matches the
+                // pill's exact on-screen position (safeArea.bottom + 4) so the
+                // morph lands at the same y.
+                if let t = track {
+                    ChatBar(
+                        track: t,
+                        mode: .composer(text: $text, focused: $focused, onSubmit: send),
+                        onASR: startASR,
+                        onVoice: startVoiceMode
+                    )
+                    .matchedGeometryEffect(id: "composer", in: namespace)
+                    .padding(.horizontal, 18)
+                    .padding(.bottom, bottomSafeInset + 4)
+                }
+            } else {
+                SignInGate(auth: auth, track: track)
+                    .transition(.opacity)
             }
         }
+        .animation(.easeOut(duration: 0.28), value: auth.state.isSignedIn)
         .frame(height: height)
         .frame(maxWidth: .infinity)
         .background(sheetBackground)
@@ -1002,11 +1044,36 @@ struct ChatOverlay: View {
     private func send() {
         let msg = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !msg.isEmpty else { return }
-        let haptic = UIImpactFeedbackGenerator(style: .soft)
-        haptic.impactOccurred(intensity: 0.5)
+        UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.5)
         store.sendUser(msg)
         text = ""
     }
+
+    #if DEBUG
+    private func cycleMock() {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred(intensity: 0.4)
+        store.cycleMockScenario()
+    }
+
+    private func cycleEnv() {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred(intensity: 0.5)
+        settings.cycleEnvironment()
+        // Different env = different cookies, different user, different
+        // conversation history. Wipe everything and re-bootstrap so the UI
+        // reflects the new backend identity instead of stale state.
+        store.replace(messages: [])
+        APIClient.shared.clearSessionCookies()
+        Task { await auth.bootstrap() }
+    }
+
+    private func envColor(for env: AgentEnvironment) -> Color {
+        switch env {
+        case .production: return Color(red: 0.85, green: 0.75, blue: 0.55)  // warm cream (prod = default)
+        case .preview:    return Color(red: 0.55, green: 0.75, blue: 0.95)  // cool blue (staging)
+        case .local:      return Color(red: 0.95, green: 0.65, blue: 0.55)  // warning orange
+        }
+    }
+    #endif
 
     private func dismiss() {
         focused = false
@@ -1017,9 +1084,10 @@ struct ChatOverlay: View {
     }
 }
 
-/// Hosts the React Native message-list surface (JS module `MobileChat` — see
-/// `apps/mobile-chat/App.tsx`). RN renders only the messages; composer / send /
-/// network all stay native. New messages flow in via `rootView.appProperties`.
+/// Headless RN host: runs `useAgentChat` + `@json-render/react` (see
+/// `apps/mobile-chat/App.tsx`) and pushes parsed messages back through
+/// `ChatBridge`. Nothing here is visible — SwiftUI renders the message list
+/// itself. Native → JS flows via `appProperties.pendingUserMessage.nonce`.
 struct ChatHostRepresentable: UIViewControllerRepresentable {
     let track: MoodTrack?
     @ObservedObject var store: ConversationStore
@@ -1027,6 +1095,7 @@ struct ChatHostRepresentable: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> UIViewController {
         let vc = UIViewController()
         vc.view.backgroundColor = .clear
+        vc.view.isUserInteractionEnabled = false
 
         let rnView = ReactNativeHost.shared.makeRootView(
             moduleName: "MobileChat",
@@ -1042,20 +1111,17 @@ struct ChatHostRepresentable: UIViewControllerRepresentable {
             rnView.trailingAnchor.constraint(equalTo: vc.view.trailingAnchor)
         ])
         context.coordinator.rootView = rnView
+        context.coordinator.lastNonce = store.pendingUserMessage?.nonce ?? ""
         return vc
     }
 
     func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
-        // SwiftUI calls updateUIViewController on every ancestor body re-render
-        // (dragOffset / detent / text edits → ~60/s while dragging the sheet).
-        // Push to RN only when the message set actually changes — otherwise
-        // we'd ship the full messages array across the bridge on every frame.
-        let sig = signature()
-        guard context.coordinator.lastSignature != sig else { return }
-        context.coordinator.lastSignature = sig
-        // Both RCTRootView and RCTFabricSurfaceHostingProxyRootView expose
-        // `appProperties` — use KVC so we don't need to import the concrete
-        // class and the code survives new-arch / legacy toggles.
+        // SwiftUI calls updateUIViewController on every ancestor body
+        // re-render. Push to RN only when the outbound command actually
+        // changes — the only thing that flows Native → JS is send intents.
+        let nonce = store.pendingUserMessage?.nonce ?? ""
+        guard context.coordinator.lastNonce != nonce else { return }
+        context.coordinator.lastNonce = nonce
         context.coordinator.rootView?.setValue(props(), forKey: "appProperties")
     }
 
@@ -1063,21 +1129,24 @@ struct ChatHostRepresentable: UIViewControllerRepresentable {
 
     final class Coordinator {
         weak var rootView: UIView?
-        var lastSignature: String = ""
-    }
-
-    private func signature() -> String {
-        // Count + last id is enough: we only ever append, never mutate in place.
-        // If the model grows edits, hash text lengths into this.
-        "\(store.messages.count):\(store.messages.last?.id.uuidString ?? "")"
+        var lastNonce: String = ""
     }
 
     private func props() -> [String: Any] {
-        [
-            "messages": store.messages.map { msg in
-                ["id": msg.id.uuidString, "role": msg.role.rawValue, "text": msg.text]
-            }
+        var out: [String: Any] = [
+            "baseUrl": DebugSettings.shared.environment.baseUrl,
+            "sessionId": track?.trackId ?? "default",
+            "userId": AuthStore.shared.state.user?.id ?? "anon",
+            "storefront": "us",
+            // Every component this iOS client can render. Agent reads this on
+            // the request body and narrows the model's allowed component
+            // vocabulary so we never get an "unknown" fallback card.
+            "genuiWhitelist": GenUIComponent.supportedTypes
         ]
+        if let cmd = store.pendingUserMessage {
+            out["pendingUserMessage"] = ["text": cmd.text, "nonce": cmd.nonce]
+        }
+        return out
     }
 }
 

@@ -13,6 +13,10 @@ struct MusicAgentApp: App {
         WindowGroup {
             ContentView()
                 .preferredColorScheme(.dark)
+                .task {
+                    // Resolve cookie-based session silently on every launch.
+                    await AuthStore.shared.bootstrap()
+                }
         }
     }
 }

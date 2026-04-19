@@ -27,8 +27,6 @@
 	</dict>
 	<key>NSAppleMusicUsageDescription</key>
 	<string>Playheads uses Apple Music to play and explore songs in your mood feed.</string>
-	<key>RCTNewArchEnabled</key>
-	<true/>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

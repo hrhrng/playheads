@@ -1,175 +1,118 @@
-import React, { memo, useEffect, useRef } from "react";
-import {
-  FlatList,
-  Platform,
-  StyleSheet,
-  Text,
-  View,
-  type ListRenderItem,
-} from "react-native";
+import React, { useEffect, useRef } from "react";
+import { NativeModules } from "react-native";
+import { useAgent } from "agents/react";
+import { useAgentChat } from "@cloudflare/ai-chat/react";
+import { buildSpecFromParts, getTextFromParts } from "@json-render/react";
 
-// Props come from SwiftUI via `appProperties` on the RN root view.
-// RN owns only the message list — composer / send / network all stay native.
-export type Message = {
-  id: string;
-  role: "user" | "agent";
-  text: string;
+/// Headless RN host. Runs useAgentChat + @json-render/react extraction, then
+/// pushes simplified messages into native via ChatBridge. SwiftUI owns all
+/// visible rendering — this component returns null.
+///
+/// Native → JS goes through `props.pendingUserMessage.nonce` so the same text
+/// sent twice still triggers a new sendMessage call.
+
+const { ChatBridge } = NativeModules as {
+  ChatBridge?: {
+    updateMessages: (messages: SimplifiedMessage[]) => void;
+    dispatchMusicAction: (payload: Record<string, unknown>) => void;
+  };
 };
 
 export type Props = {
-  messages?: Message[];
+  baseUrl?: string;
+  sessionId?: string;
+  userId?: string;
+  storefront?: string;
+  /** Component types this client can render. Agent uses it to filter the
+   *  json-render catalog so the model never emits an unknown component. */
+  genuiWhitelist?: string[];
+  pendingUserMessage?: { text: string; nonce: string };
 };
 
-// Palette derived from SwiftUI Theme.swift — pageInk (#D8CFBF). Later versions
-// will accept these as props from native so they track the mood palette.
-const INK = "rgba(216,207,191,1)";
-const INK_92 = "rgba(216,207,191,0.92)";
-const INK_45 = "rgba(216,207,191,0.45)";
-const RULE = "rgba(216,207,191,0.22)";
-const CHIP = "rgba(216,207,191,0.10)";
-const CHIP_EDGE = "rgba(216,207,191,0.18)";
-const SERIF = Platform.select({ ios: "New York", default: "serif" });
+type SimplifiedMessage = {
+  id: string;
+  role: "user" | "agent";
+  text: string;
+  reasoning?: string;
+  spec?: unknown;
+  status?: string;
+};
 
-type Row = { message: Message; marginTop: number };
+type RawPart = { type: string; text?: string; data?: unknown };
 
-function buildRows(messages: Message[]): Row[] {
-  return messages.map((m, i) => {
-    const prev = i > 0 ? messages[i - 1] : undefined;
-    const marginTop = !prev
-      ? 0
-      : prev.role === m.role
-        ? 12
-        : m.role === "agent"
-          ? 20
-          : 16;
-    return { message: m, marginTop };
-  });
-}
-
-export default function App({ messages = [] }: Props) {
-  const listRef = useRef<FlatList<Row>>(null);
-  const rows = React.useMemo(() => buildRows(messages), [messages]);
-
-  useEffect(() => {
-    if (rows.length > 0) {
-      listRef.current?.scrollToEnd({ animated: true });
+export default function App({
+  baseUrl = "https://playheads.ai",
+  sessionId = "default",
+  userId = "anon",
+  storefront = "us",
+  genuiWhitelist,
+  pendingUserMessage,
+}: Props) {
+  const host = React.useMemo(() => {
+    try {
+      return new URL(baseUrl).host;
+    } catch {
+      return "playheads.ai";
     }
-  }, [rows.length]);
+  }, [baseUrl]);
 
-  const renderItem: ListRenderItem<Row> = ({ item }) =>
-    item.message.role === "user" ? (
-      <UserBubble text={item.message.text} marginTop={item.marginTop} />
-    ) : (
-      <AgentBlock text={item.message.text} marginTop={item.marginTop} />
-    );
+  const agent = useAgent({
+    agent: "MusicChatAgent",
+    name: sessionId,
+    host,
+  });
 
-  return (
-    <FlatList
-      ref={listRef}
-      style={styles.feed}
-      contentContainerStyle={styles.feedInner}
-      data={rows}
-      keyExtractor={(r) => r.message.id}
-      renderItem={renderItem}
-      removeClippedSubviews
-      initialNumToRender={12}
-      maxToRenderPerBatch={8}
-      windowSize={7}
-      ListEmptyComponent={
-        <Text style={styles.placeholder}>Ask anything about this song.</Text>
-      }
-    />
-  );
+  const { messages, sendMessage, status } = useAgentChat({
+    agent,
+    body: {
+      session_id: sessionId,
+      user_id: userId,
+      storefront,
+      // Forwarded from native. Backend narrows the json-render catalog to this
+      // set so the model only emits components this client can render.
+      ...(genuiWhitelist && genuiWhitelist.length > 0
+        ? { genui_whitelist: genuiWhitelist }
+        : {}),
+    },
+    onData(part: { type: string; data: unknown }) {
+      if (part.type !== "data-music-action") return;
+      ChatBridge?.dispatchMusicAction(part.data as Record<string, unknown>);
+    },
+  });
+
+  // Emit simplified messages to Swift whenever the agent state changes.
+  useEffect(() => {
+    if (!ChatBridge) return;
+    const simplified: SimplifiedMessage[] = messages.map((m: any) => {
+      const parts = (m.parts ?? []) as RawPart[];
+      const text = getTextFromParts(parts as any);
+      const spec = buildSpecFromParts(parts as any);
+      const reasoning = parts
+        .filter((p) => p.type === "reasoning")
+        .map((p) => (p.text ?? "").trim())
+        .filter(Boolean)
+        .join("\n\n");
+      return {
+        id: String(m.id ?? Math.random().toString(36).slice(2)),
+        role: m.role === "assistant" ? "agent" : (m.role as "user"),
+        text,
+        reasoning: reasoning || undefined,
+        spec: spec ?? undefined,
+        status,
+      };
+    });
+    ChatBridge.updateMessages(simplified);
+  }, [messages, status]);
+
+  // Native → JS send command. Watch the nonce so SwiftUI can trigger the same
+  // text twice (reopen / retry) without de-duping on text alone.
+  const lastNonce = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (!pendingUserMessage?.nonce) return;
+    if (pendingUserMessage.nonce === lastNonce.current) return;
+    lastNonce.current = pendingUserMessage.nonce;
+    sendMessage({ text: pendingUserMessage.text });
+  }, [pendingUserMessage?.nonce, pendingUserMessage?.text, sendMessage]);
+
+  return null;
 }
-
-const UserBubble = memo(function UserBubble({
-  text,
-  marginTop,
-}: {
-  text: string;
-  marginTop: number;
-}) {
-  return (
-    <View
-      style={[styles.userRow, { marginTop }]}
-      accessible
-      accessibilityRole="text"
-      accessibilityLabel={`You: ${text}`}
-    >
-      <View style={styles.userBubble}>
-        <Text style={styles.userText}>{text}</Text>
-      </View>
-    </View>
-  );
-});
-
-const AgentBlock = memo(function AgentBlock({
-  text,
-  marginTop,
-}: {
-  text: string;
-  marginTop: number;
-}) {
-  return (
-    <View
-      style={[styles.agentRow, { marginTop }]}
-      accessible
-      accessibilityRole="text"
-      accessibilityLabel={`Agent: ${text}`}
-    >
-      <View style={styles.agentRule} />
-      <Text style={styles.agentText}>{text}</Text>
-    </View>
-  );
-});
-
-const styles = StyleSheet.create({
-  feed: { flex: 1, backgroundColor: "transparent" },
-  feedInner: { paddingHorizontal: 18, paddingVertical: 14 },
-  placeholder: {
-    color: INK_45,
-    fontSize: 13,
-    fontStyle: "italic",
-    fontFamily: SERIF,
-    textAlign: "center",
-    marginTop: 80,
-  },
-  userRow: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-  },
-  userBubble: {
-    maxWidth: "76%",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 18,
-    backgroundColor: CHIP,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: CHIP_EDGE,
-  },
-  userText: {
-    color: INK_92,
-    fontSize: 15,
-    fontFamily: SERIF,
-    lineHeight: 21,
-  },
-  agentRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    paddingRight: 8,
-  },
-  agentRule: {
-    width: 2,
-    alignSelf: "stretch",
-    backgroundColor: RULE,
-    borderRadius: 1,
-  },
-  agentText: {
-    flex: 1,
-    marginLeft: 14,
-    color: INK,
-    fontSize: 16,
-    lineHeight: 23,
-    fontFamily: SERIF,
-  },
-});
