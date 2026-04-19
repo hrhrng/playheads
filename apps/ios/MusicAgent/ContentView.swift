@@ -297,20 +297,19 @@ struct InnerCard: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(track.songName)
-                        .font(.system(size: 23, weight: .medium, design: .serif))
+                        .font(.display(size: 23, weight: .medium))
                         .kerning(-0.2)
                         .foregroundStyle(track.ink)
                     Text(track.artist)
-                        .font(.system(size: 13.5, weight: .regular, design: .serif))
+                        .font(.system(size: 13.5, weight: .regular))
                         .foregroundStyle(track.ink2)
                         .padding(.bottom, 6)
                     // 3-line lyric preview — tap to expand.
                     VStack(alignment: .leading, spacing: 6) {
                         ForEach(Array(track.lyrics.enumerated()), id: \.offset) { idx, line in
                             Text(line)
-                                .font(.system(size: 14.5,
-                                              weight: idx == track.currentLyricIndex ? .medium : .regular,
-                                              design: .serif))
+                                .font(.display(size: 14.5,
+                                               weight: idx == track.currentLyricIndex ? .medium : .regular))
                                 .foregroundStyle(idx == track.currentLyricIndex ? track.ink : track.ink4)
                                 .lineSpacing(6)
                         }
@@ -330,12 +329,12 @@ struct InnerCard: View {
                     .matchedGeometryEffect(id: "cover", in: morphNS, anchor: .topLeading)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(track.songName)
-                        .font(.system(size: 18, weight: .medium, design: .serif))
+                        .font(.display(size: 18, weight: .medium))
                         .kerning(-0.2)
                         .foregroundStyle(track.ink)
                         .lineLimit(1)
                     Text(track.artist)
-                        .font(.system(size: 13, weight: .regular, design: .serif))
+                        .font(.system(size: 13, weight: .regular))
                         .foregroundStyle(track.ink2)
                         .lineLimit(1)
                 }
@@ -368,9 +367,8 @@ struct LyricsScroll: View {
                 ForEach(lines.indices, id: \.self) { i in
                     let isActive = i % max(track.lyrics.count, 1) == track.currentLyricIndex
                     Text(lines[i])
-                        .font(.system(size: 26,
-                                      weight: isActive ? .semibold : .medium,
-                                      design: .serif))
+                        .font(.display(size: 26,
+                                       weight: isActive ? .semibold : .medium))
                         .foregroundStyle(isActive ? track.ink : track.ink4)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -472,7 +470,7 @@ struct TopBar: View {
             }
             Spacer()
             Text(title)
-                .font(.system(size: 14, weight: .medium, design: .serif))
+                .font(.display(size: 14, weight: .medium))
                 .foregroundStyle(ink)
             Spacer()
             Button { } label: {
@@ -598,7 +596,7 @@ struct ProgressRow: View {
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
             Text(currentLabel)
-                .font(.system(size: 12, weight: .regular, design: .serif))
+                .font(.system(size: 12, weight: .regular))
                 .monospacedDigit()
                 .foregroundStyle(track.ink3)
 
@@ -647,7 +645,7 @@ struct ProgressRow: View {
             .frame(height: 22)
 
             Text(totalLabel)
-                .font(.system(size: 12, weight: .regular, design: .serif))
+                .font(.system(size: 12, weight: .regular))
                 .monospacedDigit()
                 .foregroundStyle(track.ink3)
 
@@ -755,13 +753,13 @@ struct ChatBar: View {
         switch mode {
         case .pill:
             Text(track.chatHint)
-                .font(.system(size: 14.5, weight: .regular, design: .serif))
+                .font(.display(size: 14.5, weight: .regular))
                 .foregroundStyle(track.ink3)
         case let .composer(text, focused, onSubmit):
             TextField(track.chatHint, text: text, axis: .vertical)
                 .textFieldStyle(.plain)
                 .lineLimit(1...4)
-                .font(.system(size: 14.5, weight: .regular, design: .serif))
+                .font(.display(size: 14.5, weight: .regular))
                 .foregroundStyle(track.ink)
                 .tint(track.ink)
                 .focused(focused)
@@ -931,10 +929,10 @@ struct ChatOverlay: View {
                 if let t = track {
                     VStack(spacing: 2) {
                         Text(t.songName)
-                            .font(.system(size: 13, weight: .semibold, design: .serif))
+                            .font(.display(size: 13, weight: .semibold))
                             .foregroundStyle(.white.opacity(0.92))
                         Text(t.artist)
-                            .font(.system(size: 11, design: .serif))
+                            .font(.system(size: 11))
                             .foregroundStyle(.white.opacity(0.55))
                     }
                     .padding(.bottom, 8)

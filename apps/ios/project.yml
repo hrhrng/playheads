@@ -39,6 +39,11 @@ targets:
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
         NSAppleMusicUsageDescription: Playheads uses Apple Music to play and explore songs in your mood feed.
+        # Custom display face — see Typography.swift. Registering here tells
+        # CoreText to load the TTF on launch so SwiftUI's Font.custom() call
+        # resolves without runtime registration ceremony.
+        UIAppFonts:
+          - LXGWWenKaiScreen.ttf
         # Allow Metro bundler on localhost during development.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true

@@ -19,19 +19,19 @@ struct GenUIAlbumCard: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(.system(size: 16, weight: .semibold, design: .serif))
+                    .font(.display(size: 16, weight: .semibold))
                     .foregroundStyle(track?.ink ?? .white)
                     .lineLimit(2)
                 HStack(spacing: 6) {
                     Text(subtitle)
-                        .font(.system(size: 12, design: .serif))
+                        .font(.system(size: 12))
                         .foregroundStyle(track?.ink2 ?? .white.opacity(0.7))
                     if let y = year, !y.isEmpty {
                         Text("·")
-                            .font(.system(size: 12, design: .serif))
+                            .font(.system(size: 12))
                             .foregroundStyle(track?.ink3 ?? .white.opacity(0.45))
                         Text(y)
-                            .font(.system(size: 11, design: .serif))
+                            .font(.system(size: 11))
                             .foregroundStyle(track?.ink3 ?? .white.opacity(0.5))
                             .monospacedDigit()
                     }
@@ -62,14 +62,14 @@ struct GenUIAlbumDetail: View {
                 .frame(width: 120, height: 120)
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(.system(size: 18, weight: .semibold, design: .serif))
+                    .font(.display(size: 18, weight: .semibold))
                     .foregroundStyle(track?.ink ?? .white)
                 Text(subtitle)
-                    .font(.system(size: 13, design: .serif))
+                    .font(.system(size: 13))
                     .foregroundStyle(track?.ink2 ?? .white.opacity(0.7))
                 if let y = year, !y.isEmpty {
                     Text(y)
-                        .font(.system(size: 11, design: .serif))
+                        .font(.system(size: 11))
                         .foregroundStyle(track?.ink3 ?? .white.opacity(0.5))
                         .monospacedDigit()
                         .padding(.top, 1)
@@ -101,11 +101,11 @@ struct GenUIArtistSpotlight: View {
                     .overlay(Circle().strokeBorder(track?.ruleColor ?? Color.white.opacity(0.18), lineWidth: 0.5))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(name)
-                        .font(.system(size: 18, weight: .semibold, design: .serif))
+                        .font(.display(size: 18, weight: .semibold))
                         .foregroundStyle(track?.ink ?? .white)
                     if let s = subtitle, !s.isEmpty {
                         Text(s)
-                            .font(.system(size: 12, design: .serif))
+                            .font(.system(size: 12))
                             .foregroundStyle(track?.ink3 ?? .white.opacity(0.5))
                     }
                 }
@@ -114,7 +114,7 @@ struct GenUIArtistSpotlight: View {
 
             if let b = bio, !b.isEmpty {
                 Text(b)
-                    .font(.system(size: 14, design: .serif))
+                    .font(.display(size: 14))
                     .foregroundStyle(track?.ink2 ?? .white.opacity(0.75))
                     .lineSpacing(3)
             }
@@ -124,11 +124,11 @@ struct GenUIArtistSpotlight: View {
                     ForEach(Array(stats.enumerated()), id: \.offset) { _, stat in
                         VStack(alignment: .leading, spacing: 2) {
                             Text(stat.string("value") ?? "")
-                                .font(.system(size: 15, weight: .semibold, design: .serif))
+                                .font(.display(size: 15, weight: .semibold))
                                 .foregroundStyle(track?.ink ?? .white)
                                 .monospacedDigit()
                             Text(stat.string("label") ?? "")
-                                .font(.system(size: 10, design: .serif))
+                                .font(.system(size: 10))
                                 .foregroundStyle(track?.ink3 ?? .white.opacity(0.5))
                                 .textCase(.uppercase)
                                 .kerning(0.4)
@@ -172,7 +172,7 @@ private struct BadgePill: View {
         let border: Color = track?.ruleColor ?? Color.white.opacity(0.12)
 
         Text(label)
-            .font(.system(size: 11, weight: .medium, design: .serif))
+            .font(.system(size: 11, weight: .medium))
             .foregroundStyle(foreground)
             .padding(.horizontal, 9)
             .padding(.vertical, 3)
@@ -197,7 +197,7 @@ struct GenUILyricsCard: View {
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
                     Text(line)
-                        .font(.system(size: 17, weight: .regular, design: .serif))
+                        .font(.display(size: 17, weight: .regular))
                         .italic()
                         .foregroundStyle(track?.ink ?? .white)
                         .lineSpacing(2)
@@ -217,7 +217,7 @@ struct GenUILyricsCard: View {
                 Text(artist)
                     .foregroundStyle(track?.ink3 ?? .white.opacity(0.6))
             }
-            .font(.system(size: 11, design: .serif))
+            .font(.system(size: 11))
             .foregroundStyle(track?.ink2 ?? .white.opacity(0.7))
             .padding(.leading, 14)
         }
@@ -251,11 +251,11 @@ struct GenUIMoodBoard: View {
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(mood)
-                        .font(.system(size: 18, weight: .semibold, design: .serif))
+                        .font(.display(size: 18, weight: .semibold))
                         .foregroundStyle(track?.ink ?? .white)
                     if let d = description, !d.isEmpty {
                         Text(d)
-                            .font(.system(size: 12, design: .serif))
+                            .font(.system(size: 12))
                             .foregroundStyle(track?.ink2 ?? .white.opacity(0.7))
                             .lineSpacing(2)
                     }
@@ -292,11 +292,11 @@ struct GenUIStat: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(props.string("value") ?? "")
-                .font(.system(size: 20, weight: .semibold, design: .serif))
+                .font(.display(size: 20, weight: .semibold))
                 .foregroundStyle(track?.ink ?? .white)
                 .monospacedDigit()
             Text(props.string("label") ?? "")
-                .font(.system(size: 10, design: .serif))
+                .font(.system(size: 10))
                 .foregroundStyle(track?.ink3 ?? .white.opacity(0.5))
                 .textCase(.uppercase)
                 .kerning(0.4)
@@ -334,17 +334,17 @@ struct GenUITimelineEra: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(year)
-                        .font(.system(size: 13, weight: .semibold, design: .serif))
+                        .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(track?.ink ?? .white)
                         .monospacedDigit()
                     Text(label)
-                        .font(.system(size: 12, design: .serif))
+                        .font(.system(size: 12))
                         .foregroundStyle(track?.ink2 ?? .white.opacity(0.7))
                     Spacer(minLength: 0)
                 }
                 if let d = description, !d.isEmpty {
                     Text(d)
-                        .font(.system(size: 11, design: .serif))
+                        .font(.system(size: 11))
                         .foregroundStyle(track?.ink3 ?? .white.opacity(0.5))
                         .lineSpacing(2)
                 }

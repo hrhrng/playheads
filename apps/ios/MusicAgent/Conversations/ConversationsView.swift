@@ -27,7 +27,7 @@ struct ConversationsView: View {
                             .font(.system(size: 14, weight: .medium))
                             .foregroundStyle(ink)
                         Text("New conversation")
-                            .font(.system(size: 15, weight: .medium, design: .serif))
+                            .font(.display(size: 15, weight: .medium))
                             .foregroundStyle(ink)
                         Spacer(minLength: 0)
                     }
@@ -129,11 +129,11 @@ struct ConversationsView: View {
     private var emptyState: some View {
         VStack(spacing: 6) {
             Text("No conversations yet")
-                .font(.system(size: 14, design: .serif))
+                .font(.display(size: 14))
                 .italic()
                 .foregroundStyle(ink3)
             Text("Send a message to start one.")
-                .font(.system(size: 12, design: .serif))
+                .font(.system(size: 12))
                 .foregroundStyle(ink3.opacity(0.75))
         }
         .frame(maxWidth: .infinity)
@@ -184,18 +184,18 @@ private struct ConversationRow: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(displayTitle)
-                    .font(.system(size: 15, weight: isActive ? .semibold : .regular, design: .serif))
+                    .font(.display(size: 15, weight: isActive ? .semibold : .regular))
                     .foregroundStyle(ink)
                     .lineLimit(1)
                 if let preview = conversation.lastMessagePreview, !preview.isEmpty {
                     Text(preview)
-                        .font(.system(size: 12.5, design: .serif))
+                        .font(.system(size: 12.5))
                         .foregroundStyle(ink3)
                         .lineLimit(1)
                 }
                 if let rel = relativeTime {
                     Text(rel)
-                        .font(.system(size: 11, design: .serif))
+                        .font(.system(size: 11))
                         .foregroundStyle(ink3.opacity(0.75))
                 }
             }

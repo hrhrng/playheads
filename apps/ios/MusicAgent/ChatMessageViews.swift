@@ -59,7 +59,7 @@ struct EmptyChatHint: View {
     let track: MoodTrack?
     var body: some View {
         Text("Ask anything about this song.")
-            .font(.system(size: 13, design: .serif))
+            .font(.system(size: 13))
             .italic()
             .foregroundStyle(track?.ink3 ?? .white.opacity(0.45))
             .frame(maxWidth: .infinity)
@@ -75,7 +75,7 @@ struct UserBubbleView: View {
         HStack {
             Spacer(minLength: 0)
             Text(text)
-                .font(.system(size: 15, design: .serif))
+                .font(.display(size: 15))
                 .foregroundStyle(track?.ink ?? .white)
                 .lineSpacing(3)
                 .padding(.horizontal, 14)
@@ -132,7 +132,7 @@ struct AgentBlock: View {
                 .fill(track?.ruleColor ?? Color.white.opacity(0.18))
                 .frame(width: 2)
             Text(text)
-                .font(.system(size: 16, design: .serif))
+                .font(.display(size: 16))
                 .foregroundStyle(track?.ink ?? .white)
                 .lineSpacing(4)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -163,7 +163,7 @@ struct ReasoningBlock: View {
                     Image(systemName: expanded ? "chevron.down" : "chevron.right")
                         .font(.system(size: 10, weight: .semibold))
                     Text("Thinking")
-                        .font(.system(size: 11, weight: .medium, design: .serif))
+                        .font(.system(size: 11, weight: .medium))
                     if autoExpand {
                         // Small pulsing dot signals active thinking while
                         // streaming, in case the reasoning is short enough
@@ -178,7 +178,7 @@ struct ReasoningBlock: View {
 
             if expanded {
                 Text(text)
-                    .font(.system(size: 13, design: .serif))
+                    .font(.system(size: 13))
                     .italic()
                     .foregroundStyle(track?.ink3 ?? .white.opacity(0.55))
                     .lineSpacing(3)

@@ -13,10 +13,10 @@ struct SignInGate: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("Sign in to chat")
-                    .font(.system(size: 22, weight: .semibold, design: .serif))
+                    .font(.display(size: 22, weight: .semibold))
                     .foregroundStyle(track?.ink ?? .white)
                 Text("Your conversations sync across devices. Nothing else uses your account.")
-                    .font(.system(size: 14, design: .serif))
+                    .font(.display(size: 14))
                     .foregroundStyle(track?.ink2 ?? .white.opacity(0.7))
                     .lineSpacing(3)
             }
@@ -54,7 +54,7 @@ struct SignInGate: View {
 
             if case let .error(msg) = auth.state {
                 Text(msg)
-                    .font(.system(size: 12, design: .serif))
+                    .font(.system(size: 12))
                     .foregroundStyle(Color(red: 0.95, green: 0.55, blue: 0.45))
                     .padding(.horizontal, 20)
             }

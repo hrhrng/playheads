@@ -32,6 +32,10 @@
 	</dict>
 	<key>NSAppleMusicUsageDescription</key>
 	<string>Playheads uses Apple Music to play and explore songs in your mood feed.</string>
+	<key>UIAppFonts</key>
+	<array>
+		<string>LXGWWenKaiScreen.ttf</string>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

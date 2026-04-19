@@ -32,9 +32,9 @@ struct GenUITextBlock: View {
 
     private func font(for variant: String) -> Font {
         switch variant {
-        case "heading": return .system(size: 18, weight: .semibold, design: .serif)
-        case "caption": return .system(size: 12, design: .serif)
-        default: return .system(size: 16, design: .serif)
+        case "heading": return .display(size: 18, weight: .semibold)
+        case "caption": return .system(size: 12)
+        default: return .display(size: 16)
         }
     }
 
@@ -76,12 +76,12 @@ struct GenUISection: View {
         VStack(alignment: .leading, spacing: 8) {
             if let title = props.string("title"), !title.isEmpty {
                 Text(title)
-                    .font(.system(size: 14, weight: .semibold, design: .serif))
+                    .font(.display(size: 14, weight: .semibold))
                     .foregroundStyle(track?.ink ?? .white)
             }
             if let sub = props.string("subtitle"), !sub.isEmpty {
                 Text(sub)
-                    .font(.system(size: 11, design: .serif))
+                    .font(.system(size: 11))
                     .foregroundStyle(track?.ink3 ?? .white.opacity(0.5))
                     .padding(.bottom, 2)
             }
@@ -124,15 +124,15 @@ struct GenUITrackCard: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 14, weight: .semibold, design: .serif))
+                    .font(.display(size: 14, weight: .semibold))
                     .foregroundStyle(track?.ink ?? .white)
                     .lineLimit(2)
                 Text(artist)
-                    .font(.system(size: 12, design: .serif))
+                    .font(.system(size: 12))
                     .foregroundStyle(track?.ink2 ?? .white.opacity(0.7))
                 if let album, !album.isEmpty {
                     Text(album)
-                        .font(.system(size: 11, design: .serif))
+                        .font(.system(size: 11))
                         .foregroundStyle(track?.ink3 ?? .white.opacity(0.5))
                 }
             }
