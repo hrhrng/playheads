@@ -671,10 +671,10 @@ struct ProgressRow: View {
                     }
                     .overlay(Circle().fill(track.chipBg).allowsHitTesting(false))
                     .overlay(Circle().strokeBorder(track.ruleColor, lineWidth: 1).allowsHitTesting(false))
-                    .frame(width: 42, height: 42)
+                    .frame(width: 50, height: 50)
 
                     Image(systemName: showingPause ? "pause.fill" : "play.fill")
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.system(size: 17, weight: .semibold))
                         .foregroundStyle(track.ink)
                         .offset(x: showingPause ? 0 : 1)
                 }
@@ -721,7 +721,7 @@ struct ChatBar: View {
             trailingButtons
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 8)
+        .padding(.vertical, 10)
 
         let bar = Group {
             if #available(iOS 26.0, *) {
