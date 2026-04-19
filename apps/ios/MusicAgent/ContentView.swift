@@ -1,11 +1,14 @@
 import SwiftUI
 
+enum LyricsLevel: Int { case idle = 0, half = 1, full = 2 }
+
 struct ContentView: View {
     @StateObject private var viewModel = MoodFeedViewModel()
     @ObservedObject private var playback = PlaybackController.shared
     @ObservedObject private var palette = PaletteStore.shared
     @State private var currentId: String?
     @State private var chatOpen: Bool = false
+    @State private var lyricsLevel: LyricsLevel = .idle
     @Namespace private var chatNS
 
     private var currentTrack: MoodTrack? {
@@ -23,9 +26,13 @@ struct ContentView: View {
                 backgroundLayer
                     .ignoresSafeArea()
 
-                // 2. Full-screen paginated inner feed — scrolls BEHIND chrome
+                // 2. Full-screen paginated inner feed — scrolls BEHIND chrome.
+                //    When lyrics is fully expanded, the chrome is gone so the
+                //    card reclaims that 110pt for lyrics.
                 innerFeed(topPad: proxy.safeAreaInsets.top + 56,
-                          bottomPad: max(proxy.safeAreaInsets.bottom, 12) + 110)
+                          bottomPad: lyricsLevel == .full
+                              ? max(proxy.safeAreaInsets.bottom, 12)
+                              : max(proxy.safeAreaInsets.bottom, 12) + 110)
 
                 // 3. Transparent chrome overlay. Pill is hidden while chat is
                 //    open so its matchedGeometryEffect partner (composer in
@@ -34,11 +41,11 @@ struct ContentView: View {
                     headerLayer
                         .padding(.horizontal, 18)
                     Spacer(minLength: 0)
-                    if !chatOpen {
+                    if !chatOpen && lyricsLevel != .full {
                         bottomLayer
                             .padding(.horizontal, 18)
                             .padding(.bottom, 4)
-                            .transition(.opacity)
+                            .transition(.move(edge: .bottom))
                     }
                 }
 
@@ -78,6 +85,13 @@ struct ContentView: View {
             // Swipe between cards: carry playing/paused intent forward.
             loadCurrent(id: newId, policy: .continueIfPlaying)
             extractPalette(id: newId)
+            // Reset lyrics to idle when user swipes to a different track —
+            // each card manages its own lyrics state cleanly.
+            if lyricsLevel != .idle {
+                withAnimation(lyricsSpring) {
+                    lyricsLevel = .idle
+                }
+            }
         }
         .onReceive(playback.trackEnded) { _ in
             advanceToNext()
@@ -156,19 +170,58 @@ struct ContentView: View {
             ScrollView(.vertical, showsIndicators: false) {
                 LazyVStack(spacing: 0) {
                     ForEach(viewModel.tracks) { track in
-                        InnerCard(track: track, topPad: topPad, bottomPad: bottomPad)
-                            .frame(width: geo.size.width, height: geo.size.height)
-                            .id(track.id)
+                        InnerCard(
+                            track: track,
+                            topPad: topPad,
+                            bottomPad: bottomPad,
+                            lyricsLevel: track.id == currentId ? lyricsLevel : .idle,
+                            onToggleLyrics: toggleLyrics
+                        )
+                        .frame(width: geo.size.width, height: geo.size.height)
+                        .id(track.id)
                     }
                 }
                 .scrollTargetLayout()
             }
             .scrollTargetBehavior(.paging)
             .scrollPosition(id: $currentId)
+            .scrollDisabled(lyricsLevel != .idle)
             .scrollContentBackground(.hidden)
             .background(Color.clear)
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 24)
+                    .onEnded { v in
+                        // Only active when lyrics is at least half-expanded —
+                        // drag up → full, drag down → collapse one level.
+                        guard lyricsLevel != .idle else { return }
+                        let dy = v.translation.height
+                        if dy < -60 && lyricsLevel == .half {
+                            setLyricsLevel(.full)
+                        } else if dy > 60 {
+                            setLyricsLevel(lyricsLevel == .full ? .half : .idle)
+                        }
+                    }
+            )
         }
         .ignoresSafeArea()
+    }
+
+    // Sheet-like spring: slower response, a touch more bounce so the chrome's
+    // slide-off feels weighty (matches iOS native sheet dismissal timing).
+    private var lyricsSpring: Animation {
+        .spring(response: 0.55, dampingFraction: 0.82)
+    }
+
+    private func toggleLyrics() {
+        withAnimation(lyricsSpring) {
+            lyricsLevel = (lyricsLevel == .idle) ? .half : .idle
+        }
+    }
+
+    private func setLyricsLevel(_ level: LyricsLevel) {
+        withAnimation(lyricsSpring) {
+            lyricsLevel = level
+        }
     }
 
     // MARK: Fixed bottom chrome
@@ -198,19 +251,133 @@ struct InnerCard: View {
     let track: MoodTrack
     var topPad: CGFloat = 0
     var bottomPad: CGFloat = 0
+    var lyricsLevel: LyricsLevel = .idle
+    var onToggleLyrics: () -> Void = {}
+    @Namespace private var morphNS
+
+    private var coverSize: CGFloat? {
+        switch lyricsLevel {
+        case .idle: return nil           // fills available width
+        case .half: return 96
+        case .full: return 44
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
-            Spacer(minLength: 0)
-            VStack(alignment: .leading, spacing: 22) {
-                AlbumCover(track: track)
-                MetaBlock(track: track)
+            headerRow
+                .padding(.horizontal, 20)
+                .padding(.top, 12)
+
+            if lyricsLevel == .idle {
+                Spacer(minLength: 0)
+            } else {
+                LyricsScroll(track: track)
+                    .padding(.top, 16)
+                    .padding(.horizontal, 20)
+                    // Delay the fade-in so the cover/meta matchedGeometry morph
+                    // finishes first — otherwise the scroll's first line renders
+                    // mid-frame at an interpolated position and flashes.
+                    .transition(.asymmetric(
+                        insertion: .opacity.animation(.easeOut(duration: 0.22).delay(0.22)),
+                        removal: .opacity.animation(.easeOut(duration: 0.12))
+                    ))
             }
-            .padding(.horizontal, 20)
-            Spacer(minLength: 0)
         }
         .padding(.top, topPad)
         .padding(.bottom, bottomPad)
+    }
+
+    @ViewBuilder
+    private var headerRow: some View {
+        if lyricsLevel == .idle {
+            VStack(alignment: .leading, spacing: 22) {
+                AlbumCover(track: track)
+                    .matchedGeometryEffect(id: "cover", in: morphNS, anchor: .topLeading)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(track.songName)
+                        .font(.system(size: 23, weight: .medium, design: .serif))
+                        .kerning(-0.2)
+                        .foregroundStyle(track.ink)
+                    Text(track.artist)
+                        .font(.system(size: 13.5, weight: .regular, design: .serif))
+                        .foregroundStyle(track.ink2)
+                        .padding(.bottom, 6)
+                    // 3-line lyric preview — tap to expand.
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(Array(track.lyrics.enumerated()), id: \.offset) { idx, line in
+                            Text(line)
+                                .font(.system(size: 14.5,
+                                              weight: idx == track.currentLyricIndex ? .medium : .regular,
+                                              design: .serif))
+                                .foregroundStyle(idx == track.currentLyricIndex ? track.ink : track.ink4)
+                                .lineSpacing(6)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.5)
+                        onToggleLyrics()
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        } else {
+            HStack(alignment: .center, spacing: 14) {
+                AlbumCover(track: track)
+                    .frame(width: coverSize, height: coverSize)
+                    .matchedGeometryEffect(id: "cover", in: morphNS, anchor: .topLeading)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(track.songName)
+                        .font(.system(size: 18, weight: .medium, design: .serif))
+                        .kerning(-0.2)
+                        .foregroundStyle(track.ink)
+                        .lineLimit(1)
+                    Text(track.artist)
+                        .font(.system(size: 13, weight: .regular, design: .serif))
+                        .foregroundStyle(track.ink2)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                Button(action: onToggleLyrics) {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(track.ink3)
+                        .frame(width: 30, height: 30)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+}
+
+// MARK: - Lyrics scroll (half + full panel content)
+
+struct LyricsScroll: View {
+    let track: MoodTrack
+
+    private var lines: [String] {
+        Array(repeating: track.lyrics, count: 6).flatMap { $0 }
+    }
+
+    var body: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 22) {
+                ForEach(lines.indices, id: \.self) { i in
+                    let isActive = i % max(track.lyrics.count, 1) == track.currentLyricIndex
+                    Text(lines[i])
+                        .font(.system(size: 26,
+                                      weight: isActive ? .semibold : .medium,
+                                      design: .serif))
+                        .foregroundStyle(isActive ? track.ink : track.ink4)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.bottom, 60)
+        }
     }
 }
 
@@ -388,32 +555,6 @@ struct AlbumCover: View {
 
 // MARK: - Meta / lyrics
 
-struct MetaBlock: View {
-    let track: MoodTrack
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(track.songName)
-                .font(.system(size: 23, weight: .medium, design: .serif))
-                .kerning(-0.2)
-                .foregroundStyle(track.ink)
-            Text(track.artist)
-                .font(.system(size: 13.5, weight: .regular, design: .serif))
-                .foregroundStyle(track.ink2)
-                .padding(.bottom, 6)
-            VStack(alignment: .leading, spacing: 6) {
-                ForEach(Array(track.lyrics.enumerated()), id: \.offset) { idx, line in
-                    Text(line)
-                        .font(.system(size: 14.5, weight: idx == track.currentLyricIndex ? .medium : .regular, design: .serif))
-                        .foregroundStyle(idx == track.currentLyricIndex ? track.ink : track.ink4)
-                        .lineSpacing(6)
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
 // MARK: - Progress + chat
 
 struct BottomStack: View {
@@ -523,26 +664,24 @@ struct ProgressRow: View {
                 }
             } label: {
                 ZStack {
-                    if #available(iOS 26.0, *) {
-                        Circle()
-                            .fill(Color.clear)
-                            .glassEffect(.regular, in: Circle())
-                            .overlay(Circle().fill(Color.black.opacity(0.18)))
-                            .overlay(Circle().strokeBorder(.white.opacity(0.12), lineWidth: 1))
-                            .frame(width: 42, height: 42)
-                        Image(systemName: showingPause ? "pause.fill" : "play.fill")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(track.ink)
-                            .offset(x: showingPause ? 0 : 1)
-                    } else {
-                        Circle()
-                            .fill(track.ink)
-                            .frame(width: 42, height: 42)
-                        Image(systemName: showingPause ? "pause.fill" : "play.fill")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(track.coverBtnBase)
-                            .offset(x: showingPause ? 0 : 1)
+                    Group {
+                        if #available(iOS 26.0, *) {
+                            Circle()
+                                .fill(Color.clear)
+                                .glassEffect(.regular, in: Circle())
+                        } else {
+                            Circle()
+                                .fill(.ultraThinMaterial)
+                        }
                     }
+                    .overlay(Circle().fill(track.chipBg).allowsHitTesting(false))
+                    .overlay(Circle().strokeBorder(track.ruleColor, lineWidth: 1).allowsHitTesting(false))
+                    .frame(width: 42, height: 42)
+
+                    Image(systemName: showingPause ? "pause.fill" : "play.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(track.ink)
+                        .offset(x: showingPause ? 0 : 1)
                 }
             }
             .buttonStyle(.plain)
@@ -596,8 +735,10 @@ struct ChatBar: View {
                 inner.background(.ultraThinMaterial, in: Capsule())
             }
         }
-        .overlay(Capsule().fill(track.chipBg))
-        .overlay(Capsule().stroke(track.ruleColor, lineWidth: 1))
+        // Decorative overlays must not absorb touches or they swallow the
+        // TextField's tap-to-focus event.
+        .overlay(Capsule().fill(track.chipBg).allowsHitTesting(false))
+        .overlay(Capsule().strokeBorder(track.ruleColor, lineWidth: 1).allowsHitTesting(false))
         .animation(.easeOut(duration: 0.15), value: isEmpty)
 
         // Only attach a whole-bar tap gesture in pill mode — if we attach it
@@ -636,9 +777,9 @@ struct ChatBar: View {
 
     @ViewBuilder
     private var trailingButtons: some View {
+        // Left slot: mic ↔ send (mic when empty, send when there's text).
         if isEmpty {
             iconButton("mic", action: onASR)
-            iconButton("waveform", action: onVoice)
         } else {
             Button {
                 if case let .composer(_, _, onSubmit) = mode { onSubmit() }
@@ -651,6 +792,8 @@ struct ChatBar: View {
             .buttonStyle(.plain)
             .transition(.scale.combined(with: .opacity))
         }
+        // Right slot: voice mode always stays visible.
+        iconButton("waveform", action: onVoice)
     }
 
     private func iconButton(_ system: String, action: @escaping () -> Void) -> some View {
@@ -724,39 +867,44 @@ struct ChatOverlay: View {
     @ViewBuilder
     private func sheet(height: CGFloat, screen: CGFloat) -> some View {
         VStack(spacing: 0) {
-            // Top bar: collapse button (left) + grab handle (centered)
-            ZStack {
-                Capsule()
-                    .fill(.white.opacity(0.32))
-                    .frame(width: 36, height: 5)
+            // Drag region: grab handle + collapse button + track meta. Only
+            // this area listens for the drag gesture so the TextField below
+            // keeps its own tap/focus handling intact.
+            VStack(spacing: 0) {
+                ZStack {
+                    Capsule()
+                        .fill(.white.opacity(0.32))
+                        .frame(width: 36, height: 5)
 
-                HStack {
-                    Button(action: dismiss) {
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.72))
-                            .frame(width: 30, height: 30)
-                            .contentShape(Rectangle())
+                    HStack {
+                        Button(action: dismiss) {
+                            Image(systemName: "chevron.down")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(.white.opacity(0.72))
+                                .frame(width: 30, height: 30)
+                                .contentShape(Rectangle())
+                        }
+                        Spacer()
                     }
-                    Spacer()
+                    .padding(.horizontal, 12)
                 }
-                .padding(.horizontal, 12)
-            }
-            .padding(.top, 8)
-            .padding(.bottom, 10)
+                .padding(.top, 8)
+                .padding(.bottom, 10)
 
-            // Header
-            if let t = track {
-                VStack(spacing: 2) {
-                    Text(t.songName)
-                        .font(.system(size: 13, weight: .semibold, design: .serif))
-                        .foregroundStyle(.white.opacity(0.92))
-                    Text(t.artist)
-                        .font(.system(size: 11, design: .serif))
-                        .foregroundStyle(.white.opacity(0.55))
+                if let t = track {
+                    VStack(spacing: 2) {
+                        Text(t.songName)
+                            .font(.system(size: 13, weight: .semibold, design: .serif))
+                            .foregroundStyle(.white.opacity(0.92))
+                        Text(t.artist)
+                            .font(.system(size: 11, design: .serif))
+                            .foregroundStyle(.white.opacity(0.55))
+                    }
+                    .padding(.bottom, 8)
                 }
-                .padding(.bottom, 8)
             }
+            .contentShape(Rectangle())
+            .gesture(dragGesture(screen: screen))
 
             // Message area — RN host drops here.
             ChatHostRepresentable(track: track)
@@ -780,7 +928,6 @@ struct ChatOverlay: View {
         .frame(height: height)
         .frame(maxWidth: .infinity)
         .background(sheetBackground)
-        .highPriorityGesture(dragGesture(screen: screen))
         .transition(.move(edge: .bottom))
     }
 
