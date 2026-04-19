@@ -17,6 +17,10 @@ export interface AuthEnv {
   APPLE_KEY_ID?: string;
   APPLE_TEAM_ID?: string;
   APPLE_PRIVATE_KEY?: string;
+  /** Comma-separated list of iOS bundle identifiers whose native SIWA
+   *  identity tokens should validate against this provider. Required for
+   *  native id-token sign-in; leave unset to serve web OAuth only. */
+  APPLE_APP_BUNDLE_IDENTIFIER?: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
 }
@@ -144,9 +148,23 @@ export async function createAuthWithApple(db: Parameters<typeof drizzleAdapter>[
   const socialProviders: Record<string, unknown> = {};
 
   if (env.APPLE_CLIENT_ID && _appleClientSecret) {
+    // Web OAuth flow validates `aud === clientId` (the Services ID). Native
+    // iOS SIWA issues tokens whose `aud` is the app bundle identifier, so we
+    // must explicitly declare which bundles to trust. No fallback default —
+    // silently trusting a hard-coded id would widen the trust boundary if
+    // this project is forked or redeployed. If the env isn't set, native
+    // id-token sign-in returns 400; web OAuth keeps working.
+    const bundleIds = env.APPLE_APP_BUNDLE_IDENTIFIER
+      ? env.APPLE_APP_BUNDLE_IDENTIFIER.split(",").map(s => s.trim()).filter(Boolean)
+      : [];
     socialProviders.apple = {
       clientId: env.APPLE_CLIENT_ID,
       clientSecret: _appleClientSecret,
+      ...(bundleIds.length === 1
+        ? { appBundleIdentifier: bundleIds[0] }
+        : bundleIds.length > 1
+          ? { appBundleIdentifier: bundleIds }
+          : {}),
     };
   }
 
