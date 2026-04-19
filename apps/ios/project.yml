@@ -27,6 +27,13 @@ targets:
       path: MusicAgent/Info.plist
       properties:
         CFBundleDisplayName: Playheads
+        CFBundleDevelopmentRegion: en
+        # Ship both localizations — Xcode compiles Localizable.xcstrings into
+        # per-locale .strings, and this list is what the App Store / system
+        # language picker use to decide which to serve.
+        CFBundleLocalizations:
+          - en
+          - zh-Hans
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         UIApplicationSceneManifest:

@@ -206,7 +206,9 @@ private struct ConversationRow: View {
 
     private var displayTitle: String {
         if let t = conversation.title, !t.isEmpty { return t }
-        return "Untitled"
+        // `Text(displayTitle)` takes a runtime String, so it won't run through
+        // LocalizedStringKey auto-lookup — localize here instead.
+        return String(localized: "Untitled")
     }
 
     private var relativeTime: String? {
