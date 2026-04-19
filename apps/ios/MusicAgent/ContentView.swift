@@ -815,14 +815,18 @@ struct ChatOverlay: View {
     let bottomSafeInset: CGFloat
     @Binding var isOpen: Bool
     @ObservedObject private var store = ConversationStore.shared
+    @ObservedObject private var convStore = ConversationsStore.shared
     @ObservedObject private var settings = DebugSettings.shared
     @ObservedObject private var auth = AuthStore.shared
     @State private var text: String = ""
     @FocusState private var focused: Bool
     @State private var detent: Detent = .medium
     @State private var dragOffset: CGFloat = 0   // + = dragging down
+    @State private var panel: Panel = .chat
+    @State private var creatingSession: Bool = false
 
     enum Detent { case medium, large }
+    enum Panel { case chat, list }
 
     private func height(for d: Detent, screen: CGFloat) -> CGFloat {
         switch d {
@@ -882,6 +886,15 @@ struct ChatOverlay: View {
                                 .frame(width: 30, height: 30)
                                 .contentShape(Rectangle())
                         }
+                        if auth.state.isSignedIn {
+                            Button(action: togglePanel) {
+                                Image(systemName: panel == .chat ? "list.bullet" : "bubble.left")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(.white.opacity(0.72))
+                                    .frame(width: 30, height: 30)
+                                    .contentShape(Rectangle())
+                            }
+                        }
                         Spacer()
                         #if DEBUG
                         Button(action: cycleEnv) {
@@ -931,33 +944,51 @@ struct ChatOverlay: View {
             .gesture(dragGesture(screen: screen))
 
             if auth.state.isSignedIn {
-                // RN is headless — runs useAgentChat and @json-render/react in
-                // the background, pushing parsed messages into ConversationStore
-                // via ChatBridge. SwiftUI renders everything natively above it.
-                ZStack(alignment: .top) {
-                    ChatMessagesView(store: store, track: track)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    ChatHostRepresentable(track: track, store: store)
-                        .frame(width: 0, height: 0)
-                        .accessibilityHidden(true)
-                        // Rebuild RN root when env / user flips so useAgent
-                        // re-hosts against the right base URL + identity.
-                        .id("\(settings.environment.rawValue):\(auth.state.user?.id ?? "anon")")
-                }
+                if panel == .chat {
+                    // RN is headless — runs useAgentChat and @json-render/react
+                    // in the background, pushing parsed messages into
+                    // ConversationStore via ChatBridge. SwiftUI renders
+                    // everything natively above it.
+                    ZStack(alignment: .top) {
+                        ChatMessagesView(store: store, track: track)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        if let sid = convStore.activeSessionId {
+                            ChatHostRepresentable(sessionId: sid, store: store)
+                                .frame(width: 0, height: 0)
+                                .accessibilityHidden(true)
+                                // Rebuild RN root when env / user flips so
+                                // useAgent re-hosts against the right base URL
+                                // + identity. Session id is a prop, not a
+                                // remount trigger — swapping sessions inside
+                                // the same user reuses the JS runtime and only
+                                // reconnects the agent WebSocket.
+                                .id("\(settings.environment.rawValue):\(auth.state.user?.id ?? "anon")")
+                        }
+                    }
 
-                // Composer — morphs from the pill. Bottom padding matches the
-                // pill's exact on-screen position (safeArea.bottom + 4) so the
-                // morph lands at the same y.
-                if let t = track {
-                    ChatBar(
-                        track: t,
-                        mode: .composer(text: $text, focused: $focused, onSubmit: send),
-                        onASR: startASR,
-                        onVoice: startVoiceMode
+                    // Composer — morphs from the pill. Bottom padding matches
+                    // the pill's exact on-screen position (safeArea.bottom +
+                    // 4) so the morph lands at the same y.
+                    if let t = track {
+                        ChatBar(
+                            track: t,
+                            mode: .composer(text: $text, focused: $focused, onSubmit: send),
+                            onASR: startASR,
+                            onVoice: startVoiceMode
+                        )
+                        .matchedGeometryEffect(id: "composer", in: namespace)
+                        .padding(.horizontal, 18)
+                        .padding(.bottom, bottomSafeInset + 4)
+                    }
+                } else {
+                    ConversationsView(
+                        store: convStore,
+                        track: track,
+                        userId: auth.state.user?.id,
+                        onSelect: { id in selectConversation(id: id) },
+                        onNew: { newConversation() }
                     )
-                    .matchedGeometryEffect(id: "composer", in: namespace)
-                    .padding(.horizontal, 18)
-                    .padding(.bottom, bottomSafeInset + 4)
+                    .transition(.opacity)
                 }
             } else {
                 SignInGate(auth: auth, track: track)
@@ -965,6 +996,28 @@ struct ChatOverlay: View {
             }
         }
         .animation(.easeOut(duration: 0.28), value: auth.state.isSignedIn)
+        .animation(.easeOut(duration: 0.22), value: panel)
+        .task(id: auth.state.user?.id ?? "") {
+            guard let uid = auth.state.user?.id else { return }
+            convStore.loadActiveSession(userId: uid)
+            await convStore.refresh(userId: uid)
+        }
+        .onChange(of: settings.environment) { _, _ in
+            // Env swap: clear list + active id, then reload for the new host.
+            convStore.activeSessionId = nil
+            store.cancelMockStream()
+        store.replace(messages: [])
+            if let uid = auth.state.user?.id {
+                Task { await convStore.refresh(userId: uid) }
+            }
+        }
+        .onChange(of: convStore.activeSessionId) { _, newId in
+            if let uid = auth.state.user?.id {
+                convStore.persistActiveSession(userId: uid)
+                if newId != nil { convStore.startTitlePollingIfNeeded(userId: uid) }
+                else { convStore.stopTitlePolling() }
+            }
+        }
         .frame(height: height)
         .frame(maxWidth: .infinity)
         .background(sheetBackground)
@@ -1045,8 +1098,66 @@ struct ChatOverlay: View {
         let msg = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !msg.isEmpty else { return }
         UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.5)
-        store.sendUser(msg)
-        text = ""
+
+        // Mirror `apps/web/src/hooks/useChat.ts`: if no session is active
+        // yet, call `POST /api/session/create` first so we have a sticky id
+        // to route the RN websocket to, then emit the user message. The
+        // pendingUserMessage nonce + sessionId both propagate via
+        // appProperties in the same React render so useAgent reconnects and
+        // sendMessage fires against the new DO.
+        if convStore.activeSessionId == nil {
+            guard let uid = auth.state.user?.id, !creatingSession else { return }
+            creatingSession = true
+            text = ""
+            Task {
+                defer { creatingSession = false }
+                guard let id = await convStore.create(userId: uid) else { return }
+                convStore.activeSessionId = id
+                store.cancelMockStream()
+        store.replace(messages: [])
+                store.sendUser(msg)
+            }
+        } else {
+            store.sendUser(msg)
+            text = ""
+        }
+    }
+
+    private func togglePanel() {
+        UIImpactFeedbackGenerator(style: .soft).impactOccurred(intensity: 0.5)
+        focused = false
+        withAnimation(.easeOut(duration: 0.22)) {
+            panel = (panel == .chat) ? .list : .chat
+        }
+    }
+
+    private func selectConversation(id: String) {
+        convStore.activeSessionId = id
+        // Clear UI immediately; useAgentChat replays persisted history from
+        // the Durable Object once the new WebSocket connects.
+        store.cancelMockStream()
+        store.replace(messages: [])
+        withAnimation(.easeOut(duration: 0.22)) {
+            panel = .chat
+        }
+    }
+
+    private func newConversation() {
+        guard let uid = auth.state.user?.id, !creatingSession else { return }
+        creatingSession = true
+        Task {
+            defer { creatingSession = false }
+            if let id = await convStore.create(userId: uid) {
+                convStore.activeSessionId = id
+                store.cancelMockStream()
+        store.replace(messages: [])
+                await MainActor.run {
+                    withAnimation(.easeOut(duration: 0.22)) {
+                        panel = .chat
+                    }
+                }
+            }
+        }
     }
 
     #if DEBUG
@@ -1061,6 +1172,7 @@ struct ChatOverlay: View {
         // Different env = different cookies, different user, different
         // conversation history. Wipe everything and re-bootstrap so the UI
         // reflects the new backend identity instead of stale state.
+        store.cancelMockStream()
         store.replace(messages: [])
         APIClient.shared.clearSessionCookies()
         Task { await auth.bootstrap() }
@@ -1087,9 +1199,9 @@ struct ChatOverlay: View {
 /// Headless RN host: runs `useAgentChat` + `@json-render/react` (see
 /// `apps/mobile-chat/App.tsx`) and pushes parsed messages back through
 /// `ChatBridge`. Nothing here is visible — SwiftUI renders the message list
-/// itself. Native → JS flows via `appProperties.pendingUserMessage.nonce`.
+/// itself. Native → JS flows via `appProperties` (sessionId + pendingUserMessage).
 struct ChatHostRepresentable: UIViewControllerRepresentable {
-    let track: MoodTrack?
+    let sessionId: String
     @ObservedObject var store: ConversationStore
 
     func makeUIViewController(context: Context) -> UIViewController {
@@ -1111,17 +1223,18 @@ struct ChatHostRepresentable: UIViewControllerRepresentable {
             rnView.trailingAnchor.constraint(equalTo: vc.view.trailingAnchor)
         ])
         context.coordinator.rootView = rnView
-        context.coordinator.lastNonce = store.pendingUserMessage?.nonce ?? ""
+        context.coordinator.lastKey = propsKey()
         return vc
     }
 
     func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
         // SwiftUI calls updateUIViewController on every ancestor body
-        // re-render. Push to RN only when the outbound command actually
-        // changes — the only thing that flows Native → JS is send intents.
-        let nonce = store.pendingUserMessage?.nonce ?? ""
-        guard context.coordinator.lastNonce != nonce else { return }
-        context.coordinator.lastNonce = nonce
+        // re-render. Push to RN only when the outbound state actually
+        // changes — session switches and user-message nonces both need to
+        // propagate; unrelated parent re-renders don't.
+        let key = propsKey()
+        guard context.coordinator.lastKey != key else { return }
+        context.coordinator.lastKey = key
         context.coordinator.rootView?.setValue(props(), forKey: "appProperties")
     }
 
@@ -1129,13 +1242,17 @@ struct ChatHostRepresentable: UIViewControllerRepresentable {
 
     final class Coordinator {
         weak var rootView: UIView?
-        var lastNonce: String = ""
+        var lastKey: String = ""
+    }
+
+    private func propsKey() -> String {
+        "\(sessionId)|\(store.pendingUserMessage?.nonce ?? "")"
     }
 
     private func props() -> [String: Any] {
         var out: [String: Any] = [
             "baseUrl": DebugSettings.shared.environment.baseUrl,
-            "sessionId": track?.trackId ?? "default",
+            "sessionId": sessionId,
             "userId": AuthStore.shared.state.user?.id ?? "anon",
             "storefront": "us",
             // Every component this iOS client can render. Agent reads this on

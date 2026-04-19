@@ -85,6 +85,13 @@ final class ConversationStore: ObservableObject {
         self.messages = messages
     }
 
+    /// Cancel any in-flight mock streaming. Called when a real session
+    /// switches in so dev fixtures don't leak text into the real transcript.
+    func cancelMockStream() {
+        streamingTask?.cancel()
+        streamingTask = nil
+    }
+
     /// Mutate a message in place by id. Used by the streaming simulator to
     /// append text / reasoning / spec elements as they "arrive".
     func update(id: String, _ mutate: (inout ChatMessage) -> Void) {

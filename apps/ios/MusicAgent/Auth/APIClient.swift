@@ -72,6 +72,26 @@ final class APIClient {
         return try await performDiscarding(req)
     }
 
+    /// DELETE with query string only — no body.
+    @discardableResult
+    func deleteVoid(_ path: String, query: [String: String] = [:]) async throws -> HTTPURLResponse {
+        let base = await resolveBase()
+        var req = URLRequest(url: makeURL(base: base, path: path, query: query))
+        req.httpMethod = "DELETE"
+        return try await performDiscarding(req)
+    }
+
+    /// PATCH with JSON body — used for conversation rename / pin / archive.
+    @discardableResult
+    func patchVoid<B: Encodable>(_ path: String, query: [String: String] = [:], body: B) async throws -> HTTPURLResponse {
+        let base = await resolveBase()
+        var req = URLRequest(url: makeURL(base: base, path: path, query: query))
+        req.httpMethod = "PATCH"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try JSONEncoder().encode(body)
+        return try await performDiscarding(req)
+    }
+
     // MARK: - Cookie inspection / reset
 
     /// Remove every cookie scoped to the current environment — used on sign-out
