@@ -814,6 +814,7 @@ struct ChatOverlay: View {
     let namespace: Namespace.ID
     let bottomSafeInset: CGFloat
     @Binding var isOpen: Bool
+    @StateObject private var store = ConversationStore()
     @State private var text: String = ""
     @FocusState private var focused: Bool
     @State private var detent: Detent = .medium
@@ -901,8 +902,10 @@ struct ChatOverlay: View {
             .contentShape(Rectangle())
             .gesture(dragGesture(screen: screen))
 
-            // Message area — RN host drops here.
-            ChatHostRepresentable(track: track)
+            // RN owns only the message-list rendering. Everything else —
+            // composer, send, network — is SwiftUI. Messages flow into RN via
+            // appProperties on the root view.
+            ChatHostRepresentable(track: track, store: store)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             // Composer — morphs from the pill. Bottom padding matches the pill's
@@ -999,7 +1002,9 @@ struct ChatOverlay: View {
     private func send() {
         let msg = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !msg.isEmpty else { return }
-        // TODO: forward to RN bridge / agent-worker SSE.
+        let haptic = UIImpactFeedbackGenerator(style: .soft)
+        haptic.impactOccurred(intensity: 0.5)
+        store.sendUser(msg)
         text = ""
     }
 
@@ -1012,32 +1017,68 @@ struct ChatOverlay: View {
     }
 }
 
-/// Hosts the React Native `RCTRootView` (registered JS module name: `MobileChat`).
-/// When RN is wired up (Podfile + bridge), replace the placeholder view with the real
-/// `RCTRootView`. See `apps/mobile-chat/README.md` for integration steps.
+/// Hosts the React Native message-list surface (JS module `MobileChat` — see
+/// `apps/mobile-chat/App.tsx`). RN renders only the messages; composer / send /
+/// network all stay native. New messages flow in via `rootView.appProperties`.
 struct ChatHostRepresentable: UIViewControllerRepresentable {
     let track: MoodTrack?
+    @ObservedObject var store: ConversationStore
 
     func makeUIViewController(context: Context) -> UIViewController {
         let vc = UIViewController()
         vc.view.backgroundColor = .clear
-        let label = UILabel()
-        label.text = "Chat / GenUI\n(React Native host — not yet wired)"
-        label.numberOfLines = 0
-        label.textAlignment = .center
-        label.textColor = UIColor(white: 1, alpha: 0.75)
-        label.font = .systemFont(ofSize: 15, weight: .regular)
-        label.translatesAutoresizingMaskIntoConstraints = false
-        vc.view.addSubview(label)
+
+        let rnView = ReactNativeHost.shared.makeRootView(
+            moduleName: "MobileChat",
+            initialProperties: props()
+        )
+        rnView.backgroundColor = .clear
+        rnView.translatesAutoresizingMaskIntoConstraints = false
+        vc.view.addSubview(rnView)
         NSLayoutConstraint.activate([
-            label.centerXAnchor.constraint(equalTo: vc.view.centerXAnchor),
-            label.centerYAnchor.constraint(equalTo: vc.view.centerYAnchor),
-            label.widthAnchor.constraint(lessThanOrEqualTo: vc.view.widthAnchor, constant: -32)
+            rnView.topAnchor.constraint(equalTo: vc.view.topAnchor),
+            rnView.bottomAnchor.constraint(equalTo: vc.view.bottomAnchor),
+            rnView.leadingAnchor.constraint(equalTo: vc.view.leadingAnchor),
+            rnView.trailingAnchor.constraint(equalTo: vc.view.trailingAnchor)
         ])
+        context.coordinator.rootView = rnView
         return vc
     }
 
-    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {}
+    func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
+        // SwiftUI calls updateUIViewController on every ancestor body re-render
+        // (dragOffset / detent / text edits → ~60/s while dragging the sheet).
+        // Push to RN only when the message set actually changes — otherwise
+        // we'd ship the full messages array across the bridge on every frame.
+        let sig = signature()
+        guard context.coordinator.lastSignature != sig else { return }
+        context.coordinator.lastSignature = sig
+        // Both RCTRootView and RCTFabricSurfaceHostingProxyRootView expose
+        // `appProperties` — use KVC so we don't need to import the concrete
+        // class and the code survives new-arch / legacy toggles.
+        context.coordinator.rootView?.setValue(props(), forKey: "appProperties")
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    final class Coordinator {
+        weak var rootView: UIView?
+        var lastSignature: String = ""
+    }
+
+    private func signature() -> String {
+        // Count + last id is enough: we only ever append, never mutate in place.
+        // If the model grows edits, hash text lengths into this.
+        "\(store.messages.count):\(store.messages.last?.id.uuidString ?? "")"
+    }
+
+    private func props() -> [String: Any] {
+        [
+            "messages": store.messages.map { msg in
+                ["id": msg.id.uuidString, "role": msg.role.rawValue, "text": msg.text]
+            }
+        ]
+    }
 }
 
 struct DebugStrip: View {

@@ -1,9 +1,21 @@
 {
-  "extends": "@react-native/typescript-config/tsconfig.json",
   "compilerOptions": {
+    "target": "esnext",
+    "module": "esnext",
+    "lib": ["es2022", "dom"],
     "jsx": "react-native",
-    "moduleResolution": "node",
-    "strict": true
+    "moduleResolution": "bundler",
+    "customConditions": ["react-native"],
+    "allowJs": true,
+    "strict": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": false,
+    "types": []
   },
   "include": ["App.tsx", "index.js"]
 }

@@ -1,206 +1,175 @@
-import React, { useState } from "react";
+import React, { memo, useEffect, useRef } from "react";
 import {
-  KeyboardAvoidingView,
+  FlatList,
   Platform,
-  Pressable,
-  ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
+  type ListRenderItem,
 } from "react-native";
 
-// Hosted by SwiftUI via `ChatHostRepresentable`. Props passed from native go
-// through `RCTRootView`'s `initialProperties` — typed here as a loose bag so
-// we can evolve the contract without native changes.
-export type Props = {
-  trackId?: string;
-  songName?: string;
-  artist?: string;
+// Props come from SwiftUI via `appProperties` on the RN root view.
+// RN owns only the message list — composer / send / network all stay native.
+export type Message = {
+  id: string;
+  role: "user" | "agent";
+  text: string;
 };
 
-type Message =
-  | { role: "user"; text: string }
-  | { role: "agent"; text: string };
+export type Props = {
+  messages?: Message[];
+};
 
-const AGENT_BASE = "https://playheads.ai/api";
+// Palette derived from SwiftUI Theme.swift — pageInk (#D8CFBF). Later versions
+// will accept these as props from native so they track the mood palette.
+const INK = "rgba(216,207,191,1)";
+const INK_92 = "rgba(216,207,191,0.92)";
+const INK_45 = "rgba(216,207,191,0.45)";
+const RULE = "rgba(216,207,191,0.22)";
+const CHIP = "rgba(216,207,191,0.10)";
+const CHIP_EDGE = "rgba(216,207,191,0.18)";
+const SERIF = Platform.select({ ios: "New York", default: "serif" });
 
-export default function App(props: Props) {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState("");
-  const [pending, setPending] = useState(false);
+type Row = { message: Message; marginTop: number };
 
-  async function send() {
-    const text = input.trim();
-    if (!text || pending) return;
-    setInput("");
-    setMessages((prev) => [...prev, { role: "user", text }]);
-    setPending(true);
-    try {
-      // TODO: swap for the real agent-sdk streaming endpoint once wired.
-      // For now we just round-trip a stub so the plumbing can be exercised.
-      const res = await fetch(`${AGENT_BASE}/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: text,
-          track: {
-            id: props.trackId,
-            name: props.songName,
-            artist: props.artist,
-          },
-        }),
-      });
-      const body = res.ok ? await res.text() : `Error ${res.status}`;
-      setMessages((prev) => [...prev, { role: "agent", text: body }]);
-    } catch (e) {
-      setMessages((prev) => [
-        ...prev,
-        { role: "agent", text: `Network error: ${String(e)}` },
-      ]);
-    } finally {
-      setPending(false);
+function buildRows(messages: Message[]): Row[] {
+  return messages.map((m, i) => {
+    const prev = i > 0 ? messages[i - 1] : undefined;
+    const marginTop = !prev
+      ? 0
+      : prev.role === m.role
+        ? 12
+        : m.role === "agent"
+          ? 20
+          : 16;
+    return { message: m, marginTop };
+  });
+}
+
+export default function App({ messages = [] }: Props) {
+  const listRef = useRef<FlatList<Row>>(null);
+  const rows = React.useMemo(() => buildRows(messages), [messages]);
+
+  useEffect(() => {
+    if (rows.length > 0) {
+      listRef.current?.scrollToEnd({ animated: true });
     }
-  }
+  }, [rows.length]);
+
+  const renderItem: ListRenderItem<Row> = ({ item }) =>
+    item.message.role === "user" ? (
+      <UserBubble text={item.message.text} marginTop={item.marginTop} />
+    ) : (
+      <AgentBlock text={item.message.text} marginTop={item.marginTop} />
+    );
 
   return (
-    <KeyboardAvoidingView
-      style={styles.root}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>
-          {props.songName ?? "Playheads"}
-        </Text>
-        {props.artist ? (
-          <Text style={styles.headerSub}>{props.artist}</Text>
-        ) : null}
-      </View>
-
-      <ScrollView style={styles.feed} contentContainerStyle={styles.feedInner}>
-        {messages.length === 0 ? (
-          <Text style={styles.placeholder}>
-            Ask the vibe anything. GenUI cards land here.
-          </Text>
-        ) : null}
-        {messages.map((m, i) => (
-          <View
-            key={i}
-            style={[
-              styles.bubble,
-              m.role === "user" ? styles.bubbleUser : styles.bubbleAgent,
-            ]}
-          >
-            <Text style={styles.bubbleText}>{m.text}</Text>
-          </View>
-        ))}
-      </ScrollView>
-
-      <View style={styles.composer}>
-        <TextInput
-          style={styles.input}
-          placeholder="Start a vibe…"
-          placeholderTextColor="rgba(255,255,255,0.4)"
-          value={input}
-          onChangeText={setInput}
-          onSubmitEditing={send}
-          returnKeyType="send"
-          editable={!pending}
-        />
-        <Pressable
-          style={({ pressed }) => [
-            styles.send,
-            pressed && styles.sendPressed,
-            pending && styles.sendDisabled,
-          ]}
-          onPress={send}
-          disabled={pending}
-        >
-          <Text style={styles.sendText}>{pending ? "…" : "↑"}</Text>
-        </Pressable>
-      </View>
-    </KeyboardAvoidingView>
+    <FlatList
+      ref={listRef}
+      style={styles.feed}
+      contentContainerStyle={styles.feedInner}
+      data={rows}
+      keyExtractor={(r) => r.message.id}
+      renderItem={renderItem}
+      removeClippedSubviews
+      initialNumToRender={12}
+      maxToRenderPerBatch={8}
+      windowSize={7}
+      ListEmptyComponent={
+        <Text style={styles.placeholder}>Ask anything about this song.</Text>
+      }
+    />
   );
 }
 
+const UserBubble = memo(function UserBubble({
+  text,
+  marginTop,
+}: {
+  text: string;
+  marginTop: number;
+}) {
+  return (
+    <View
+      style={[styles.userRow, { marginTop }]}
+      accessible
+      accessibilityRole="text"
+      accessibilityLabel={`You: ${text}`}
+    >
+      <View style={styles.userBubble}>
+        <Text style={styles.userText}>{text}</Text>
+      </View>
+    </View>
+  );
+});
+
+const AgentBlock = memo(function AgentBlock({
+  text,
+  marginTop,
+}: {
+  text: string;
+  marginTop: number;
+}) {
+  return (
+    <View
+      style={[styles.agentRow, { marginTop }]}
+      accessible
+      accessibilityRole="text"
+      accessibilityLabel={`Agent: ${text}`}
+    >
+      <View style={styles.agentRule} />
+      <Text style={styles.agentText}>{text}</Text>
+    </View>
+  );
+});
+
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: "transparent",
-  },
-  header: {
-    paddingHorizontal: 20,
-    paddingTop: 18,
-    paddingBottom: 12,
-  },
-  headerTitle: {
-    color: "rgba(255,255,255,0.92)",
-    fontSize: 18,
-    fontWeight: "600",
-  },
-  headerSub: {
-    color: "rgba(255,255,255,0.6)",
-    fontSize: 13,
-    marginTop: 2,
-  },
-  feed: { flex: 1 },
-  feedInner: { padding: 16, gap: 10 },
+  feed: { flex: 1, backgroundColor: "transparent" },
+  feedInner: { paddingHorizontal: 18, paddingVertical: 14 },
   placeholder: {
-    color: "rgba(255,255,255,0.35)",
-    fontSize: 14,
+    color: INK_45,
+    fontSize: 13,
+    fontStyle: "italic",
+    fontFamily: SERIF,
     textAlign: "center",
     marginTop: 80,
   },
-  bubble: {
-    maxWidth: "85%",
+  userRow: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+  },
+  userBubble: {
+    maxWidth: "76%",
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderRadius: 18,
+    backgroundColor: CHIP,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: CHIP_EDGE,
   },
-  bubbleUser: {
-    alignSelf: "flex-end",
-    backgroundColor: "rgba(255,255,255,0.16)",
-  },
-  bubbleAgent: {
-    alignSelf: "flex-start",
-    backgroundColor: "rgba(255,255,255,0.08)",
-  },
-  bubbleText: {
-    color: "rgba(255,255,255,0.95)",
-    fontSize: 14.5,
-  },
-  composer: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    gap: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "rgba(255,255,255,0.12)",
-  },
-  input: {
-    flex: 1,
-    color: "rgba(255,255,255,0.95)",
+  userText: {
+    color: INK_92,
     fontSize: 15,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.08)",
+    fontFamily: SERIF,
+    lineHeight: 21,
   },
-  send: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.92)",
+  agentRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingRight: 8,
   },
-  sendPressed: { opacity: 0.6 },
-  sendDisabled: { opacity: 0.4 },
-  sendText: {
-    color: "#111",
-    fontSize: 18,
-    fontWeight: "700",
-    lineHeight: 20,
+  agentRule: {
+    width: 2,
+    alignSelf: "stretch",
+    backgroundColor: RULE,
+    borderRadius: 1,
+  },
+  agentText: {
+    flex: 1,
+    marginLeft: 14,
+    color: INK,
+    fontSize: 16,
+    lineHeight: 23,
+    fontFamily: SERIF,
   },
 });

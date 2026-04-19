@@ -1,0 +1,17 @@
+# Regenerated from project.yml on every `xcodegen generate`.
+MusicAgent.xcodeproj/
+
+# Regenerated from Podfile on every `pod install`.
+MusicAgent.xcworkspace/
+Pods/
+
+# CocoaPods / RN prebuilt artifacts (fetched by `pod install`).
+PrivacyInfo.xcprivacy
+hermes-engine/
+
+# RN codegen output + misc build scratch.
+build/
+.last_build_configuration
+
+# Personal env override (NODE_BINARY path). Shared defaults live in .xcode.env.
+.xcode.env.local

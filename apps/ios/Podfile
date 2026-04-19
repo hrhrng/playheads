@@ -1,0 +1,45 @@
+# Podfile for MusicAgent (SwiftUI) with embedded React Native surface.
+#
+# Monorepo layout:
+#   apps/ios/           <- this file
+#   apps/mobile-chat/   <- RN JS app (package.json, App.tsx, index.js)
+#   node_modules/       <- pnpm-hoisted root (react-native lives here)
+
+# Resolve react_native_pods.rb from the hoisted root.
+require_relative '../../node_modules/react-native/scripts/react_native_pods'
+
+platform :ios, min_ios_version_supported
+prepare_react_native_project!
+
+# Keep linkage as static frameworks off by default; RN defaults are fine.
+linkage = ENV['USE_FRAMEWORKS']
+if linkage != nil
+  Pod.ui.puts "Configuring Pod with #{linkage}ally linked Frameworks".green
+  use_frameworks! :linkage => linkage.to_sym
+end
+
+target 'MusicAgent' do
+  # Autolink — empty today (mobile-chat has no third-party native modules),
+  # but keeping the hook so future RN libs (gesture handler, reanimated, …)
+  # drop in without Podfile edits. The CLI must run with cwd inside the RN app
+  # so Node can resolve @react-native-community/cli from that tree.
+  config = use_native_modules!(['scripts/rn-config.sh'])
+
+  use_react_native!(
+    :path => '../../node_modules/react-native',
+    :app_path => "#{Pod::Config.instance.installation_root}/../mobile-chat"
+  )
+
+  # RN's post-install hook wires up:
+  #   - REACT_NATIVE_PATH across every Pods target (so build-phase scripts work)
+  #   - React-VFS.yaml generation (required by -ivfsoverlay in pod xcconfigs)
+  #   - search paths, hermes flags, etc.
+  # Must call this or the build fails with "virtual filesystem overlay not found".
+  post_install do |installer|
+    react_native_post_install(
+      installer,
+      '../../node_modules/react-native',
+      mac_catalyst_enabled: false
+    )
+  end
+end
