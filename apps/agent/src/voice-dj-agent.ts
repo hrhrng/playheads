@@ -16,6 +16,8 @@ import {
   withVoice,
   WorkersAIFluxSTT,
   WorkersAITTS,
+  type TTSProvider,
+  type StreamingTTSProvider,
   type VoiceTurnContext,
   type TextSource,
 } from "@cloudflare/voice";
@@ -26,6 +28,7 @@ import {
 } from "ai";
 import { createMusicTools } from "./tools";
 import { resolveLLM } from "./resolve-llm";
+import { ElevenLabsTTS } from "./elevenlabs-tts";
 import type { Env, PlaybackState } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -119,10 +122,37 @@ async function loadGlobalState(env: Env, userId: string | undefined): Promise<Pl
 
 const VoiceBase = withVoice(Agent<Env>);
 
+// Select a TTS provider based on env: ElevenLabs (via AI Gateway, streaming)
+// when the API key is configured, otherwise fall back to Workers AI Aura.
+// Declared as a standalone fn so class property initialization can read `this.env`.
+function resolveTTS(env: Env): TTSProvider & Partial<StreamingTTSProvider> {
+  const key = env.ELEVENLABS_API_KEY;
+  if (key && env.CLOUDFLARE_ACCOUNT_ID && env.AI_GATEWAY_ID) {
+    try {
+      console.log("[VoiceDJAgent] Using ElevenLabs TTS via AI Gateway", {
+        voiceId: env.ELEVENLABS_VOICE_ID,
+        model: env.ELEVENLABS_MODEL,
+      });
+      return new ElevenLabsTTS({
+        apiKey: key,
+        accountId: env.CLOUDFLARE_ACCOUNT_ID,
+        gatewayId: env.AI_GATEWAY_ID,
+        voiceId: env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM",
+        modelId: env.ELEVENLABS_MODEL || "eleven_multilingual_v2",
+      });
+    } catch (e) {
+      console.warn("[VoiceDJAgent] ElevenLabs init failed, falling back to Aura:", e);
+    }
+  }
+  console.log("[VoiceDJAgent] Using Workers AI Aura TTS (no ELEVENLABS_API_KEY)");
+  return new WorkersAITTS(env.AI);
+}
+
 export class VoiceDJAgent extends VoiceBase {
-  // Workers AI providers — no external keys required.
+  // STT via Workers AI Deepgram Flux (no external key required).
   transcriber = new WorkersAIFluxSTT(this.env.AI);
-  tts = new WorkersAITTS(this.env.AI);
+  // TTS: ElevenLabs (via AI Gateway, streaming) when configured; Aura fallback.
+  tts = resolveTTS(this.env);
 
   // Extract userId / storefront from the WebSocket URL query.
   // Set by the client via useVoiceAgent({ query: { userId, storefront } }).
