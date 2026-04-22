@@ -560,6 +560,10 @@ export class MusicChatAgent extends VoiceChatBase {
   // =========================================================================
 
   override async onCallStart(connection: Connection): Promise<void> {
+    // Log immediately so we can confirm the WS reached the DO before any
+    // provider init (TTS/STT) potentially throws and aborts the connection.
+    console.error("[Voice] onCallStart ENTER", { connId: connection.id });
+
     // userId / storefront arrive as query params on the voice WebSocket URL
     // (set by the client via useVoiceAgent({ query: { ... } })).
     const url = new URL(
@@ -569,14 +573,21 @@ export class MusicChatAgent extends VoiceChatBase {
     const storefront = url.searchParams.get("storefront") || "us";
     this.voiceCtx.set(connection, { userId, storefront });
 
-    console.log("[Voice] onCallStart", { userId, storefront });
+    console.error("[Voice] onCallStart", { userId, storefront });
 
-    // Short greeting — varies based on whether the user has prior voice history.
-    const history = this.getConversationHistory(1);
-    const greeting = history.length
-      ? "欢迎回来，想听点什么？"
-      : "嘿，我是你的 Playhead DJ。说一句歌名，或者随便聊聊你今天的心情。";
-    await this.speak(connection, greeting);
+    // Greeting — wrapped in try/catch so a TTS misconfiguration (ElevenLabs
+    // 401, missing key, etc.) doesn't tear down the whole WS connection.
+    // The user can still chat via text; voice-out is just degraded.
+    try {
+      const history = this.getConversationHistory(1);
+      const greeting = history.length
+        ? "欢迎回来，想听点什么？"
+        : "嘿，我是你的 Playhead DJ。说一句歌名，或者随便聊聊你今天的心情。";
+      await this.speak(connection, greeting);
+      console.error("[Voice] greeting sent OK");
+    } catch (e) {
+      console.error("[Voice] greeting failed (continuing without voice-out):", e);
+    }
   }
 
   override async onCallEnd(connection: Connection): Promise<void> {
