@@ -32,6 +32,17 @@ export interface UsePlayQueueReturn {
   clear(): void;
 }
 
+export interface UsePlayQueueInternal {
+  /**
+   * Called by useMusicProvider when initial restore completes.
+   * `succeeded=false` signals restore could not populate the MusicKit
+   * queue (e.g. MusicKit failed to resolve saved IDs). The hook uses
+   * this to avoid POSTing an empty queue to the backend and wiping
+   * valid saved data — persistence resumes once the user adds tracks.
+   */
+  finishRestore(succeeded: boolean): void;
+}
+
 interface UsePlayQueueParams {
   provider: AppleMusicProvider | null;
   userId: string | null;
@@ -43,7 +54,7 @@ function readSnapshot(provider: AppleMusicProvider | null) {
   return provider.getQueueSnapshot();
 }
 
-export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQueueReturn & { finishRestore: () => void } {
+export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQueueReturn & UsePlayQueueInternal {
   // Trigger re-renders when MusicKit queue or now-playing changes.
   // We use a simple counter — bumped by MusicKit events — to force re-read.
   const [, setTick] = useState(0);
@@ -72,10 +83,16 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
 
   // ── Backend sync ──────────────────────────────────────────────
   const isRestoringRef = useRef(true);
+  // True after finishRestore(false): restore couldn't populate MusicKit
+  // (e.g. saved IDs unresolvable). Suppress sync of the resulting empty
+  // queue so we don't wipe D1 data; resume once items reappear.
+  const restoreFailedRef = useRef(false);
 
   useEffect(() => {
     if (isRestoringRef.current) return;
     if (!userId || !provider) return;
+    if (restoreFailedRef.current && items.length === 0) return;
+    restoreFailedRef.current = false;
 
     const body = JSON.stringify({
       user_id: userId,
@@ -96,6 +113,9 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
       const p = providerRef.current;
       if (!p) return;
       const snap = p.getQueueSnapshot();
+      // Same protection as the regular sync effect: don't wipe D1 data
+      // when MusicKit is empty because restore failed to populate it.
+      if (restoreFailedRef.current && snap.items.length === 0) return;
       const body = JSON.stringify({
         user_id: userId,
         queue: snap.items,
@@ -213,9 +233,10 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
     bump();
   }, [bump]);
 
-  const finishRestore = useCallback(() => {
-    console.log('[usePlayQueue] finishRestore: restore complete, sync re-enabled');
+  const finishRestore = useCallback((succeeded: boolean) => {
+    console.log('[usePlayQueue] finishRestore: succeeded=', succeeded);
     isRestoringRef.current = false;
+    restoreFailedRef.current = !succeeded;
     bump();
   }, [bump]);
 
@@ -243,5 +264,5 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
     setQueue: setQueueFn,
     clear,
     finishRestore,
-  } as UsePlayQueueReturn & { finishRestore: () => void };
+  };
 }

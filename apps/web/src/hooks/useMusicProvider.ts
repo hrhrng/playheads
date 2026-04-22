@@ -123,11 +123,15 @@ export function useMusicProvider({
 
   // Global play queue
   const queueHook = usePlayQueue({ provider, userId });
-  const finishRestore = (queueHook as any).finishRestore as () => void;
+  const finishRestore = queueHook.finishRestore;
 
   // ── Queue restore from localStorage (no autoplay) ──────────────
   const restoreStarted = useRef(false);
   const initialRestoreDone = useRef(false);
+  // True after a restore attempt couldn't populate MusicKit (e.g. saved
+  // IDs unresolvable). Persist effect uses this to avoid overwriting
+  // valid saved data with an empty queue; resumes once user adds tracks.
+  const restoreFailedRef = useRef(false);
   const QUEUE_STORAGE_KEY = 'playheads_queue';
   const QUEUE_POS_KEY = 'playheads_queue_position';
   const PLAYBACK_POS_KEY = 'playheads_playback_pos';
@@ -137,6 +141,7 @@ export function useMusicProvider({
     restoreStarted.current = true;
 
     (async () => {
+      let succeeded = true;
       try {
         const raw = localStorage.getItem(QUEUE_STORAGE_KEY);
         if (raw) {
@@ -158,12 +163,16 @@ export function useMusicProvider({
             } catch { /* ignore */ }
 
             const upcomingIds = tracks.slice(savedQueuePos).map((t: any) => t.id);
-            await provider.setQueueWithoutPlaying(upcomingIds, savedPos);
+            succeeded = await provider.setQueueWithoutPlaying(upcomingIds, savedPos);
           }
         }
-      } catch { /* ignore corrupt localStorage */ }
+      } catch {
+        // Corrupt localStorage is NOT a MusicKit restore failure — the
+        // saved data is already unusable, no need to protect it.
+      }
+      restoreFailedRef.current = !succeeded;
       initialRestoreDone.current = true;
-      finishRestore();
+      finishRestore(succeeded);
     })();
   }, [provider, isInitializing]);
 
@@ -172,6 +181,8 @@ export function useMusicProvider({
     if (!initialRestoreDone.current || !provider) return;
     try {
       const snap = provider.getQueueSnapshot();
+      if (restoreFailedRef.current && snap.items.length === 0) return;
+      restoreFailedRef.current = false;
       localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(snap.items));
       localStorage.setItem(QUEUE_POS_KEY, String(snap.position));
     } catch { /* ignore */ }

@@ -175,9 +175,14 @@ export class AppleMusicProvider implements MusicProvider {
     }
   }
 
-  /** Set MusicKit queue without starting playback (for restore). */
-  async setQueueWithoutPlaying(songIds: string[], startTime?: number): Promise<void> {
-    if (!this.musicKit || songIds.length === 0) return;
+  /**
+   * Set MusicKit queue without starting playback (for restore).
+   * Returns true if MusicKit populated the queue, false otherwise —
+   * callers can use this to protect saved state from being overwritten
+   * (e.g. don't persist an empty queue over valid localStorage data).
+   */
+  async setQueueWithoutPlaying(songIds: string[], startTime?: number): Promise<boolean> {
+    if (!this.musicKit || songIds.length === 0) return false;
     try {
       await this.musicKit.setQueue({ songs: songIds, startPlaying: false } as any);
       // seekToTime() requires a nowPlayingItem (only available after play() starts).
@@ -195,9 +200,12 @@ export class AppleMusicProvider implements MusicProvider {
           currentTrack: track,
           playbackTime: { current: startTime || 0, total: track.durationSeconds },
         });
+        return true;
       }
+      return false;
     } catch (e) {
       console.error('[AppleMusicProvider] setQueueWithoutPlaying error:', e);
+      return false;
     }
   }
 
