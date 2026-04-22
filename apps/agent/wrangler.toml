@@ -7,14 +7,26 @@ compatibility_flags = ["nodejs_compat"]
 name = "MusicChatAgent"
 class_name = "MusicChatAgent"
 
+[[durable_objects.bindings]]
+name = "VoiceDJAgent"
+class_name = "VoiceDJAgent"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["MusicChatAgent"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["VoiceDJAgent"]
 
 [[d1_databases]]
 binding = "DB"
 database_name = "playheads-db"
 database_id = "31cba35f-8e23-46eb-880f-19d667c0946b"
+
+# Workers AI — powers @cloudflare/voice STT (Deepgram Flux) + TTS (Aura).
+[ai]
+binding = "AI"
 
 [observability]
 enabled = true

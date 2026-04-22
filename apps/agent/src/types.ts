@@ -8,6 +8,10 @@
 export interface Env {
   // Durable Object bindings
   MusicChatAgent: DurableObjectNamespace;
+  VoiceDJAgent: DurableObjectNamespace;
+
+  // Workers AI binding — used by @cloudflare/voice for STT/TTS
+  AI: Ai;
 
   // D1 database
   DB: D1Database;

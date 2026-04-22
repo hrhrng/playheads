@@ -643,6 +643,31 @@ export class AppleMusicProvider implements MusicProvider {
     return (this.musicKit as any)?.musicUserToken || null;
   }
 
+  /**
+   * Set playback volume (0.0 – 1.0).
+   * Used by voice mode to duck music while the DJ speaks.
+   * MusicKit JS doesn't expose the PCM stream (DRM), so this is the only
+   * way to attenuate music for a voice-over.
+   */
+  setVolume(level: number): void {
+    if (!this.musicKit) return;
+    const clamped = Math.max(0, Math.min(1, level));
+    try {
+      (this.musicKit as { volume: number }).volume = clamped;
+    } catch (e) {
+      console.warn('[AppleMusicProvider] setVolume failed:', e);
+    }
+  }
+
+  getVolume(): number {
+    if (!this.musicKit) return 1;
+    try {
+      return (this.musicKit as { volume: number }).volume ?? 1;
+    } catch {
+      return 1;
+    }
+  }
+
   destroy(): void {
     this.destroyed = true;
     this.phase = 'init';

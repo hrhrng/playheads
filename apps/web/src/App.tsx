@@ -16,6 +16,8 @@ import { LoadingScreen } from './components/LoadingScreen';
 import { LoginScreen } from './components/LoginScreen';
 import { WaitlistGate } from './components/WaitlistGate';
 import { useWaitlistGate } from './hooks/useWaitlistGate';
+import { VoiceModeProvider, useVoiceMode } from './contexts/VoiceModeContext';
+import { VoiceModeView } from './components/voice/VoiceModeView';
 import type { MusicActions } from './hooks/useAgentChatAdapter';
 
 function App() {
@@ -135,8 +137,16 @@ function App() {
   }
 
   return (
-    <>
+    <VoiceModeProvider>
       <ToastProvider />
+
+      <VoiceModeShell
+        userId={effectiveSession?.user?.id || null}
+        storefront={storefrontId}
+        provider={provider}
+        queueOps={queue}
+        currentTrack={playback.currentTrack}
+      />
 
       <Routes>
         <Route path="/" element={
@@ -200,7 +210,33 @@ function App() {
           />
         } />
       </Routes>
-    </>
+    </VoiceModeProvider>
+  );
+}
+
+/**
+ * VoiceModeShell — mounts the voice modal and connects it to the app-wide
+ * VoiceModeContext. Lives next to <Routes> so the overlay covers the whole
+ * viewport regardless of which route is active.
+ */
+function VoiceModeShell(props: {
+  userId: string | null;
+  storefront: string;
+  provider: ReturnType<typeof useMusicProvider>['provider'];
+  queueOps: ReturnType<typeof useMusicProvider>['queue'];
+  currentTrack: ReturnType<typeof useMusicProvider>['playback']['currentTrack'];
+}): React.JSX.Element {
+  const { isOpen, close } = useVoiceMode();
+  return (
+    <VoiceModeView
+      isOpen={isOpen}
+      onClose={close}
+      userId={props.userId}
+      storefront={props.storefront}
+      provider={props.provider}
+      queueOps={props.queueOps}
+      currentTrack={props.currentTrack}
+    />
   );
 }
 

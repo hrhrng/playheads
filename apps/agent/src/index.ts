@@ -13,6 +13,7 @@ import type { Env } from "./types";
 
 // Must export the Durable Object class for Wrangler
 export { MusicChatAgent } from "./chat-agent";
+export { VoiceDJAgent } from "./voice-dj-agent";
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {

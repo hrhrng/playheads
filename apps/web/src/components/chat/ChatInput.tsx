@@ -6,6 +6,7 @@
 
 import { useRef, useState, useCallback } from 'react';
 import { useAutoResizeTextarea } from '../../hooks/useChatHelpers';
+import { useVoiceMode } from '../../contexts/VoiceModeContext';
 import type { ProviderType } from '../../providers/types';
 
 interface ChatInputProps {
@@ -23,11 +24,11 @@ interface ChatInputProps {
   onSend: () => void;
   /** Active music provider type */
   activeProvider?: ProviderType;
-  /** Short press voice button — start ASR */
+  /** Short press voice button — start ASR dictation */
   onVoiceShortPress?: () => void;
-  /** Long press voice button — start voice conversation mode */
+  /** Long press voice button — start voice conversation mode (legacy) */
   onVoiceLongPress?: () => void;
-  /** Whether voice is currently listening */
+  /** Whether voice dictation is currently listening */
   isListening?: boolean;
   /** Callback when files are attached */
   onAttach?: (files: File[]) => void;
@@ -59,6 +60,7 @@ export const ChatInput = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isLongPress, setIsLongPress] = useState(false);
+  const voiceMode = useVoiceMode();
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -194,9 +196,9 @@ export const ChatInput = ({
           </div>
         )}
 
-        {/* Voice/Send Dual Button */}
+        {/* Trailing action cluster — matches iOS ChatBar (mic + waveform) */}
         {hasInput ? (
-          /* Send button */
+          /* Send button (replaces mic when user has typed text) */
           <button
             onClick={onSend}
             disabled={isLoading}
@@ -217,28 +219,43 @@ export const ChatInput = ({
             )}
           </button>
         ) : (
-          /* Voice button */
-          <button
-            onPointerDown={handleVoicePointerDown}
-            onPointerUp={handleVoicePointerUp}
-            onPointerLeave={() => {
-              if (longPressTimer.current) {
-                clearTimeout(longPressTimer.current);
-                longPressTimer.current = null;
-              }
-            }}
-            disabled={isLoading}
-            className={`p-2 rounded-full transition-all shrink-0 ${
-              isListening
-                ? 'bg-red-500 text-white animate-pulse'
-                : 'bg-gray-200 text-gray-400 hover:bg-gray-300 hover:text-gray-600'
-            }`}
-            title="Tap to dictate, hold for voice mode"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4M12 15a3 3 0 003-3V5a3 3 0 00-6 0v7a3 3 0 003 3z" />
-            </svg>
-          </button>
+          <>
+            {/* Mic button — ASR dictation (short press fills the textarea).
+                Still stubbed pending useVoiceInput wiring; matches iOS current state. */}
+            <button
+              onPointerDown={handleVoicePointerDown}
+              onPointerUp={handleVoicePointerUp}
+              onPointerLeave={() => {
+                if (longPressTimer.current) {
+                  clearTimeout(longPressTimer.current);
+                  longPressTimer.current = null;
+                }
+              }}
+              disabled={isLoading}
+              className={`p-2 rounded-full transition-all shrink-0 ${
+                isListening
+                  ? 'bg-red-500 text-white animate-pulse'
+                  : 'bg-gray-200 text-gray-400 hover:bg-gray-300 hover:text-gray-600'
+              }`}
+              title="Tap to dictate"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4M12 15a3 3 0 003-3V5a3 3 0 00-6 0v7a3 3 0 003 3z" />
+              </svg>
+            </button>
+
+            {/* Waveform button — enter voice mode. Mirrors iOS ChatBar L789. */}
+            <button
+              onClick={voiceMode.open}
+              disabled={isLoading}
+              className="p-2 rounded-full transition-all shrink-0 bg-gray-800 text-white hover:bg-black"
+              title="进入语音模式"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v12M8 9v6M4 11v2M16 9v6M20 11v2" />
+              </svg>
+            </button>
+          </>
         )}
       </div>
     </div>
