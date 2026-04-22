@@ -335,17 +335,27 @@ export class MusicChatAgent extends VoiceChatBase {
   private _transcriber?: WorkersAIFluxSTT;
   get transcriber(): WorkersAIFluxSTT {
     if (!this._transcriber) {
-      const ai = this.env.AI;
-      console.log("[Voice] init transcriber", {
-        aiBindingDefined: ai !== undefined && ai !== null,
-        aiHasRun: typeof (ai as { run?: unknown })?.run === "function",
+      const ai = this.env.AI as unknown as { run?: unknown } | undefined;
+      // Verbose so we can see what's actually bound. Uses console.error so it
+      // survives log filtering.
+      console.error("[Voice][diag] transcriber getter", {
+        envKeys: Object.keys(this.env as object),
+        aiType: typeof ai,
+        aiTruthy: !!ai,
+        aiKeys: ai && typeof ai === "object" ? Object.keys(ai) : [],
+        aiRunType: typeof ai?.run,
       });
-      if (!ai) {
+      if (!ai || typeof ai.run !== "function") {
         throw new Error(
-          "[Voice] env.AI is undefined — is [ai] binding deployed and Workers AI enabled on this account?"
+          `[Voice] env.AI.run is not a function (typeof=${typeof ai?.run}). ` +
+          `The [ai] binding is either missing from the deploy or this CF ` +
+          `account has no Workers AI access. Check dashboard → Workers & Pages ` +
+          `→ Settings → Workers AI.`
         );
       }
-      this._transcriber = new WorkersAIFluxSTT(ai);
+      // ai is validated to have .run above; cast to satisfy WorkersAIFluxSTT's
+      // AiLike interface without depending on its private type.
+      this._transcriber = new WorkersAIFluxSTT(ai as never);
     }
     return this._transcriber;
   }
