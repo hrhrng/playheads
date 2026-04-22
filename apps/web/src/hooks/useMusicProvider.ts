@@ -123,48 +123,57 @@ export function useMusicProvider({
 
   // Global play queue
   const queueHook = usePlayQueue({ provider, userId });
-  const finishRestore = (queueHook as any).finishRestore as () => void;
+  const finishRestore = queueHook.finishRestore;
 
   // ── Queue restore from localStorage (no autoplay) ──────────────
+  const restoreStarted = useRef(false);
   const initialRestoreDone = useRef(false);
+  // True after a restore attempt couldn't populate MusicKit (e.g. saved
+  // IDs unresolvable). Persist effect uses this to avoid overwriting
+  // valid saved data with an empty queue; resumes once user adds tracks.
+  const restoreFailedRef = useRef(false);
   const QUEUE_STORAGE_KEY = 'playheads_queue';
   const QUEUE_POS_KEY = 'playheads_queue_position';
   const PLAYBACK_POS_KEY = 'playheads_playback_pos';
 
   useEffect(() => {
-    if (!provider || isInitializing || initialRestoreDone.current) return;
-    initialRestoreDone.current = true;
+    if (!provider || isInitializing || restoreStarted.current) return;
+    restoreStarted.current = true;
 
-    try {
-      const raw = localStorage.getItem(QUEUE_STORAGE_KEY);
-      if (raw) {
-        const tracks = JSON.parse(raw);
-        if (Array.isArray(tracks) && tracks.length > 0) {
-          // Restore saved position (default 0)
-          let savedQueuePos = 0;
-          try {
-            savedQueuePos = parseInt(localStorage.getItem(QUEUE_POS_KEY) || '0', 10) || 0;
-          } catch { /* ignore */ }
-          savedQueuePos = Math.max(0, Math.min(savedQueuePos, tracks.length - 1));
+    (async () => {
+      let succeeded = true;
+      try {
+        const raw = localStorage.getItem(QUEUE_STORAGE_KEY);
+        if (raw) {
+          const tracks = JSON.parse(raw);
+          if (Array.isArray(tracks) && tracks.length > 0) {
+            let savedQueuePos = 0;
+            try {
+              savedQueuePos = parseInt(localStorage.getItem(QUEUE_POS_KEY) || '0', 10) || 0;
+            } catch { /* ignore */ }
+            savedQueuePos = Math.max(0, Math.min(savedQueuePos, tracks.length - 1));
 
-          console.log('[useMusicProvider] restore:', tracks.length, 'tracks, pos=', savedQueuePos);
-          // Cache metadata so MusicKit items display correctly
-          queueHook.setQueue(tracks);
+            console.log('[useMusicProvider] restore:', tracks.length, 'tracks, pos=', savedQueuePos);
 
-          // Restore playback time for display (visual only — no seek)
-          let savedPos = 0;
-          try {
-            savedPos = parseFloat(localStorage.getItem(PLAYBACK_POS_KEY) || '0') || 0;
-          } catch { /* ignore */ }
-          provider.setDisplayTrack(tracks[savedQueuePos], savedPos);
+            for (const t of tracks) provider.cacheTrackMetadata(t);
 
-          // Prime MusicKit queue from saved position onward
-          const upcomingIds = tracks.slice(savedQueuePos).map((t: any) => t.id);
-          provider.setQueueWithoutPlaying(upcomingIds, savedPos);
+            let savedPos = 0;
+            try {
+              savedPos = parseFloat(localStorage.getItem(PLAYBACK_POS_KEY) || '0') || 0;
+            } catch { /* ignore */ }
+
+            const upcomingIds = tracks.slice(savedQueuePos).map((t: any) => t.id);
+            succeeded = await provider.setQueueWithoutPlaying(upcomingIds, savedPos);
+          }
         }
+      } catch {
+        // Corrupt localStorage is NOT a MusicKit restore failure — the
+        // saved data is already unusable, no need to protect it.
       }
-    } catch { /* ignore corrupt localStorage */ }
-    finishRestore();
+      restoreFailedRef.current = !succeeded;
+      initialRestoreDone.current = true;
+      finishRestore(succeeded);
+    })();
   }, [provider, isInitializing]);
 
   // ── Persist queue + position to localStorage ──────────────────
@@ -172,6 +181,8 @@ export function useMusicProvider({
     if (!initialRestoreDone.current || !provider) return;
     try {
       const snap = provider.getQueueSnapshot();
+      if (restoreFailedRef.current && snap.items.length === 0) return;
+      restoreFailedRef.current = false;
       localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(snap.items));
       localStorage.setItem(QUEUE_POS_KEY, String(snap.position));
     } catch { /* ignore */ }
