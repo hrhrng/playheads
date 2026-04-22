@@ -1,8 +1,12 @@
 name = "playheads-agent-preview"
 main = "src/index.ts"
-compatibility_date = "2025-01-01"
+# Bumped from 2025-01-01 to pick up Workers AI WebSocket binding behavior
+# needed by @cloudflare/voice (ai.run("@cf/deepgram/flux", ..., { websocket: true })).
+compatibility_date = "2026-04-01"
 compatibility_flags = ["nodejs_compat"]
 
+# MusicChatAgent handles BOTH text chat (AIChatAgent) and realtime voice
+# (withVoice mixin) in the same DO class — one binding, one SQLite instance.
 [[durable_objects.bindings]]
 name = "MusicChatAgent"
 class_name = "MusicChatAgent"
@@ -11,10 +15,20 @@ class_name = "MusicChatAgent"
 tag = "v1"
 new_sqlite_classes = ["MusicChatAgent"]
 
+# v2: VoiceDJAgent was briefly introduced as a separate DO, then merged back
+# into MusicChatAgent. Any preview env that deployed v2 gets the class cleaned up.
+[[migrations]]
+tag = "v2"
+deleted_classes = ["VoiceDJAgent"]
+
 [[d1_databases]]
 binding = "DB"
 database_name = "playheads-db"
 database_id = "31cba35f-8e23-46eb-880f-19d667c0946b"
+
+# Workers AI — powers @cloudflare/voice STT (Deepgram Flux) + TTS (Aura fallback).
+[ai]
+binding = "AI"
 
 [observability]
 enabled = true
@@ -29,3 +43,11 @@ ANTHROPIC_MODEL = "claude-sonnet-4-6"
 APPLE_MUSIC_TOKEN_TTL_SECONDS = "3600"
 CLOUDFLARE_ACCOUNT_ID = "44af79e51582ca20c9003eb926540242"
 AI_GATEWAY_ID = "clash"
+
+# ElevenLabs TTS — routed through AI Gateway. Auth priority:
+#   1. ELEVENLABS_API_KEY (wrangler secret) → xi-api-key header
+#   2. CF_AIG_TOKEN only → Authorization: Bearer (unified billing / gateway BYOK)
+# Voice library: https://elevenlabs.io/voice-library
+ELEVENLABS_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"
+# Models: eleven_multilingual_v2 (best CJK), eleven_turbo_v2_5, eleven_flash_v2_5 (fastest)
+ELEVENLABS_MODEL = "eleven_multilingual_v2"
