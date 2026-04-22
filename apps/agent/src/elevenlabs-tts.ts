@@ -1,30 +1,34 @@
 /**
- * ElevenLabsTTS — TTSProvider implementation that routes through Cloudflare
- * AI Gateway to ElevenLabs. Used by VoiceDJAgent for higher-quality multilingual
- * voices than the default Workers AI (Deepgram Aura) provider.
+ * ElevenLabsTTS — streaming TTS via Cloudflare AI Gateway → ElevenLabs.
  *
- * Auth: Cloudflare AI Gateway unified billing. We send
- *   cf-aig-authorization: Bearer <CF_AIG_TOKEN>
- * and do NOT forward an xi-api-key — Cloudflare provisions the upstream
- * credentials (either CF-managed or BYOK stored in Secrets Store). This also
- * sidesteps a known conflict where xi-api-key clashes with gateway-injected
- * headers for ElevenLabs specifically.
+ * Auth modes (in priority order):
+ *   1. xi-api-key header — if `apiKey` is provided, sent directly.
+ *      Simplest path: put your ElevenLabs key in a wrangler secret.
+ *   2. cf-aig-authorization header — if `cfAigToken` is provided (and no
+ *      apiKey), relies on BYOK configured in the AI Gateway dashboard (key
+ *      stored in CF Secrets Store, gateway injects on request).
+ *
+ * The "unified billing" header alone (without BYOK-in-dashboard) will 401:
+ * AI Gateway does NOT auto-provision a CF-managed ElevenLabs account —
+ * unified billing is opt-in per provider and currently limited.
  *
  * Gateway route: https://gateway.ai.cloudflare.com/v1/{account}/{gateway}/elevenlabs
  * ElevenLabs endpoint: POST /v1/text-to-speech/{voice_id}[/stream]
- *
- * @cloudflare/voice-elevenlabs is not published on npm (as of 0.1.2), so we
- * implement the one-method interface directly. No dependency cost.
  */
 import type { TTSProvider, StreamingTTSProvider } from "@cloudflare/voice";
 
 export interface ElevenLabsTTSOptions {
   /**
-   * Cloudflare AI Gateway token (Bearer). Used as cf-aig-authorization.
-   * Under unified billing CF fronts the ElevenLabs bill; under BYOK CF
-   * injects your stored xi-api-key automatically.
+   * ElevenLabs API key — sent as xi-api-key header. Prefer this unless you
+   * have BYOK configured in the AI Gateway dashboard.
    */
-  cfAigToken: string;
+  apiKey?: string;
+
+  /**
+   * Cloudflare AI Gateway token — sent as cf-aig-authorization Bearer.
+   * Used when apiKey is not provided (BYOK-via-dashboard mode).
+   */
+  cfAigToken?: string;
 
   /** Cloudflare account ID for AI Gateway routing. */
   accountId: string;
@@ -74,20 +78,24 @@ export interface ElevenLabsTTSOptions {
  */
 export class ElevenLabsTTS implements TTSProvider, StreamingTTSProvider {
   private readonly baseUrl: string;
-  private readonly cfAigToken: string;
+  private readonly apiKey: string | null;
+  private readonly cfAigToken: string | null;
   private readonly voiceId: string;
   private readonly modelId: string;
   private readonly outputFormat: string;
   private readonly voiceSettings: ElevenLabsTTSOptions["voiceSettings"];
 
   constructor(opts: ElevenLabsTTSOptions) {
-    if (!opts.cfAigToken) throw new Error("ElevenLabsTTS: cfAigToken required");
+    if (!opts.apiKey && !opts.cfAigToken) {
+      throw new Error("ElevenLabsTTS: either apiKey or cfAigToken required");
+    }
     if (!opts.accountId) throw new Error("ElevenLabsTTS: accountId required");
     if (!opts.gatewayId) throw new Error("ElevenLabsTTS: gatewayId required");
     if (!opts.voiceId) throw new Error("ElevenLabsTTS: voiceId required");
 
     this.baseUrl = `https://gateway.ai.cloudflare.com/v1/${opts.accountId}/${opts.gatewayId}/elevenlabs`;
-    this.cfAigToken = opts.cfAigToken;
+    this.apiKey = opts.apiKey ?? null;
+    this.cfAigToken = opts.cfAigToken ?? null;
     this.voiceId = opts.voiceId;
     this.modelId = opts.modelId ?? "eleven_multilingual_v2";
     this.outputFormat = opts.outputFormat ?? "mp3_44100_128";
@@ -103,13 +111,21 @@ export class ElevenLabsTTS implements TTSProvider, StreamingTTSProvider {
   }
 
   private buildHeaders(): Record<string, string> {
-    return {
-      // Unified billing / BYOK — CF injects upstream credentials for us.
-      // Do NOT also send xi-api-key; it conflicts with gateway-managed auth.
-      "cf-aig-authorization": `Bearer ${this.cfAigToken}`,
+    const headers: Record<string, string> = {
       "Content-Type": "application/json",
       Accept: "audio/mpeg",
     };
+    // Auth priority:
+    //   1. ELEVENLABS_API_KEY present → xi-api-key (direct BYO key, simplest)
+    //   2. CF_AIG_TOKEN only → Authorization: Bearer (unified billing or
+    //      gateway-stored BYOK, same pattern as LLM routes through AI Gateway)
+    // Never send both — gateway will complain about conflicting auth.
+    if (this.apiKey) {
+      headers["xi-api-key"] = this.apiKey;
+    } else if (this.cfAigToken) {
+      headers.Authorization = `Bearer ${this.cfAigToken}`;
+    }
+    return headers;
   }
 
   /**

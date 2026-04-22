@@ -28,10 +28,12 @@ export interface Env {
   AI_GATEWAY_ID: string;
   CF_AIG_TOKEN: string;
 
-  // ElevenLabs TTS — routed through Cloudflare AI Gateway with unified billing.
-  // No ElevenLabs API key is needed here; CF_AIG_TOKEN above doubles as the
-  // cf-aig-authorization Bearer and CF provisions the upstream credentials
-  // (managed key or BYOK stored in Secrets Store).
+  // ElevenLabs TTS — routed through Cloudflare AI Gateway.
+  // Auth priority: ELEVENLABS_API_KEY (direct xi-api-key) > CF_AIG_TOKEN
+  // (cf-aig-authorization, only works if BYOK is configured in the AI Gateway
+  // dashboard). Prefer the direct key — it "just works" out of the box.
+  // Secret: `wrangler secret put ELEVENLABS_API_KEY`
+  ELEVENLABS_API_KEY: string;
   ELEVENLABS_VOICE_ID: string;
   ELEVENLABS_MODEL: string;
 

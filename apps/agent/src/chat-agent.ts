@@ -277,18 +277,28 @@ async function loadGlobalState(
 }
 
 /**
- * Pick a TTS provider: ElevenLabs via AI Gateway (unified billing, streaming)
- * when CF_AIG_TOKEN is configured; otherwise fall back to Workers AI Aura.
+ * Pick a TTS provider: ElevenLabs via AI Gateway (streaming) when any auth
+ * mode is configured; otherwise fall back to Workers AI Aura.
+ *
+ * Auth priority — mirrors the LLM route in @playheads/llm-config:
+ *   1. ELEVENLABS_API_KEY → xi-api-key (direct BYO key)
+ *   2. CF_AIG_TOKEN only  → Authorization: Bearer (unified billing / BYOK
+ *                            stored in AI Gateway dashboard)
  */
 function resolveTTS(env: Env): TTSProvider & Partial<StreamingTTSProvider> {
-  if (env.CF_AIG_TOKEN && env.CLOUDFLARE_ACCOUNT_ID && env.AI_GATEWAY_ID) {
+  const haveGateway = env.CLOUDFLARE_ACCOUNT_ID && env.AI_GATEWAY_ID;
+  const haveAuth = env.ELEVENLABS_API_KEY || env.CF_AIG_TOKEN;
+  if (haveGateway && haveAuth) {
     try {
-      console.log("[Voice] Using ElevenLabs TTS via AI Gateway (unified billing)", {
+      const authMode = env.ELEVENLABS_API_KEY ? "xi-api-key" : "Authorization (unified billing)";
+      console.log("[Voice] Using ElevenLabs TTS via AI Gateway", {
+        auth: authMode,
         voiceId: env.ELEVENLABS_VOICE_ID,
         model: env.ELEVENLABS_MODEL,
       });
       return new ElevenLabsTTS({
-        cfAigToken: env.CF_AIG_TOKEN,
+        apiKey: env.ELEVENLABS_API_KEY || undefined,
+        cfAigToken: env.CF_AIG_TOKEN || undefined,
         accountId: env.CLOUDFLARE_ACCOUNT_ID,
         gatewayId: env.AI_GATEWAY_ID,
         voiceId: env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM",
@@ -298,7 +308,7 @@ function resolveTTS(env: Env): TTSProvider & Partial<StreamingTTSProvider> {
       console.warn("[Voice] ElevenLabs init failed, falling back to Aura:", e);
     }
   }
-  console.log("[Voice] Using Workers AI Aura TTS (no CF_AIG_TOKEN or gateway)");
+  console.log("[Voice] Using Workers AI Aura TTS (no ElevenLabs auth configured)");
   return new WorkersAITTS(env.AI);
 }
 
@@ -318,10 +328,37 @@ export class MusicChatAgent extends VoiceChatBase {
   };
 
   // ── Voice pipeline providers ────────────────────────────────────────────
-  // STT via Workers AI Deepgram Flux (unified billing, no external key).
-  transcriber = new WorkersAIFluxSTT(this.env.AI);
-  // TTS: ElevenLabs via AI Gateway (streaming, unified billing) with Aura fallback.
-  tts = resolveTTS(this.env);
+  // Lazy getters so we can log the AI binding shape at first access — lets us
+  // diagnose cases where wrangler declares [ai] binding but the DO sees
+  // env.AI === undefined (account not enrolled in Workers AI, model not
+  // provisioned, or deploy didn't apply the binding).
+  private _transcriber?: WorkersAIFluxSTT;
+  get transcriber(): WorkersAIFluxSTT {
+    if (!this._transcriber) {
+      const ai = this.env.AI;
+      console.log("[Voice] init transcriber", {
+        aiBindingDefined: ai !== undefined && ai !== null,
+        aiHasRun: typeof (ai as { run?: unknown })?.run === "function",
+      });
+      if (!ai) {
+        throw new Error(
+          "[Voice] env.AI is undefined — is [ai] binding deployed and Workers AI enabled on this account?"
+        );
+      }
+      this._transcriber = new WorkersAIFluxSTT(ai);
+    }
+    return this._transcriber;
+  }
+
+  // TTS: ElevenLabs via AI Gateway (streaming) with Aura fallback.
+  // Lazy — so we don't hit ElevenLabs/gateway auth at DO construction.
+  private _tts?: TTSProvider & Partial<StreamingTTSProvider>;
+  get tts(): TTSProvider & Partial<StreamingTTSProvider> {
+    if (!this._tts) {
+      this._tts = resolveTTS(this.env);
+    }
+    return this._tts;
+  }
 
   // Per-connection voice context (userId, storefront) pulled from the WS query
   // string. Used by onTurn to load D1 queue state without relying on chat body.
