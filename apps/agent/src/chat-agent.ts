@@ -333,28 +333,32 @@ export class MusicChatAgent extends VoiceChatBase {
   // env.AI === undefined (account not enrolled in Workers AI, model not
   // provisioned, or deploy didn't apply the binding).
   private _transcriber?: WorkersAIFluxSTT;
-  get transcriber(): WorkersAIFluxSTT {
+  // Return type is nullable so the voice pipeline's built-in `if (!provider)`
+  // branch fires and sends an error frame to the client — throwing here gets
+  // silently swallowed by @cloudflare/voice's async message handler (no
+  // try/catch around `this.transcriber` access in #handleStartCall).
+  get transcriber(): WorkersAIFluxSTT | undefined {
     if (!this._transcriber) {
       const ai = this.env.AI as unknown as { run?: unknown } | undefined;
-      // Verbose so we can see what's actually bound. Uses console.error so it
-      // survives log filtering.
-      console.error("[Voice][diag] transcriber getter", {
-        envKeys: Object.keys(this.env as object),
-        aiType: typeof ai,
-        aiTruthy: !!ai,
-        aiKeys: ai && typeof ai === "object" ? Object.keys(ai) : [],
-        aiRunType: typeof ai?.run,
-      });
+      const envKeys = Object.keys(this.env as object);
+      const aiType = typeof ai;
+      const aiKeys = ai && typeof ai === "object" ? Object.keys(ai) : [];
+      const aiRunType = typeof ai?.run;
+      // Flatten the diagnostic into the message string — some log viewers
+      // truncate the structured payload object.
+      console.error(
+        `[Voice][diag] transcriber getter: envKeys=[${envKeys.join(",")}] ` +
+        `aiType=${aiType} aiTruthy=${!!ai} aiKeys=[${aiKeys.join(",")}] ` +
+        `aiRunType=${aiRunType}`
+      );
       if (!ai || typeof ai.run !== "function") {
-        throw new Error(
-          `[Voice] env.AI.run is not a function (typeof=${typeof ai?.run}). ` +
-          `The [ai] binding is either missing from the deploy or this CF ` +
-          `account has no Workers AI access. Check dashboard → Workers & Pages ` +
-          `→ Settings → Workers AI.`
+        console.error(
+          "[Voice] transcriber init SKIPPED — env.AI.run is not a function. " +
+          "Returning undefined so the voice pipeline surfaces a clean error " +
+          "to the client."
         );
+        return undefined;
       }
-      // ai is validated to have .run above; cast to satisfy WorkersAIFluxSTT's
-      // AiLike interface without depending on its private type.
       this._transcriber = new WorkersAIFluxSTT(ai as never);
     }
     return this._transcriber;
