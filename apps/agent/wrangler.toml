@@ -3,21 +3,21 @@ main = "src/index.ts"
 compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
 
+# MusicChatAgent handles BOTH text chat (AIChatAgent) and realtime voice
+# (withVoice mixin) in the same DO class — one binding, one SQLite instance.
 [[durable_objects.bindings]]
 name = "MusicChatAgent"
 class_name = "MusicChatAgent"
-
-[[durable_objects.bindings]]
-name = "VoiceDJAgent"
-class_name = "VoiceDJAgent"
 
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["MusicChatAgent"]
 
+# v2: VoiceDJAgent was briefly introduced as a separate DO, then merged back
+# into MusicChatAgent. Any preview env that deployed v2 gets the class cleaned up.
 [[migrations]]
 tag = "v2"
-new_sqlite_classes = ["VoiceDJAgent"]
+deleted_classes = ["VoiceDJAgent"]
 
 [[d1_databases]]
 binding = "DB"

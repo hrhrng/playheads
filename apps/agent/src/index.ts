@@ -11,9 +11,10 @@ import { handleAppleMusic } from "./apple-music";
 import { handleLyrics } from "./lyrics";
 import type { Env } from "./types";
 
-// Must export the Durable Object class for Wrangler
+// Must export the Durable Object class for Wrangler.
+// MusicChatAgent now handles both text chat (AIChatAgent.onChatMessage) and
+// realtime voice (withVoice.onTurn) — a single DO class for both modalities.
 export { MusicChatAgent } from "./chat-agent";
-export { VoiceDJAgent } from "./voice-dj-agent";
 
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {

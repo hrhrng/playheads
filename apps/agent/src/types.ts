@@ -6,9 +6,8 @@
 // Worker Environment
 // ---------------------------------------------------------------------------
 export interface Env {
-  // Durable Object bindings
+  // Durable Object bindings — MusicChatAgent handles both text chat + voice.
   MusicChatAgent: DurableObjectNamespace;
-  VoiceDJAgent: DurableObjectNamespace;
 
   // Workers AI binding — used by @cloudflare/voice for STT/TTS
   AI: Ai;

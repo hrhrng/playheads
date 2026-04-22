@@ -50,9 +50,13 @@ export function useVoiceDJ({
   duckedVolume = 0.25,
   restoredVolume = 1,
 }: UseVoiceDJParams) {
+  // Voice and text chat share the same DO class (MusicChatAgent). Voice uses
+  // a userId-scoped instance for persistent DJ presence across chats, while
+  // text chat uses sessionId-scoped instances — they're independent DO
+  // instances of the same class, coordinating via D1 profile.queue.
   const voice = useVoiceAgent({
-    agent: 'VoiceDJAgent',
-    name: instanceName || userId || 'default',
+    agent: 'MusicChatAgent',
+    name: instanceName || (userId ? `voice-${userId}` : 'voice-default'),
     query: {
       userId: userId ?? undefined,
       storefront,

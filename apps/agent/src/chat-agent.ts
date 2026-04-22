@@ -1,15 +1,32 @@
 /**
- * MusicChatAgent - Core AI chat agent powered by Cloudflare Agents SDK.
+ * MusicChatAgent — AI DJ running on Cloudflare Agents SDK.
  *
- * Extends AIChatAgent for automatic message persistence, resumable streaming,
- * and multi-device synchronization. Uses Vercel AI SDK for unified LLM access
- * through Cloudflare AI Gateway.
+ * Extends AIChatAgent for text chat (automatic message persistence, resumable
+ * streaming, multi-device sync) AND wraps with @cloudflare/voice's withVoice()
+ * mixin so the SAME Durable Object class handles realtime voice too:
+ *   - onChatMessage() — text chat path (Vercel AI SDK streaming)
+ *   - onTurn()        — voice path (continuous STT + streaming TTS)
+ *
+ * Both paths share the SAME music tools, same LLM resolver, and same D1-backed
+ * playback state. Text chat instances are keyed by sessionId; voice instances
+ * are keyed by userId (persistent DJ across chats).
  *
  * Ported from apps/backend/agent.py
  */
 import { AIChatAgent } from "@cloudflare/ai-chat";
 import { streamText, convertToModelMessages, stepCountIs, tool, createUIMessageStream, createUIMessageStreamResponse, type ModelMessage } from "ai";
 import { z } from "zod";
+import type { Connection } from "agents";
+import {
+  withVoice,
+  WorkersAIFluxSTT,
+  WorkersAITTS,
+  type TTSProvider,
+  type StreamingTTSProvider,
+  type VoiceTurnContext,
+  type TextSource,
+} from "@cloudflare/voice";
+import { ElevenLabsTTS } from "./elevenlabs-tts";
 import { createMusicTools } from "./tools";
 import { pipeYamlRender } from "@json-render/yaml";
 import { yamlPrompt } from "@json-render/yaml";
@@ -200,10 +217,98 @@ function extractTextPreview(msg: import("ai").UIMessage): string {
 }
 
 // ---------------------------------------------------------------------------
-// MusicChatAgent
+// Voice pipeline — config + helpers
 // ---------------------------------------------------------------------------
 
-export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
+/**
+ * Voice-mode system prompt. Unlike the text-chat prompt, voice output is read
+ * aloud by TTS — so: no markdown, no lists, no URLs. Short spoken sentences.
+ * Tools mutate state silently — don't narrate "let me search for that".
+ */
+const VOICE_SYSTEM_PROMPT = `你是 "Playhead DJ" —— 一个实时语音电台主持人。
+你的回答会被直接朗读出来，所以：
+- 只说人话：短句、口语化、有呼吸感
+- 绝对不要 markdown、列表、标题、代码、URL、表情符号
+- 不要念 "第一、第二"；不要念 "井号、冒号"
+- 英文专有名词（歌名、乐队名）直接念英文
+- 提到具体数字/年份，用汉字说出来（比如 "两千年"，不是 "2000"）
+
+工具使用：
+- 用户说"播 X" → search_music(X) → add_to_queue → play_track
+- 用户说"下一首" → skip_next
+- 用户说"现在放的什么" → 直接根据上下文回答，必要时 get_now_playing
+- 调工具前不要罗嗦 "让我帮你查一下"，直接做；做完简短说结果（"来这首，XXX 的 YYY"）
+- 如果只是闲聊/推荐，不必每次都 search_music，先聊再说
+
+语气：
+- 像深夜电台 DJ，不是客服
+- 一段话最多两三句，别讲课
+- 用户打断你的时候，立刻停下来听`;
+
+/** Read the user-level global queue from D1 (same source chat uses). */
+async function loadGlobalState(
+  env: Env,
+  userId: string | undefined
+): Promise<PlaybackState> {
+  const empty: PlaybackState = {
+    currentTrack: null,
+    playlist: [],
+    isPlaying: false,
+    playbackPosition: 0,
+  };
+  if (!userId) return empty;
+  try {
+    const row = await env.DB
+      .prepare('SELECT "queue", "queueIndex" FROM "profile" WHERE "id" = ?')
+      .bind(userId)
+      .first<{ queue: string; queueIndex: number }>();
+    if (!row) return empty;
+    const tracks = JSON.parse(row.queue || "[]") as PlaybackState["playlist"];
+    const idx = row.queueIndex ?? -1;
+    return {
+      currentTrack: idx >= 0 && idx < tracks.length ? tracks[idx] : null,
+      playlist: tracks,
+      isPlaying: false,
+      playbackPosition: 0,
+    };
+  } catch {
+    return empty;
+  }
+}
+
+/**
+ * Pick a TTS provider: ElevenLabs via AI Gateway (unified billing, streaming)
+ * when CF_AIG_TOKEN is configured; otherwise fall back to Workers AI Aura.
+ */
+function resolveTTS(env: Env): TTSProvider & Partial<StreamingTTSProvider> {
+  if (env.CF_AIG_TOKEN && env.CLOUDFLARE_ACCOUNT_ID && env.AI_GATEWAY_ID) {
+    try {
+      console.log("[Voice] Using ElevenLabs TTS via AI Gateway (unified billing)", {
+        voiceId: env.ELEVENLABS_VOICE_ID,
+        model: env.ELEVENLABS_MODEL,
+      });
+      return new ElevenLabsTTS({
+        cfAigToken: env.CF_AIG_TOKEN,
+        accountId: env.CLOUDFLARE_ACCOUNT_ID,
+        gatewayId: env.AI_GATEWAY_ID,
+        voiceId: env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM",
+        modelId: env.ELEVENLABS_MODEL || "eleven_multilingual_v2",
+      });
+    } catch (e) {
+      console.warn("[Voice] ElevenLabs init failed, falling back to Aura:", e);
+    }
+  }
+  console.log("[Voice] Using Workers AI Aura TTS (no CF_AIG_TOKEN or gateway)");
+  return new WorkersAITTS(env.AI);
+}
+
+// ---------------------------------------------------------------------------
+// MusicChatAgent — text chat (AIChatAgent.onChatMessage) + voice (withVoice.onTurn)
+// ---------------------------------------------------------------------------
+
+const VoiceChatBase = withVoice(AIChatAgent<Env, PlaybackState>);
+
+export class MusicChatAgent extends VoiceChatBase {
   // Playback state synced in real-time to all connected clients via setState()
   initialState: PlaybackState = {
     currentTrack: null,
@@ -211,6 +316,19 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
     isPlaying: false,
     playbackPosition: 0,
   };
+
+  // ── Voice pipeline providers ────────────────────────────────────────────
+  // STT via Workers AI Deepgram Flux (unified billing, no external key).
+  transcriber = new WorkersAIFluxSTT(this.env.AI);
+  // TTS: ElevenLabs via AI Gateway (streaming, unified billing) with Aura fallback.
+  tts = resolveTTS(this.env);
+
+  // Per-connection voice context (userId, storefront) pulled from the WS query
+  // string. Used by onTurn to load D1 queue state without relying on chat body.
+  private voiceCtx = new WeakMap<
+    Connection,
+    { userId?: string; storefront: string }
+  >();
 
   async onChatMessage(
     onFinish?: Parameters<AIChatAgent<Env, PlaybackState>["onChatMessage"]>[0],
@@ -388,6 +506,129 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
     });
 
     return createUIMessageStreamResponse({ stream });
+  }
+
+  // =========================================================================
+  // Voice pipeline (withVoice mixin hooks)
+  // =========================================================================
+
+  override async onCallStart(connection: Connection): Promise<void> {
+    // userId / storefront arrive as query params on the voice WebSocket URL
+    // (set by the client via useVoiceAgent({ query: { ... } })).
+    const url = new URL(
+      (connection as unknown as { uri?: string }).uri || "http://x"
+    );
+    const userId = url.searchParams.get("userId") || undefined;
+    const storefront = url.searchParams.get("storefront") || "us";
+    this.voiceCtx.set(connection, { userId, storefront });
+
+    console.log("[Voice] onCallStart", { userId, storefront });
+
+    // Short greeting — varies based on whether the user has prior voice history.
+    const history = this.getConversationHistory(1);
+    const greeting = history.length
+      ? "欢迎回来，想听点什么？"
+      : "嘿，我是你的 Playhead DJ。说一句歌名，或者随便聊聊你今天的心情。";
+    await this.speak(connection, greeting);
+  }
+
+  override async onCallEnd(connection: Connection): Promise<void> {
+    this.voiceCtx.delete(connection);
+  }
+
+  override async onTurn(
+    transcript: string,
+    context: VoiceTurnContext
+  ): Promise<TextSource> {
+    const ctx = this.voiceCtx.get(context.connection) || { storefront: "us" };
+    const globalState = await loadGlobalState(this.env, ctx.userId);
+
+    console.log("[Voice] onTurn", {
+      userId: ctx.userId,
+      storefront: ctx.storefront,
+      transcriptLen: transcript.length,
+      playlistLen: globalState.playlist.length,
+    });
+
+    // Same LLM resolver as chat — voice uses the "chat" caller type.
+    const { model, providerOptions, maxOutputTokens } = await resolveLLM(
+      this.env,
+      "chat"
+    );
+
+    // Same music tools, same closure pattern. Voice skips web_search to keep
+    // turns snappy (spoken search results are rarely useful).
+    const musicTools = createMusicTools({
+      env: this.env,
+      state: globalState,
+      storefront: ctx.storefront,
+    });
+
+    // Voice history is stored separately (saveMessage / getConversationHistory)
+    // — text-only, simple mapping to ModelMessage[].
+    const convertedMessages: ModelMessage[] = context.messages.map((m) => ({
+      role: m.role === "assistant" ? ("assistant" as const) : ("user" as const),
+      content: m.content,
+    }));
+    convertedMessages.push({ role: "user", content: transcript });
+    convertedMessages.push(buildStateContext(globalState));
+
+    const conn = context.connection;
+
+    const result = streamText({
+      model: model as Parameters<typeof streamText>[0]["model"],
+      ...(maxOutputTokens ? { maxOutputTokens } : {}),
+      providerOptions:
+        providerOptions as Parameters<typeof streamText>[0]["providerOptions"],
+      system: {
+        role: "system" as const,
+        content: VOICE_SYSTEM_PROMPT,
+        providerOptions: {
+          anthropic: { cacheControl: { type: "ephemeral" } },
+        },
+      },
+      messages: convertedMessages,
+      tools: musicTools,
+      stopWhen: stepCountIs(6),
+      abortSignal: context.signal,
+      onStepFinish: ({ toolResults }) => {
+        // Forward tool _action payloads to the client over the same WebSocket.
+        // Client's useVoiceDJ hook picks these up from lastCustomMessage and
+        // dispatches them to MusicKit — same pattern as the chat data-part flow.
+        for (const tr of toolResults) {
+          const output =
+            (tr as unknown as { result: unknown }).result ??
+            (tr as unknown as { output: unknown }).output;
+          try {
+            const parsed = typeof output === "string" ? JSON.parse(output) : null;
+            if (parsed?._action) {
+              conn.send(
+                JSON.stringify({
+                  type: "music-action",
+                  id: (tr as unknown as { toolCallId: string }).toolCallId,
+                  action: parsed._action,
+                })
+              );
+            }
+          } catch {
+            /* tool output wasn't JSON — ignore */
+          }
+        }
+      },
+    });
+
+    // Persist voice turn to the voice-specific SQLite table (async, non-blocking).
+    this.saveMessage("user", transcript);
+    result.text.then(
+      (finalText) => {
+        if (finalText) this.saveMessage("assistant", finalText);
+      },
+      () => { /* abort / timeout — ignore */ }
+    );
+
+    // textStream is AsyncIterable<string>; @cloudflare/voice sentence-chunks
+    // this and pipes each chunk to TTS the moment a sentence boundary lands.
+    return result.textStream;
   }
 }
 
