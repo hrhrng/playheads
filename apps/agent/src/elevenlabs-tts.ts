@@ -3,6 +3,13 @@
  * AI Gateway to ElevenLabs. Used by VoiceDJAgent for higher-quality multilingual
  * voices than the default Workers AI (Deepgram Aura) provider.
  *
+ * Auth: Cloudflare AI Gateway unified billing. We send
+ *   cf-aig-authorization: Bearer <CF_AIG_TOKEN>
+ * and do NOT forward an xi-api-key — Cloudflare provisions the upstream
+ * credentials (either CF-managed or BYOK stored in Secrets Store). This also
+ * sidesteps a known conflict where xi-api-key clashes with gateway-injected
+ * headers for ElevenLabs specifically.
+ *
  * Gateway route: https://gateway.ai.cloudflare.com/v1/{account}/{gateway}/elevenlabs
  * ElevenLabs endpoint: POST /v1/text-to-speech/{voice_id}[/stream]
  *
@@ -12,8 +19,12 @@
 import type { TTSProvider, StreamingTTSProvider } from "@cloudflare/voice";
 
 export interface ElevenLabsTTSOptions {
-  /** ElevenLabs API key — sent as xi-api-key header. */
-  apiKey: string;
+  /**
+   * Cloudflare AI Gateway token (Bearer). Used as cf-aig-authorization.
+   * Under unified billing CF fronts the ElevenLabs bill; under BYOK CF
+   * injects your stored xi-api-key automatically.
+   */
+  cfAigToken: string;
 
   /** Cloudflare account ID for AI Gateway routing. */
   accountId: string;
@@ -63,20 +74,20 @@ export interface ElevenLabsTTSOptions {
  */
 export class ElevenLabsTTS implements TTSProvider, StreamingTTSProvider {
   private readonly baseUrl: string;
-  private readonly apiKey: string;
+  private readonly cfAigToken: string;
   private readonly voiceId: string;
   private readonly modelId: string;
   private readonly outputFormat: string;
   private readonly voiceSettings: ElevenLabsTTSOptions["voiceSettings"];
 
   constructor(opts: ElevenLabsTTSOptions) {
-    if (!opts.apiKey) throw new Error("ElevenLabsTTS: apiKey required");
+    if (!opts.cfAigToken) throw new Error("ElevenLabsTTS: cfAigToken required");
     if (!opts.accountId) throw new Error("ElevenLabsTTS: accountId required");
     if (!opts.gatewayId) throw new Error("ElevenLabsTTS: gatewayId required");
     if (!opts.voiceId) throw new Error("ElevenLabsTTS: voiceId required");
 
     this.baseUrl = `https://gateway.ai.cloudflare.com/v1/${opts.accountId}/${opts.gatewayId}/elevenlabs`;
-    this.apiKey = opts.apiKey;
+    this.cfAigToken = opts.cfAigToken;
     this.voiceId = opts.voiceId;
     this.modelId = opts.modelId ?? "eleven_multilingual_v2";
     this.outputFormat = opts.outputFormat ?? "mp3_44100_128";
@@ -93,7 +104,9 @@ export class ElevenLabsTTS implements TTSProvider, StreamingTTSProvider {
 
   private buildHeaders(): Record<string, string> {
     return {
-      "xi-api-key": this.apiKey,
+      // Unified billing / BYOK — CF injects upstream credentials for us.
+      // Do NOT also send xi-api-key; it conflicts with gateway-managed auth.
+      "cf-aig-authorization": `Bearer ${this.cfAigToken}`,
       "Content-Type": "application/json",
       Accept: "audio/mpeg",
     };

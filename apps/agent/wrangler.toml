@@ -57,8 +57,11 @@ AI_GATEWAY_ID = "clash"
 # Switch to "brave" or "tavily" to use external search APIs with any LLM provider.
 SEARCH_PROVIDER = "anthropic"
 
-# ElevenLabs TTS (routed through AI Gateway). VoiceDJAgent uses these when
-# ELEVENLABS_API_KEY is set; otherwise it falls back to Workers AI Aura.
+# ElevenLabs TTS — routed through AI Gateway with unified billing.
+# No ElevenLabs API key needed; CF_AIG_TOKEN is the cf-aig-authorization Bearer
+# and Cloudflare fronts the ElevenLabs bill (or injects your BYOK from the
+# Secrets Store — both use the same header).
+# Enable ElevenLabs + Unified Billing in the AI Gateway dashboard first.
 # Voice library: https://elevenlabs.io/voice-library
 ELEVENLABS_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"
 # Models: eleven_multilingual_v2 (best CJK), eleven_turbo_v2_5, eleven_flash_v2_5 (fastest)
@@ -68,7 +71,6 @@ ELEVENLABS_MODEL = "eleven_multilingual_v2"
 # ADMIN_ENCRYPTION_KEY   — same 64-char hex as playheads-admin; used to decrypt DB keys at runtime
 # TAVILY_API_KEY         — Tavily search API key (https://tavily.com); used when SEARCH_PROVIDER=tavily
 # BRAVE_SEARCH_API_KEY   — Brave Search API key (https://brave.com/search/api); used when SEARCH_PROVIDER=brave
-# CF_AIG_TOKEN           — Cloudflare AI Gateway token (Anthropic env-based fallback)
+# CF_AIG_TOKEN           — Cloudflare AI Gateway token (also drives ElevenLabs unified billing)
 # DOUBAO_API_KEY         — Doubao API key (env-based fallback when no DB config)
-# ELEVENLABS_API_KEY     — ElevenLabs API key for VoiceDJAgent TTS
 # APPLE_MUSIC_TEAM_ID, APPLE_MUSIC_KEY_ID, APPLE_MUSIC_PRIVATE_KEY

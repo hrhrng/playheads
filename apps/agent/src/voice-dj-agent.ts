@@ -122,19 +122,19 @@ async function loadGlobalState(env: Env, userId: string | undefined): Promise<Pl
 
 const VoiceBase = withVoice(Agent<Env>);
 
-// Select a TTS provider based on env: ElevenLabs (via AI Gateway, streaming)
-// when the API key is configured, otherwise fall back to Workers AI Aura.
-// Declared as a standalone fn so class property initialization can read `this.env`.
+// Select a TTS provider based on env: ElevenLabs through Cloudflare AI Gateway
+// (unified billing — CF fronts the ElevenLabs bill) when CF_AIG_TOKEN is
+// configured, else fall back to Workers AI Aura. Declared as a standalone fn
+// so class-property initialization can read `this.env`.
 function resolveTTS(env: Env): TTSProvider & Partial<StreamingTTSProvider> {
-  const key = env.ELEVENLABS_API_KEY;
-  if (key && env.CLOUDFLARE_ACCOUNT_ID && env.AI_GATEWAY_ID) {
+  if (env.CF_AIG_TOKEN && env.CLOUDFLARE_ACCOUNT_ID && env.AI_GATEWAY_ID) {
     try {
-      console.log("[VoiceDJAgent] Using ElevenLabs TTS via AI Gateway", {
+      console.log("[VoiceDJAgent] Using ElevenLabs TTS via AI Gateway (unified billing)", {
         voiceId: env.ELEVENLABS_VOICE_ID,
         model: env.ELEVENLABS_MODEL,
       });
       return new ElevenLabsTTS({
-        apiKey: key,
+        cfAigToken: env.CF_AIG_TOKEN,
         accountId: env.CLOUDFLARE_ACCOUNT_ID,
         gatewayId: env.AI_GATEWAY_ID,
         voiceId: env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM",
@@ -144,7 +144,7 @@ function resolveTTS(env: Env): TTSProvider & Partial<StreamingTTSProvider> {
       console.warn("[VoiceDJAgent] ElevenLabs init failed, falling back to Aura:", e);
     }
   }
-  console.log("[VoiceDJAgent] Using Workers AI Aura TTS (no ELEVENLABS_API_KEY)");
+  console.log("[VoiceDJAgent] Using Workers AI Aura TTS (no CF_AIG_TOKEN or gateway)");
   return new WorkersAITTS(env.AI);
 }
 

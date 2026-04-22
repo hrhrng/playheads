@@ -29,11 +29,10 @@ export interface Env {
   AI_GATEWAY_ID: string;
   CF_AIG_TOKEN: string;
 
-  // ElevenLabs TTS (used by VoiceDJAgent when configured; falls back to Workers
-  // AI Aura otherwise). Requests route through Cloudflare AI Gateway for
-  // observability and caching.
-  // Secret: set via `wrangler secret put ELEVENLABS_API_KEY`
-  ELEVENLABS_API_KEY: string;
+  // ElevenLabs TTS — routed through Cloudflare AI Gateway with unified billing.
+  // No ElevenLabs API key is needed here; CF_AIG_TOKEN above doubles as the
+  // cf-aig-authorization Bearer and CF provisions the upstream credentials
+  // (managed key or BYOK stored in Secrets Store).
   ELEVENLABS_VOICE_ID: string;
   ELEVENLABS_MODEL: string;
 
