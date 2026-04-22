@@ -141,6 +141,7 @@ function App() {
       <ToastProvider />
 
       <VoiceModeShell
+        sessionId={activeSessionId}
         userId={effectiveSession?.user?.id || null}
         storefront={storefrontId}
         provider={provider}
@@ -220,6 +221,7 @@ function App() {
  * viewport regardless of which route is active.
  */
 function VoiceModeShell(props: {
+  sessionId: string | null;
   userId: string | null;
   storefront: string;
   provider: ReturnType<typeof useMusicProvider>['provider'];
@@ -231,6 +233,7 @@ function VoiceModeShell(props: {
     <VoiceModeView
       isOpen={isOpen}
       onClose={close}
+      sessionId={props.sessionId}
       userId={props.userId}
       storefront={props.storefront}
       provider={props.provider}

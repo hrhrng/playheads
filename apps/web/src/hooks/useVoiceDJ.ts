@@ -26,10 +26,14 @@ interface CustomMessage {
 interface UseVoiceDJParams {
   /** Whether voice mode is currently active — controls connection lifecycle. */
   enabled: boolean;
+  /**
+   * Chat session ID. Voice connects to the SAME MusicChatAgent DO instance
+   * as the chat for this session — one DO per session, both modalities share
+   * state, history, and the connection pool.
+   */
+  sessionId: string | null;
   userId: string | null;
   storefront: string;
-  /** Per-user DO instance name — keeps voice state isolated across users. */
-  instanceName?: string;
   /** Apple Music provider for volume ducking. */
   provider: AppleMusicProvider | null;
   /** Queue dispatcher (reused from chat flow). */
@@ -42,21 +46,20 @@ interface UseVoiceDJParams {
 
 export function useVoiceDJ({
   enabled,
+  sessionId,
   userId,
   storefront,
-  instanceName,
   provider,
   queueOps,
   duckedVolume = 0.25,
   restoredVolume = 1,
 }: UseVoiceDJParams) {
-  // Voice and text chat share the same DO class (MusicChatAgent). Voice uses
-  // a userId-scoped instance for persistent DJ presence across chats, while
-  // text chat uses sessionId-scoped instances — they're independent DO
-  // instances of the same class, coordinating via D1 profile.queue.
+  // Voice connects to the EXACT same DO instance as the chat for this session.
+  // Same agent class, same instance name (sessionId) — voice and chat are two
+  // I/O modalities on one DO, sharing state and tools.
   const voice = useVoiceAgent({
     agent: 'MusicChatAgent',
-    name: instanceName || (userId ? `voice-${userId}` : 'voice-default'),
+    name: sessionId || 'default',
     query: {
       userId: userId ?? undefined,
       storefront,

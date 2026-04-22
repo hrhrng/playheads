@@ -23,6 +23,8 @@ import type { UnifiedTrack } from '../../providers/types';
 interface VoiceModeViewProps {
   isOpen: boolean;
   onClose: () => void;
+  /** Chat session ID — voice connects to the same DO instance as the chat. */
+  sessionId: string | null;
   userId: string | null;
   storefront: string;
   provider: AppleMusicProvider | null;
@@ -33,6 +35,7 @@ interface VoiceModeViewProps {
 export function VoiceModeView({
   isOpen,
   onClose,
+  sessionId,
   userId,
   storefront,
   provider,
@@ -41,6 +44,7 @@ export function VoiceModeView({
 }: VoiceModeViewProps): React.JSX.Element | null {
   const voice = useVoiceDJ({
     enabled: isOpen,
+    sessionId,
     userId,
     storefront,
     provider,
