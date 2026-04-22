@@ -51,13 +51,19 @@ export function VoiceModeView({
     queueOps,
   });
 
+  // Status labels reflect the CF voice pipeline state, which has four phases:
+  //   idle       — WS connected, VAD hasn't detected user speech yet (between turns)
+  //   listening  — VAD caught voice, STT is streaming the utterance
+  //   thinking   — transcript finalized, LLM generating
+  //   speaking   — TTS audio is playing back
   const statusLabel = useMemo(() => {
+    if (!voice.connected) return '连接中…';
     switch (voice.status) {
       case 'listening': return '正在聆听';
       case 'thinking':  return '思考中';
       case 'speaking':  return '正在说话';
-      case 'idle':      return voice.connected ? '待机' : '连接中';
-      default:          return '待机';
+      case 'idle':      return '请开口说话';
+      default:          return '请开口说话';
     }
   }, [voice.status, voice.connected]);
 
