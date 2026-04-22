@@ -1,6 +1,8 @@
 name = "playheads-agent"
 main = "src/index.ts"
-compatibility_date = "2025-01-01"
+# Bumped from 2025-01-01 to pick up Workers AI WebSocket binding behavior
+# needed by @cloudflare/voice (ai.run("@cf/deepgram/flux", ..., { websocket: true })).
+compatibility_date = "2026-04-01"
 compatibility_flags = ["nodejs_compat"]
 
 # MusicChatAgent handles BOTH text chat (AIChatAgent) and realtime voice

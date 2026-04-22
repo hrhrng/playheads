@@ -575,6 +575,24 @@ export class MusicChatAgent extends VoiceChatBase {
 
     console.error("[Voice] onCallStart", { userId, storefront });
 
+    // Eagerly init transcriber so any binding misconfiguration (env.AI
+    // undefined, Workers AI not enabled on the account, etc.) surfaces here
+    // — and we can tell the client about it rather than failing silently
+    // inside FluxSession's catch block.
+    try {
+      const t = this.transcriber;
+      console.error("[Voice] transcriber ready", { ctor: t?.constructor?.name });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("[Voice] transcriber init FAILED:", msg);
+      try {
+        connection.send(
+          JSON.stringify({ type: "error", message: `STT init failed: ${msg}` })
+        );
+      } catch { /* connection may already be torn down */ }
+      return;
+    }
+
     // Greeting — wrapped in try/catch so a TTS misconfiguration (ElevenLabs
     // 401, missing key, etc.) doesn't tear down the whole WS connection.
     // The user can still chat via text; voice-out is just degraded.
@@ -586,7 +604,13 @@ export class MusicChatAgent extends VoiceChatBase {
       await this.speak(connection, greeting);
       console.error("[Voice] greeting sent OK");
     } catch (e) {
-      console.error("[Voice] greeting failed (continuing without voice-out):", e);
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("[Voice] greeting failed (continuing without voice-out):", msg);
+      try {
+        connection.send(
+          JSON.stringify({ type: "error", message: `TTS failed: ${msg}` })
+        );
+      } catch { /* ignore */ }
     }
   }
 
