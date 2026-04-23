@@ -1,4 +1,8 @@
-import { WorkersAIFluxSTT } from "@cloudflare/voice";
+import {
+  WorkersAIFluxSTT,
+  type Transcriber,
+} from "@cloudflare/voice";
+import { WhisperBufferedSTT } from "./voice-stt";
 
 interface VoiceLogger {
   error: (...args: unknown[]) => void;
@@ -12,6 +16,8 @@ interface VoiceEnvLike {
   AI?: {
     run?: unknown;
   };
+  VOICE_STT_PROVIDER?: string;
+  VOICE_STT_LANGUAGE?: string;
 }
 
 function resolveWorkersAIBinding(
@@ -40,7 +46,7 @@ function resolveWorkersAIBinding(
 export function createVoiceTranscriber(
   env: VoiceEnvLike,
   logger: VoiceLogger = console
-): WorkersAIFluxSTT | null {
+): Transcriber | null {
   const ai = resolveWorkersAIBinding(env, logger);
   if (!ai) {
     logger.error(
@@ -49,5 +55,12 @@ export function createVoiceTranscriber(
     return null;
   }
 
-  return new WorkersAIFluxSTT(ai);
+  const provider = (env.VOICE_STT_PROVIDER || "whisper").toLowerCase();
+  if (provider === "flux") {
+    return new WorkersAIFluxSTT(ai);
+  }
+
+  return new WhisperBufferedSTT(ai, {
+    language: env.VOICE_STT_LANGUAGE || "zh",
+  });
 }

@@ -67,9 +67,10 @@ export function VoiceModeView({
     }
   }, [voice.status, voice.connected]);
 
-  const lastMessage = voice.transcript[voice.transcript.length - 1];
-  const lastMessageText = lastMessage?.text || '';
-  const lastMessageRole = lastMessage?.role;
+  const visibleTranscript = useMemo(
+    () => voice.transcript.slice(-8),
+    [voice.transcript]
+  );
 
   if (!isOpen) return null;
 
@@ -123,26 +124,11 @@ export function VoiceModeView({
           </div>
         )}
 
-        {/* Live caption — interim user speech OR latest DJ line */}
-        <div className="max-w-lg text-center min-h-[4rem] px-4">
-          {voice.interimTranscript ? (
-            <p className="text-white/50 text-lg leading-relaxed italic">
-              {voice.interimTranscript}
-            </p>
-          ) : lastMessageText ? (
-            <p
-              className={`text-lg leading-relaxed ${
-                lastMessageRole === 'assistant' ? 'text-white' : 'text-white/60'
-              }`}
-            >
-              {lastMessageText}
-            </p>
-          ) : (
-            <p className="text-white/40 text-base">
-              {voice.connected ? '开口说话吧' : '正在连接…'}
-            </p>
-          )}
-        </div>
+        <VoiceTranscript
+          messages={visibleTranscript}
+          interimTranscript={voice.interimTranscript}
+          connected={voice.connected}
+        />
       </div>
 
       {/* Ducked music strip — shows what's playing while DJ talks */}
@@ -215,6 +201,77 @@ export function VoiceModeView({
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
+
+function VoiceTranscript({
+  messages,
+  interimTranscript,
+  connected,
+}: {
+  messages: Array<{ role: string; text: string; timestamp?: number }>;
+  interimTranscript: string | null;
+  connected: boolean;
+}): React.JSX.Element {
+  const hasContent =
+    messages.some((message) => message.text.trim().length > 0) ||
+    Boolean(interimTranscript?.trim());
+
+  if (!hasContent) {
+    return (
+      <div className="w-full max-w-xl min-h-[5rem] flex items-center justify-center text-center px-4">
+        <p className="text-white/40 text-base">
+          {connected ? '开口说话吧，对话会显示在这里' : '正在连接…'}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full max-w-2xl max-h-[18rem] overflow-y-auto rounded-[2rem] border border-white/10 bg-black/25 backdrop-blur-xl p-4 shadow-2xl shadow-black/25">
+      <div className="flex flex-col gap-3">
+        {messages.map((message, index) => {
+          const isUser = message.role === 'user';
+          const text = message.text.trim() || (isUser ? '' : '正在组织回答…');
+          if (!text) return null;
+
+          return (
+            <div
+              key={`${message.timestamp ?? index}-${index}`}
+              className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}
+            >
+              <div
+                className={`max-w-[82%] rounded-2xl px-4 py-3 text-left ${
+                  isUser
+                    ? 'bg-pink-400/18 border border-pink-300/20 text-white'
+                    : 'bg-white/10 border border-white/10 text-white/90'
+                }`}
+              >
+                <div className="mb-1 text-[10px] uppercase tracking-[0.2em] text-white/40">
+                  {isUser ? '你' : 'DJ'}
+                </div>
+                <p className="text-sm sm:text-base leading-relaxed whitespace-pre-wrap">
+                  {text}
+                </p>
+              </div>
+            </div>
+          );
+        })}
+
+        {interimTranscript?.trim() && (
+          <div className="flex justify-end">
+            <div className="max-w-[82%] rounded-2xl border border-pink-300/20 bg-pink-400/10 px-4 py-3 text-left text-white/60">
+              <div className="mb-1 text-[10px] uppercase tracking-[0.2em] text-white/35">
+                你 · 正在说
+              </div>
+              <p className="text-sm sm:text-base leading-relaxed italic">
+                {interimTranscript}
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function StatusDot({ status }: { status: string }): React.JSX.Element {
   const color = {

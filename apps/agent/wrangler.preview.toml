@@ -20,7 +20,7 @@ binding = "DB"
 database_name = "playheads-db"
 database_id = "31cba35f-8e23-46eb-880f-19d667c0946b"
 
-# Workers AI — powers @cloudflare/voice STT (Deepgram Flux) + TTS (Aura fallback).
+# Workers AI — powers voice STT (Whisper Chinese default / Flux opt-in) + TTS (Aura fallback).
 [ai]
 binding = "AI"
 
@@ -45,3 +45,8 @@ AI_GATEWAY_ID = "clash"
 ELEVENLABS_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"
 # Models: eleven_multilingual_v2 (best CJK), eleven_turbo_v2_5, eleven_flash_v2_5 (fastest)
 ELEVENLABS_MODEL = "eleven_multilingual_v2"
+
+# STT defaults to buffered Whisper because Deepgram Flux/Nova in Workers AI
+# do not handle Mandarin reliably. Use "flux" only for English realtime tests.
+VOICE_STT_PROVIDER = "whisper"
+VOICE_STT_LANGUAGE = "zh"

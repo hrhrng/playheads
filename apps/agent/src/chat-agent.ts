@@ -19,14 +19,12 @@ import { z } from "zod";
 import type { Connection } from "agents";
 import {
   withVoice,
-  WorkersAIFluxSTT,
-  WorkersAITTS,
   type TTSProvider,
   type StreamingTTSProvider,
+  type Transcriber,
   type VoiceTurnContext,
   type TextSource,
 } from "@cloudflare/voice";
-import { ElevenLabsTTS } from "./elevenlabs-tts";
 import { createMusicTools } from "./tools";
 import { pipeYamlRender } from "@json-render/yaml";
 import { yamlPrompt } from "@json-render/yaml";
@@ -36,6 +34,7 @@ import { resolveLLM, decryptApiKey } from "./resolve-llm";
 import type { Env, PlaybackState } from "./types";
 import { createVoiceTranscriber } from "./voice-config";
 import { loadVoiceGlobalState } from "./voice-state";
+import { resolveVoiceTTS } from "./voice-tts";
 
 // ---------------------------------------------------------------------------
 // System Prompt (ported from agent.py:298-322)
@@ -247,42 +246,6 @@ const VOICE_SYSTEM_PROMPT = `你是 "Playhead DJ" —— 一个实时语音电�
 - 一段话最多两三句，别讲课
 - 用户打断你的时候，立刻停下来听`;
 
-/**
- * Pick a TTS provider: ElevenLabs via AI Gateway (streaming) when any auth
- * mode is configured; otherwise fall back to Workers AI Aura.
- *
- * Auth priority — mirrors the LLM route in @playheads/llm-config:
- *   1. ELEVENLABS_API_KEY → xi-api-key (direct BYO key)
- *   2. CF_AIG_TOKEN only  → Authorization: Bearer (unified billing / BYOK
- *                            stored in AI Gateway dashboard)
- */
-function resolveTTS(env: Env): TTSProvider & Partial<StreamingTTSProvider> {
-  const haveGateway = env.CLOUDFLARE_ACCOUNT_ID && env.AI_GATEWAY_ID;
-  const haveAuth = env.ELEVENLABS_API_KEY || env.CF_AIG_TOKEN;
-  if (haveGateway && haveAuth) {
-    try {
-      const authMode = env.ELEVENLABS_API_KEY ? "xi-api-key" : "Authorization (unified billing)";
-      console.log("[Voice] Using ElevenLabs TTS via AI Gateway", {
-        auth: authMode,
-        voiceId: env.ELEVENLABS_VOICE_ID,
-        model: env.ELEVENLABS_MODEL,
-      });
-      return new ElevenLabsTTS({
-        apiKey: env.ELEVENLABS_API_KEY || undefined,
-        cfAigToken: env.CF_AIG_TOKEN || undefined,
-        accountId: env.CLOUDFLARE_ACCOUNT_ID,
-        gatewayId: env.AI_GATEWAY_ID,
-        voiceId: env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM",
-        modelId: env.ELEVENLABS_MODEL || "eleven_multilingual_v2",
-      });
-    } catch (e) {
-      console.warn("[Voice] ElevenLabs init failed, falling back to Aura:", e);
-    }
-  }
-  console.log("[Voice] Using Workers AI Aura TTS (no ElevenLabs auth configured)");
-  return new WorkersAITTS(env.AI);
-}
-
 // ---------------------------------------------------------------------------
 // MusicChatAgent — text chat (AIChatAgent.onChatMessage) + voice (withVoice.onTurn)
 // ---------------------------------------------------------------------------
@@ -302,8 +265,8 @@ export class MusicChatAgent extends VoiceChatBase {
   // @cloudflare/voice resolves STT before it invokes onCallStart(), so use the
   // library's createTranscriber() hook instead of trying to initialize from
   // onCallStart(). Cache the provider after first successful resolution.
-  private _transcriber?: WorkersAIFluxSTT | null;
-  override createTranscriber(_connection: Connection): WorkersAIFluxSTT | null {
+  private _transcriber?: Transcriber | null;
+  override createTranscriber(_connection: Connection): Transcriber | null {
     if (this._transcriber === undefined) {
       this._transcriber = createVoiceTranscriber(this.env);
     }
@@ -315,7 +278,7 @@ export class MusicChatAgent extends VoiceChatBase {
   private _tts?: TTSProvider & Partial<StreamingTTSProvider>;
   get tts(): TTSProvider & Partial<StreamingTTSProvider> {
     if (!this._tts) {
-      this._tts = resolveTTS(this.env);
+      this._tts = resolveVoiceTTS(this.env);
     }
     return this._tts;
   }

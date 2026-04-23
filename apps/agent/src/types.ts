@@ -37,6 +37,11 @@ export interface Env {
   ELEVENLABS_VOICE_ID: string;
   ELEVENLABS_MODEL: string;
 
+  // Voice STT provider. Defaults to buffered Whisper for Chinese support.
+  // Set VOICE_STT_PROVIDER=flux to use @cf/deepgram/flux for English realtime.
+  VOICE_STT_PROVIDER: string;
+  VOICE_STT_LANGUAGE: string;
+
   // Doubao (ByteDance / Volcano Engine Ark) configuration
   DOUBAO_API_KEY: string;
   // Model ID, e.g. "doubao-1.5-pro-32k"
@@ -94,4 +99,3 @@ export interface MusicAction {
   type: MusicActionType;
   data: Record<string, unknown>;
 }
-
