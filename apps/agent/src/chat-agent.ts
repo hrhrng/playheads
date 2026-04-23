@@ -35,6 +35,7 @@ import { generateAndUpdateTitle } from "./title";
 import { resolveLLM, decryptApiKey } from "./resolve-llm";
 import type { Env, PlaybackState } from "./types";
 import { createVoiceTranscriber } from "./voice-config";
+import { loadVoiceGlobalState } from "./voice-state";
 
 // ---------------------------------------------------------------------------
 // System Prompt (ported from agent.py:298-322)
@@ -245,37 +246,6 @@ const VOICE_SYSTEM_PROMPT = `你是 "Playhead DJ" —— 一个实时语音电�
 - 像深夜电台 DJ，不是客服
 - 一段话最多两三句，别讲课
 - 用户打断你的时候，立刻停下来听`;
-
-/** Read the user-level global queue from D1 (same source chat uses). */
-async function loadGlobalState(
-  env: Env,
-  userId: string | undefined
-): Promise<PlaybackState> {
-  const empty: PlaybackState = {
-    currentTrack: null,
-    playlist: [],
-    isPlaying: false,
-    playbackPosition: 0,
-  };
-  if (!userId) return empty;
-  try {
-    const row = await env.DB
-      .prepare('SELECT "queue", "queueIndex" FROM "profile" WHERE "id" = ?')
-      .bind(userId)
-      .first<{ queue: string; queueIndex: number }>();
-    if (!row) return empty;
-    const tracks = JSON.parse(row.queue || "[]") as PlaybackState["playlist"];
-    const idx = row.queueIndex ?? -1;
-    return {
-      currentTrack: idx >= 0 && idx < tracks.length ? tracks[idx] : null,
-      playlist: tracks,
-      isPlaying: false,
-      playbackPosition: 0,
-    };
-  } catch {
-    return empty;
-  }
-}
 
 /**
  * Pick a TTS provider: ElevenLabs via AI Gateway (streaming) when any auth
@@ -583,7 +553,11 @@ export class MusicChatAgent extends VoiceChatBase {
     context: VoiceTurnContext
   ): Promise<TextSource> {
     const ctx = this.voiceCtx.get(context.connection) || { storefront: "us" };
-    const globalState = await loadGlobalState(this.env, ctx.userId);
+    const globalState = await loadVoiceGlobalState(
+      this.env,
+      ctx.userId,
+      this.state
+    );
 
     console.log("[Voice] onTurn", {
       userId: ctx.userId,
