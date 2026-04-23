@@ -61,6 +61,18 @@ cd apps/gateway && npx wrangler rollback <deployment-id>
 - Worker 层：自动采集请求日志、延迟、错误率
 - Container 层：JSON 结构化日志（stdout）
 
+## Voice Agent 排障
+
+- `@cloudflare/voice` 会在 `onCallStart()` 之前先解析 `createTranscriber() ?? this.transcriber`。
+- 如果要动态创建 STT provider，必须实现 `createTranscriber()`；只在 `onCallStart()` 里初始化已经太晚了。
+- `apps/agent/wrangler.toml` 和 `apps/agent/wrangler.preview.toml` 都必须声明 `[ai] binding = "AI"`，否则 voice call 会在开始阶段直接报 `No transcriber configured`。
+- 看到这个错误时，先看 agent worker 日志里有没有 `[Voice][diag] invalid AI binding`。这条日志会把 `env.AI` 的 runtime 形状打出来，用来区分“库接入时序错了”和“AI binding 根本没进来”。
+- 部署前至少跑一次：
+
+```bash
+pnpm --filter playheads-agent exec wrangler deploy --dry-run
+```
+
 ## 本地开发
 
 ```bash

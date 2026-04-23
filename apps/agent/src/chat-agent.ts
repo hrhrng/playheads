@@ -34,6 +34,7 @@ import { musicCatalog } from "./genui-catalog";
 import { generateAndUpdateTitle } from "./title";
 import { resolveLLM, decryptApiKey } from "./resolve-llm";
 import type { Env, PlaybackState } from "./types";
+import { createVoiceTranscriber } from "./voice-config";
 
 // ---------------------------------------------------------------------------
 // System Prompt (ported from agent.py:298-322)
@@ -328,38 +329,13 @@ export class MusicChatAgent extends VoiceChatBase {
   };
 
   // ── Voice pipeline providers ────────────────────────────────────────────
-  // Lazy getters so we can log the AI binding shape at first access — lets us
-  // diagnose cases where wrangler declares [ai] binding but the DO sees
-  // env.AI === undefined (account not enrolled in Workers AI, model not
-  // provisioned, or deploy didn't apply the binding).
-  private _transcriber?: WorkersAIFluxSTT;
-  // Return type is nullable so the voice pipeline's built-in `if (!provider)`
-  // branch fires and sends an error frame to the client — throwing here gets
-  // silently swallowed by @cloudflare/voice's async message handler (no
-  // try/catch around `this.transcriber` access in #handleStartCall).
-  get transcriber(): WorkersAIFluxSTT | undefined {
-    if (!this._transcriber) {
-      const ai = this.env.AI as unknown as { run?: unknown } | undefined;
-      const envKeys = Object.keys(this.env as object);
-      const aiType = typeof ai;
-      const aiKeys = ai && typeof ai === "object" ? Object.keys(ai) : [];
-      const aiRunType = typeof ai?.run;
-      // Flatten the diagnostic into the message string — some log viewers
-      // truncate the structured payload object.
-      console.error(
-        `[Voice][diag] transcriber getter: envKeys=[${envKeys.join(",")}] ` +
-        `aiType=${aiType} aiTruthy=${!!ai} aiKeys=[${aiKeys.join(",")}] ` +
-        `aiRunType=${aiRunType}`
-      );
-      if (!ai || typeof ai.run !== "function") {
-        console.error(
-          "[Voice] transcriber init SKIPPED — env.AI.run is not a function. " +
-          "Returning undefined so the voice pipeline surfaces a clean error " +
-          "to the client."
-        );
-        return undefined;
-      }
-      this._transcriber = new WorkersAIFluxSTT(ai as never);
+  // @cloudflare/voice resolves STT before it invokes onCallStart(), so use the
+  // library's createTranscriber() hook instead of trying to initialize from
+  // onCallStart(). Cache the provider after first successful resolution.
+  private _transcriber?: WorkersAIFluxSTT | null;
+  override createTranscriber(_connection: Connection): WorkersAIFluxSTT | null {
+    if (this._transcriber === undefined) {
+      this._transcriber = createVoiceTranscriber(this.env);
     }
     return this._transcriber;
   }
@@ -564,8 +540,6 @@ export class MusicChatAgent extends VoiceChatBase {
   // =========================================================================
 
   override async onCallStart(connection: Connection): Promise<void> {
-    // Log immediately so we can confirm the WS reached the DO before any
-    // provider init (TTS/STT) potentially throws and aborts the connection.
     console.error("[Voice] onCallStart ENTER", { connId: connection.id });
 
     // userId / storefront arrive as query params on the voice WebSocket URL
@@ -578,24 +552,6 @@ export class MusicChatAgent extends VoiceChatBase {
     this.voiceCtx.set(connection, { userId, storefront });
 
     console.error("[Voice] onCallStart", { userId, storefront });
-
-    // Eagerly init transcriber so any binding misconfiguration (env.AI
-    // undefined, Workers AI not enabled on the account, etc.) surfaces here
-    // — and we can tell the client about it rather than failing silently
-    // inside FluxSession's catch block.
-    try {
-      const t = this.transcriber;
-      console.error("[Voice] transcriber ready", { ctor: t?.constructor?.name });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      console.error("[Voice] transcriber init FAILED:", msg);
-      try {
-        connection.send(
-          JSON.stringify({ type: "error", message: `STT init failed: ${msg}` })
-        );
-      } catch { /* connection may already be torn down */ }
-      return;
-    }
 
     // Greeting — wrapped in try/catch so a TTS misconfiguration (ElevenLabs
     // 401, missing key, etc.) doesn't tear down the whole WS connection.
