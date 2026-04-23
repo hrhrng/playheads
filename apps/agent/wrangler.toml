@@ -15,12 +15,6 @@ class_name = "MusicChatAgent"
 tag = "v1"
 new_sqlite_classes = ["MusicChatAgent"]
 
-# v2: VoiceDJAgent was briefly introduced as a separate DO, then merged back
-# into MusicChatAgent. Any preview env that deployed v2 gets the class cleaned up.
-[[migrations]]
-tag = "v2"
-deleted_classes = ["VoiceDJAgent"]
-
 [[d1_databases]]
 binding = "DB"
 database_name = "playheads-db"
