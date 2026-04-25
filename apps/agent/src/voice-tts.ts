@@ -58,11 +58,34 @@ export class FallbackTTS implements TTSProvider, StreamingTTSProvider {
 }
 
 /**
+ * Build the auth context for an xAI route. Mirrors the LLM resolver pattern
+ * in @playheads/llm-config: bearer = XAI_API_KEY (BYOK) || CF_AIG_TOKEN
+ * (gateway / unified billing). Routes through gateway by default so voice
+ * traffic shares the LLM's billing + observability path; falls back to
+ * api.x.ai direct when only XAI_API_KEY is present without gateway info.
+ */
+function resolveGrokAuth(env: Env): { baseUrl: string; apiKey: string } | null {
+  const haveGateway =
+    env.CLOUDFLARE_ACCOUNT_ID && env.AI_GATEWAY_ID && env.CF_AIG_TOKEN;
+  if (haveGateway) {
+    return {
+      baseUrl: `https://gateway.ai.cloudflare.com/v1/${env.CLOUDFLARE_ACCOUNT_ID}/${env.AI_GATEWAY_ID}/xai`,
+      apiKey: env.XAI_API_KEY || env.CF_AIG_TOKEN,
+    };
+  }
+  if (env.XAI_API_KEY) {
+    return { baseUrl: "https://api.x.ai", apiKey: env.XAI_API_KEY };
+  }
+  return null;
+}
+
+/**
  * Pick a TTS primary in priority order, always wrap with Aura fallback so
  * misconfiguration doesn't silence the DJ.
  *
  * Priority:
- *   1. Grok TTS         — when XAI_API_KEY is set; cheapest + same vendor as LLM
+ *   1. Grok TTS         — when xAI is reachable (gateway with CF_AIG_TOKEN OR
+ *                          direct with XAI_API_KEY); cheapest + same vendor as LLM
  *   2. ElevenLabs       — when ELEVENLABS_API_KEY or CF_AIG_TOKEN is configured
  *   3. Workers AI Aura  — fallback only (also primary if nothing else available)
  */
@@ -71,15 +94,19 @@ export function resolveVoiceTTS(
 ): TTSProvider & Partial<StreamingTTSProvider> {
   const fallback = new WorkersAITTS(env.AI);
 
-  if (env.XAI_API_KEY) {
+  const grokAuth = resolveGrokAuth(env);
+  if (grokAuth) {
     try {
-      console.log("[Voice] Using Grok TTS via api.x.ai with Aura fallback", {
+      console.log("[Voice] Using Grok TTS with Aura fallback", {
+        baseUrl: grokAuth.baseUrl,
+        keySource: env.XAI_API_KEY ? "XAI_API_KEY" : "CF_AIG_TOKEN",
         voiceId: env.GROK_TTS_VOICE_ID,
         language: env.GROK_TTS_LANGUAGE,
       });
       return new FallbackTTS(
         new GrokTTS({
-          apiKey: env.XAI_API_KEY,
+          apiKey: grokAuth.apiKey,
+          baseUrl: grokAuth.baseUrl,
           voiceId: env.GROK_TTS_VOICE_ID || "ara",
           language: env.GROK_TTS_LANGUAGE || "auto",
         }),

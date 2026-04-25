@@ -1,34 +1,37 @@
 /**
- * GrokTTS — TTSProvider implementation backed by xAI's Grok TTS API.
+ * GrokTTS — TTSProvider backed by xAI's Grok TTS API.
  *
- * Direct call to api.x.ai/v1/tts — does NOT route through CF AI Gateway
- * because the gateway's `xai` provider segment was added for chat completions
- * and may not yet recognize voice endpoints. Direct call costs us gateway
- * caching/observability for TTS requests but guarantees the route works.
+ * Default routes through Cloudflare AI Gateway exactly like the LLM does
+ * (`gateway.ai.cloudflare.com/v1/{acc}/{gw}/xai/...` + `Authorization: Bearer
+ * <CF_AIG_TOKEN>`). If your gateway already authenticates xai chat completions,
+ * the same credentials authenticate xai voice — no separate secret needed.
  *
- * Endpoint:  POST https://api.x.ai/v1/tts
- * Auth:      Authorization: Bearer ${XAI_API_KEY}
+ * Override `baseUrl` + provide an `apiKey` to bypass the gateway and call
+ * api.x.ai directly (handy for debugging gateway issues).
+ *
+ * Endpoint:  POST {baseUrl}/v1/tts
+ * Auth:      Authorization: Bearer ${apiKey}
  * Body:      { text, voice_id, language }
  * Response:  audio/mpeg bytes
  *
  * Voices: ara | eve | leo | rex | sal — see https://x.ai/api/voice
- * Models: grok-tts (default)
  */
 import type { TTSProvider, StreamingTTSProvider } from "@cloudflare/voice";
 
 export interface GrokTTSOptions {
-  /** xAI API key. Required. */
-  apiKey: string;
-  /** Voice id, case-insensitive. Defaults to "ara". */
-  voiceId?: string;
   /**
-   * BCP-47 language code (en, zh, pt-BR…) or "auto".
-   * Defaults to "auto" so the model detects from text.
+   * Bearer token. Use `CF_AIG_TOKEN` to go through the AI Gateway (same auth
+   * pattern as the LLM), or your direct xAI key when bypassing the gateway.
    */
+  apiKey: string;
+  /**
+   * Base URL — defaults to the AI Gateway xai segment so voice rides the
+   * same auth/billing path as the LLM. Override to "https://api.x.ai" to
+   * skip the gateway.
+   */
+  baseUrl: string;
+  voiceId?: string;
   language?: string;
-  /** Custom base URL — useful for proxies. */
-  baseUrl?: string;
-  /** Override fetch — useful for tests. */
   fetchImpl?: typeof fetch;
 }
 
@@ -41,8 +44,10 @@ export class GrokTTS implements TTSProvider, StreamingTTSProvider {
 
   constructor(opts: GrokTTSOptions) {
     if (!opts.apiKey) throw new Error("GrokTTS: apiKey required");
+    if (!opts.baseUrl) throw new Error("GrokTTS: baseUrl required");
     this.apiKey = opts.apiKey;
-    this.baseUrl = opts.baseUrl ?? "https://api.x.ai";
+    // Strip trailing slash to keep concat predictable.
+    this.baseUrl = opts.baseUrl.replace(/\/+$/, "");
     this.voiceId = opts.voiceId ?? "ara";
     this.language = opts.language ?? "auto";
     this.fetchImpl = opts.fetchImpl ?? fetch;

@@ -2,13 +2,12 @@
  * GrokBufferedSTT — Transcriber backed by xAI's Grok STT REST API.
  *
  * Same buffered-VAD shape as WhisperBufferedSTT (collect PCM chunks until
- * silence, ship the utterance as a WAV blob), but the upload goes to
- * api.x.ai/v1/stt as multipart form data — the only spec the Grok STT REST
- * endpoint accepts. Streaming is xAI-side WebSocket; we use the simpler REST
- * path for now to stay symmetric with the existing Whisper integration.
+ * silence, ship the utterance as a WAV blob). Default upload target is the
+ * Cloudflare AI Gateway xai segment — same auth/billing path as the LLM.
+ * Override `baseUrl` to "https://api.x.ai" to call xAI directly with a BYO key.
  *
- * Endpoint: POST https://api.x.ai/v1/stt
- * Auth:     Authorization: Bearer ${XAI_API_KEY}
+ * Endpoint: POST {baseUrl}/v1/stt
+ * Auth:     Authorization: Bearer ${apiKey}
  * Form:     model=grok-stt&language=...&format=json&file=<wav>
  * Response: { text, ...word-level timestamps }
  */
@@ -19,11 +18,18 @@ import type {
 } from "@cloudflare/voice";
 
 interface GrokSTTOptions {
+  /**
+   * Bearer token. Use CF_AIG_TOKEN for gateway routing (same as LLM), or
+   * your xAI key when bypassing the gateway.
+   */
   apiKey: string;
+  /**
+   * Base URL — defaults to the AI Gateway xai segment so STT rides the same
+   * auth path as the LLM. Required (no implicit default to keep config explicit).
+   */
+  baseUrl: string;
   model?: string;
-  /** BCP-47 language hint (en, zh, etc.); omit to let Grok auto-detect. */
   language?: string;
-  baseUrl?: string;
   fetchImpl?: typeof fetch;
   sampleRate?: number;
   speechThreshold?: number;
@@ -37,7 +43,6 @@ interface GrokSTTResponse {
 }
 
 const DEFAULT_MODEL = "grok-stt";
-const DEFAULT_BASE_URL = "https://api.x.ai";
 const DEFAULT_SAMPLE_RATE = 16000;
 const DEFAULT_SPEECH_THRESHOLD = 0.012;
 const DEFAULT_SILENCE_CHUNKS = 7;
@@ -47,6 +52,7 @@ const DEFAULT_MAX_UTTERANCE_CHUNKS = 300;
 export class GrokBufferedSTT implements Transcriber {
   constructor(private readonly options: GrokSTTOptions) {
     if (!options.apiKey) throw new Error("GrokBufferedSTT: apiKey required");
+    if (!options.baseUrl) throw new Error("GrokBufferedSTT: baseUrl required");
   }
 
   createSession(options?: TranscriberSessionOptions): TranscriberSession {
@@ -80,7 +86,8 @@ class GrokBufferedSTTSession implements TranscriberSession {
   ) {
     this.apiKey = options.apiKey;
     this.model = options.model ?? DEFAULT_MODEL;
-    this.baseUrl = options.baseUrl ?? DEFAULT_BASE_URL;
+    // Strip trailing slash to keep concat predictable.
+    this.baseUrl = options.baseUrl.replace(/\/+$/, "");
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.language = options.language;
     this.sampleRate = options.sampleRate ?? DEFAULT_SAMPLE_RATE;
