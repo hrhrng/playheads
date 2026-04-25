@@ -290,6 +290,59 @@ export class MusicChatAgent extends VoiceChatBase {
     { userId?: string; storefront: string }
   >();
 
+  // ── Diagnostic constructor — wraps the voice mixin's onConnect/onMessage so
+  //    we can see what's actually flowing through every WS connection (chat
+  //    AND voice). Helps diagnose cases where voice mixin's protocol filtering
+  //    silently eats chat messages. Logs are tagged [Diag] for easy grep.
+  constructor(...args: ConstructorParameters<typeof VoiceChatBase>) {
+    super(...args);
+
+    const voiceOnConnect = this.onConnect;
+    const voiceOnMessage = this.onMessage;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    this.onConnect = (async (connection: Connection, ...rest: any[]) => {
+      const uri = (connection as unknown as { uri?: string }).uri || "";
+      const qs = uri.includes("?") ? uri.split("?")[1] : "";
+      const looksLikeVoice = qs.includes("userId=") || qs.includes("storefront=");
+      console.error(
+        `[Diag] onConnect connId=${connection.id} kind=${looksLikeVoice ? "voice" : "chat"} qs=${qs.slice(0, 200)}`
+      );
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return (voiceOnConnect as any)?.call(this, connection, ...rest);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    }) as any;
+
+    this.onMessage = ((connection: Connection, message: string | ArrayBuffer) => {
+      let kind: string;
+      let preview = "";
+      let parsedType: string | undefined;
+      if (typeof message === "string") {
+        kind = `string(${message.length})`;
+        preview = message.slice(0, 200);
+        try {
+          const parsed = JSON.parse(message) as { type?: unknown };
+          if (typeof parsed.type === "string") parsedType = parsed.type;
+        } catch { /* not JSON */ }
+      } else if (message instanceof ArrayBuffer) {
+        kind = `ArrayBuffer(${message.byteLength}b)`;
+      } else {
+        kind = typeof message;
+      }
+      // VOICE_MESSAGES = hello | start_call | end_call | start_of_speech |
+      //                  end_of_speech | interrupt | text_message
+      const swallowedByVoice =
+        parsedType !== undefined &&
+        ["hello", "start_call", "end_call", "start_of_speech", "end_of_speech", "interrupt", "text_message"].includes(parsedType);
+      console.error(
+        `[Diag] onMessage connId=${connection.id} kind=${kind} type=${parsedType ?? "-"} ` +
+        `swallowedByVoiceMixin=${swallowedByVoice} preview=${preview}`
+      );
+      return voiceOnMessage?.call(this, connection, message);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    }) as any;
+  }
+
   async onChatMessage(
     onFinish?: Parameters<AIChatAgent<Env, PlaybackState>["onChatMessage"]>[0],
     options?: Parameters<AIChatAgent<Env, PlaybackState>["onChatMessage"]>[1]
