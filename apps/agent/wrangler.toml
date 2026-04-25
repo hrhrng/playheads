@@ -63,10 +63,19 @@ ELEVENLABS_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"
 # Models: eleven_multilingual_v2 (best CJK), eleven_turbo_v2_5, eleven_flash_v2_5 (fastest)
 ELEVENLABS_MODEL = "eleven_multilingual_v2"
 
-# STT defaults to buffered Whisper because Deepgram Flux/Nova in Workers AI
-# do not handle Mandarin reliably. Use "flux" only for English realtime tests.
-VOICE_STT_PROVIDER = "whisper"
+# STT options:
+#   "grok"    — Grok STT via api.x.ai (requires XAI_API_KEY secret)
+#   "whisper" — Workers AI Whisper (default; best Chinese accuracy)
+#   "flux"    — Workers AI Deepgram Flux (English realtime only)
+VOICE_STT_PROVIDER = "grok"
 VOICE_STT_LANGUAGE = "zh"
+
+# Grok voice (xAI) — direct call to api.x.ai, NOT via gateway. The gateway's
+# xai segment was added for chat completions and may not yet recognize voice
+# endpoints. Voices: ara | eve | leo | rex | sal.
+GROK_TTS_VOICE_ID = "ara"
+GROK_TTS_LANGUAGE = "zh"
+GROK_STT_MODEL = "grok-stt"
 
 # Secrets (set via `wrangler secret put <NAME>`)
 # ADMIN_ENCRYPTION_KEY   — same 64-char hex as playheads-admin; used to decrypt DB keys at runtime
@@ -74,4 +83,6 @@ VOICE_STT_LANGUAGE = "zh"
 # BRAVE_SEARCH_API_KEY   — Brave Search API key (https://brave.com/search/api); used when SEARCH_PROVIDER=brave
 # CF_AIG_TOKEN           — Cloudflare AI Gateway token (also drives ElevenLabs unified billing)
 # DOUBAO_API_KEY         — Doubao API key (env-based fallback when no DB config)
+# XAI_API_KEY            — xAI key for Grok STT/TTS direct calls
+# ELEVENLABS_API_KEY     — ElevenLabs API key (BYOK fallback if you stop using Grok TTS)
 # APPLE_MUSIC_TEAM_ID, APPLE_MUSIC_KEY_ID, APPLE_MUSIC_PRIVATE_KEY

@@ -37,8 +37,19 @@ export interface Env {
   ELEVENLABS_VOICE_ID: string;
   ELEVENLABS_MODEL: string;
 
+  // Grok voice (xAI). Direct calls to api.x.ai — does NOT route through CF
+  // AI Gateway because the gateway's xai segment was added for chat completions
+  // and may not yet recognize voice endpoints.
+  // Secret: `wrangler secret put XAI_API_KEY`
+  // Voices: ara | eve | leo | rex | sal
+  XAI_API_KEY: string;
+  GROK_TTS_VOICE_ID: string;
+  GROK_TTS_LANGUAGE: string;
+  GROK_STT_MODEL: string;
+
   // Voice STT provider. Defaults to buffered Whisper for Chinese support.
-  // Set VOICE_STT_PROVIDER=flux to use @cf/deepgram/flux for English realtime.
+  // Other options: "grok" (Grok STT, requires XAI_API_KEY) | "flux"
+  // (Workers AI Deepgram Flux, English realtime).
   VOICE_STT_PROVIDER: string;
   VOICE_STT_LANGUAGE: string;
 

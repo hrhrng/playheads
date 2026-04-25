@@ -46,7 +46,15 @@ ELEVENLABS_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"
 # Models: eleven_multilingual_v2 (best CJK), eleven_turbo_v2_5, eleven_flash_v2_5 (fastest)
 ELEVENLABS_MODEL = "eleven_multilingual_v2"
 
-# STT defaults to buffered Whisper because Deepgram Flux/Nova in Workers AI
-# do not handle Mandarin reliably. Use "flux" only for English realtime tests.
-VOICE_STT_PROVIDER = "whisper"
+# STT options:
+#   "grok"    — Grok STT via api.x.ai (requires XAI_API_KEY secret)
+#   "whisper" — Workers AI Whisper (default; best Chinese accuracy)
+#   "flux"    — Workers AI Deepgram Flux (English realtime only)
+VOICE_STT_PROVIDER = "grok"
 VOICE_STT_LANGUAGE = "zh"
+
+# Grok TTS — direct call to api.x.ai (NOT via gateway). Voices: ara | eve | leo | rex | sal.
+# Set XAI_API_KEY via `wrangler secret put XAI_API_KEY --config wrangler.preview.toml`.
+GROK_TTS_VOICE_ID = "ara"
+GROK_TTS_LANGUAGE = "zh"
+GROK_STT_MODEL = "grok-stt"

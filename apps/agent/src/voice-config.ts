@@ -3,6 +3,7 @@ import {
   type Transcriber,
 } from "@cloudflare/voice";
 import { WhisperBufferedSTT } from "./voice-stt";
+import { GrokBufferedSTT } from "./grok-stt";
 
 interface VoiceLogger {
   error: (...args: unknown[]) => void;
@@ -18,6 +19,8 @@ interface VoiceEnvLike {
   };
   VOICE_STT_PROVIDER?: string;
   VOICE_STT_LANGUAGE?: string;
+  XAI_API_KEY?: string;
+  GROK_STT_MODEL?: string;
 }
 
 function resolveWorkersAIBinding(
@@ -43,10 +46,39 @@ function resolveWorkersAIBinding(
   return null;
 }
 
+/**
+ * Pick a transcriber based on VOICE_STT_PROVIDER:
+ *   "grok"    → Grok STT via api.x.ai (requires XAI_API_KEY)
+ *   "flux"    → Workers AI Deepgram Flux (English realtime)
+ *   "whisper" → Workers AI Whisper buffered (default, best Chinese)
+ *
+ * Grok needs no Workers AI binding so it works even when env.AI is missing.
+ * The other two require env.AI.run.
+ */
 export function createVoiceTranscriber(
   env: VoiceEnvLike,
   logger: VoiceLogger = console
 ): Transcriber | null {
+  const provider = (env.VOICE_STT_PROVIDER || "whisper").toLowerCase();
+
+  if (provider === "grok") {
+    if (!env.XAI_API_KEY) {
+      logger.error(
+        "[Voice] Grok STT requested but XAI_API_KEY is not set — cannot init transcriber"
+      );
+      return null;
+    }
+    console.log("[Voice] Using Grok STT via api.x.ai", {
+      model: env.GROK_STT_MODEL,
+      language: env.VOICE_STT_LANGUAGE,
+    });
+    return new GrokBufferedSTT({
+      apiKey: env.XAI_API_KEY,
+      model: env.GROK_STT_MODEL || "grok-stt",
+      language: env.VOICE_STT_LANGUAGE,
+    });
+  }
+
   const ai = resolveWorkersAIBinding(env, logger);
   if (!ai) {
     logger.error(
@@ -55,7 +87,6 @@ export function createVoiceTranscriber(
     return null;
   }
 
-  const provider = (env.VOICE_STT_PROVIDER || "whisper").toLowerCase();
   if (provider === "flux") {
     return new WorkersAIFluxSTT(ai);
   }
