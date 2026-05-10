@@ -40,7 +40,24 @@ type SimplifiedMessage = {
 
 type RawPart = { type: string; text?: string; data?: unknown };
 
-export default function App({
+// Catches errors thrown by the Suspense `use(promise)` path below — without
+// a boundary, a rejected initial-messages fetch would unwind to the RN root
+// and crash the whole bundle.
+class ChatErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { failed: boolean }
+> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  render() {
+    if (this.state.failed) return null;
+    return this.props.children as React.ReactElement;
+  }
+}
+
+function AppInner({
   baseUrl = "https://playheads.ai",
   sessionId = "default",
   userId = "anon",
@@ -115,4 +132,20 @@ export default function App({
   }, [pendingUserMessage?.nonce, pendingUserMessage?.text, sendMessage]);
 
   return null;
+}
+
+export default function App(props: Props) {
+  // useAgentChat (via @cloudflare/ai-chat) calls React 19's `use(promise)` to
+  // suspend on the initial /get-messages fetch. Without a Suspense boundary
+  // here, that suspension propagates up and kills the whole RN root tree —
+  // useEffect never runs, sendMessage is never called, and the user message
+  // stays bottled in the bridge forever. The error boundary catches a
+  // rejected initial fetch so a network blip doesn't take down the bundle.
+  return (
+    <ChatErrorBoundary>
+      <React.Suspense fallback={null}>
+        <AppInner {...props} />
+      </React.Suspense>
+    </ChatErrorBoundary>
+  );
 }
