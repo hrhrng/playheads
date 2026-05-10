@@ -113,7 +113,20 @@ final class ConversationStore: ObservableObject {
     func sendUser(_ raw: String) {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        pendingUserMessage = PendingCommand(text: trimmed, nonce: UUID().uuidString)
+        let cmd = PendingCommand(text: trimmed, nonce: UUID().uuidString)
+        pendingUserMessage = cmd
+        // RN's `useAgentChat` consumes pendingUserMessage within a few render
+        // cycles. Clear it shortly after so a remount of the chat host
+        // (closing + reopening the chat sheet, or a session swap) doesn't
+        // re-fire sendMessage with the same payload — the embedded JS
+        // resets its `lastNonce` ref on every fresh mount.
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            guard let self else { return }
+            if self.pendingUserMessage?.nonce == cmd.nonce {
+                self.pendingUserMessage = nil
+            }
+        }
     }
 
     func handleMusicAction(_ payload: NSDictionary) {

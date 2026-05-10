@@ -8,9 +8,10 @@ settings:
     SWIFT_VERSION: "5.9"
     DEVELOPMENT_TEAM: "962863MJ5J"
     CODE_SIGN_STYLE: Automatic
-    # React Native is hoisted to the pnpm monorepo root. RN's build-phase
-    # scripts key off REACT_NATIVE_PATH to locate `with-environment.sh` and the
-    # Hermes / codegen helpers — thread it in here so every target inherits.
+    # React Native is hoisted to the pnpm monorepo root (.npmrc:
+    # node-linker=hoisted). RN's build-phase scripts key off REACT_NATIVE_PATH
+    # to locate `with-environment.sh` and the Hermes / codegen helpers —
+    # thread it in here so every target inherits.
     REACT_NATIVE_PATH: $(SRCROOT)/../../node_modules/react-native
 targets:
   MusicAgent:

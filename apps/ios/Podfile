@@ -3,7 +3,11 @@
 # Monorepo layout:
 #   apps/ios/           <- this file
 #   apps/mobile-chat/   <- RN JS app (package.json, App.tsx, index.js)
-#   node_modules/       <- pnpm-hoisted root (react-native lives here)
+#   node_modules/       <- pnpm hoists to root (.npmrc: node-linker=hoisted) so
+#                          react-native lives at the repo root, not nested.
+#                          Hoisting also avoids a known pnpm + cocoapods
+#                          symlink interaction that throws "pathname contains
+#                          null byte" during `pod install` (CocoaPods #12866).
 
 # Resolve react_native_pods.rb from the hoisted root.
 require_relative '../../node_modules/react-native/scripts/react_native_pods'

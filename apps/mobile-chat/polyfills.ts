@@ -24,10 +24,23 @@ if (typeof g.ByteLengthQueuingStrategy === "undefined")
 if (typeof g.CountQueuingStrategy === "undefined")
   g.CountQueuingStrategy = CountQueuingStrategy;
 
-// Math.random-backed RFC4122 v4 UUID — good enough for client-side request ids.
-// Proper randomness would need `react-native-get-random-values` (native module).
+// Math.random-backed crypto shims — Hermes ships neither
+// `crypto.getRandomValues` nor `crypto.randomUUID`. The agents SDK + nanoid
+// rely on `getRandomValues` for request IDs (`nanoid(8)` tags every chat
+// request inside `WebSocketChatTransport.sendMessages`); without it,
+// sendMessages throws "undefined is not a function" before reaching
+// `agent.send(...)` and no chat request ever leaves the device. Math.random
+// is sufficient for request-id uniqueness — not for real cryptographic use,
+// which would need `react-native-get-random-values` (native module).
 if (typeof g.crypto === "undefined") {
   g.crypto = {};
+}
+if (typeof g.crypto.getRandomValues !== "function") {
+  g.crypto.getRandomValues = function getRandomValues<T extends ArrayBufferView>(buf: T): T {
+    const bytes = new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+    for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+    return buf;
+  };
 }
 if (typeof g.crypto.randomUUID !== "function") {
   g.crypto.randomUUID = function randomUUID(): string {
@@ -113,6 +126,20 @@ if (typeof g.CloseEvent === "undefined") {
     }
   }
   g.CloseEvent = CloseEvent;
+}
+
+// Hermes (RN's default JS engine) doesn't ship `structuredClone`. The AI SDK's
+// `Chat.state.snapshot = v => structuredClone(v)` runs on every `makeRequest`
+// to deep-clone the user message before opening the agent stream — without
+// this polyfill, `Chat.makeRequest` throws inside `try {}`, the inner
+// `try { onFinish(...) } catch` then crashes on `this.activeResponse.state`
+// (which was never assigned), and no `cf_agent_use_chat_request` is sent.
+// JSON round-trip is sufficient because chat messages are always JSON-safe.
+if (typeof g.structuredClone === "undefined") {
+  g.structuredClone = function structuredClone(value: unknown) {
+    if (value === undefined) return undefined;
+    return JSON.parse(JSON.stringify(value));
+  };
 }
 
 if (typeof g.MessageEvent === "undefined") {
