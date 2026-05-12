@@ -1253,10 +1253,6 @@ struct ChatHostRepresentable: UIViewControllerRepresentable {
             "sessionId": sessionId,
             "userId": AuthStore.shared.state.user?.id ?? "anon",
             "storefront": "us",
-            // Every component this iOS client can render. Agent reads this on
-            // the request body and narrows the model's allowed component
-            // vocabulary so we never get an "unknown" fallback card.
-            "genuiWhitelist": GenUIComponent.supportedTypes
         ]
         if let cmd = store.pendingUserMessage {
             out["pendingUserMessage"] = ["text": cmd.text, "nonce": cmd.nonce]

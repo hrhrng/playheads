@@ -23,9 +23,6 @@ export type Props = {
   sessionId?: string;
   userId?: string;
   storefront?: string;
-  /** Component types this client can render. Agent uses it to filter the
-   *  json-render catalog so the model never emits an unknown component. */
-  genuiWhitelist?: string[];
   pendingUserMessage?: { text: string; nonce: string };
 };
 
@@ -62,7 +59,6 @@ function AppInner({
   sessionId = "default",
   userId = "anon",
   storefront = "us",
-  genuiWhitelist,
   pendingUserMessage,
 }: Props) {
   const host = React.useMemo(() => {
@@ -85,11 +81,6 @@ function AppInner({
       session_id: sessionId,
       user_id: userId,
       storefront,
-      // Forwarded from native. Backend narrows the json-render catalog to this
-      // set so the model only emits components this client can render.
-      ...(genuiWhitelist && genuiWhitelist.length > 0
-        ? { genui_whitelist: genuiWhitelist }
-        : {}),
     },
     onData(part: { type: string; data: unknown }) {
       if (part.type !== "data-music-action") return;
