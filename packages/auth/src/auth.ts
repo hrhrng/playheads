@@ -5,7 +5,6 @@
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { magicLink } from 'better-auth/plugins';
-import { eq } from 'drizzle-orm';
 import * as schema from './schema';
 
 export interface AuthEnv {
@@ -217,57 +216,6 @@ export async function createAuthWithApple(db: Parameters<typeof drizzleAdapter>[
       crossSubDomainCookies: rootDomain
         ? { enabled: true, domain: `.${rootDomain}` }
         : undefined,
-    },
-    databaseHooks: {
-      session: {
-        create: {
-          after: async (session) => {
-            // On every login: ensure waitlist entry exists + sync approval to user
-            try {
-              const [user] = await db
-                .select({ email: schema.user.email, waitlistApproved: schema.user.waitlistApproved })
-                .from(schema.user)
-                .where(eq(schema.user.id, session.userId));
-              if (!user) return;
-
-              const now = Date.now();
-
-              // Ensure waitlist entry exists
-              await db.insert(schema.waitlist).values({
-                id: crypto.randomUUID(),
-                email: user.email,
-                status: 'pending',
-                createdAt: now,
-                updatedAt: now,
-              }).onConflictDoNothing();
-
-              // If waitlist is approved but user.waitlistApproved is false, sync it
-              if (!user.waitlistApproved) {
-                const [wl] = await db
-                  .select({ status: schema.waitlist.status })
-                  .from(schema.waitlist)
-                  .where(eq(schema.waitlist.email, user.email));
-                if (wl?.status === 'approved') {
-                  await db.update(schema.user)
-                    .set({ waitlistApproved: true })
-                    .where(eq(schema.user.id, session.userId));
-                }
-              }
-            } catch {
-              // Ignore — waitlist entry may already exist
-            }
-          },
-        },
-      },
-    },
-    user: {
-      additionalFields: {
-        waitlistApproved: {
-          type: 'boolean',
-          defaultValue: false,
-          input: false,
-        },
-      },
     },
   });
 }
