@@ -10,7 +10,6 @@ export interface AuthSession {
     id: string;
     email: string;
     name: string;
-    waitlistApproved?: boolean;
   };
 }
 
@@ -29,7 +28,7 @@ export function useAuth() {
   // Dev mode: skip auth with ?dev=1
   const isDev = import.meta.env.DEV && new URLSearchParams(window.location.search).has('dev');
   const devSession: AuthSession = {
-    user: { id: 'dev-user', email: 'dev@playhead.local', name: 'Dev User', waitlistApproved: true },
+    user: { id: 'dev-user', email: 'dev@playhead.local', name: 'Dev User' },
   };
   const effectiveSession = isDev ? devSession : session;
   const isLoggedIn = !!effectiveSession;
@@ -44,7 +43,6 @@ export function useAuth() {
             id: u.id as string,
             email: u.email as string,
             name: u.name as string,
-            waitlistApproved: u.waitlistApproved as boolean | undefined,
           },
         });
 
@@ -78,24 +76,6 @@ export function useAuth() {
     e.preventDefault();
     setLoading(true);
     setAuthMessage(null);
-
-    try {
-      // Check waitlist status first (idempotent — adds if not exists)
-      const res = await fetch('/api/waitlist', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
-      });
-      const data = await res.json();
-
-      if (res.ok && data.status !== 'approved') {
-        setAuthMessage({ type: 'success', text: data.message || "You're on the list! We'll notify you when it's your turn." });
-        setLoading(false);
-        return;
-      }
-    } catch {
-      // Waitlist check failed — proceed with login anyway
-    }
 
     // Preserve ?q= query param across auth redirect
     const q = new URLSearchParams(window.location.search).get('q');

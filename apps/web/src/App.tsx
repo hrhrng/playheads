@@ -14,8 +14,6 @@ import { useConversations } from './hooks/useConversations';
 import { ToastProvider } from './components/ToastProvider';
 import { LoadingScreen } from './components/LoadingScreen';
 import { LoginScreen } from './components/LoginScreen';
-import { WaitlistGate } from './components/WaitlistGate';
-import { useWaitlistGate } from './hooks/useWaitlistGate';
 import type { MusicActions } from './hooks/useAgentChatAdapter';
 
 function App() {
@@ -36,9 +34,6 @@ function App() {
     handleLogin,
     logout,
   } = useAuth();
-
-  // Waitlist gate
-  const waitlistStatus = useWaitlistGate(effectiveSession);
 
   // Extract active session ID from URL
   const pathParts = location.pathname.split('/');
@@ -128,10 +123,6 @@ function App() {
         onLogin={handleLogin}
       />
     );
-  }
-
-  if (!isDev && waitlistStatus !== 'approved') {
-    return <WaitlistGate email={effectiveSession?.user?.email} onLogout={logout} />;
   }
 
   return (
