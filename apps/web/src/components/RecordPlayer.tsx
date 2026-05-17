@@ -55,9 +55,11 @@ export const RecordPlayer = ({
 
   return (
     <div className="flex flex-col items-center gap-7 group w-full">
-      {/* Cover Art — 10px radius, dual cover shadow, no border (iOS Spec.swift) */}
-      <div className="relative pointer-events-auto">
-        <div className={`w-72 h-72 md:w-[380px] md:h-[380px] rounded-card shadow-cover overflow-hidden relative transition-transform duration-700 ease-spring ${!isPaused ? 'scale-100' : 'scale-[0.97] opacity-95'}`}>
+      {/* Cover Art — fills the parent container width (matches ChatInput
+         max-w-xl so cover + composer line up), aspect-square keeps it
+         a perfect square, 10px radius + dual cover shadow per iOS Spec. */}
+      <div className="relative pointer-events-auto w-full">
+        <div className={`w-full aspect-square rounded-card shadow-cover overflow-hidden relative transition-transform duration-700 ease-spring ${!isPaused ? 'scale-100' : 'scale-[0.97] opacity-95'}`}>
           {artworkUrl ? (
             <img src={artworkUrl} alt={trackName} className="w-full h-full object-cover" />
           ) : (

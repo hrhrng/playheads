@@ -47,6 +47,9 @@ body {
   font-family: "Noto Serif SC", -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", serif;
   background-color: rgb(var(--page));
   position: relative;
+  /* Smooth the bg flip when a bright/dark cover swaps in. */
+  transition: background-color 0.6s cubic-bezier(0.22, 1, 0.36, 1),
+              color 0.6s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 /* Mood blob layer — sits on top of the dark page bg, adds painterly
