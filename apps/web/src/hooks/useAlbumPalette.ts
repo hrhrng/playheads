@@ -26,19 +26,41 @@ const PROPS = [
   '--has-mood',
 ] as const;
 
-/** Perceived luminance (Rec. 601). 0..255. */
-function luma(rgb: number[]): number {
-  return 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2];
-}
-
-/** Pick the swatch with the highest pixel population — represents the
- * dominant tone of the cover and is what Apple Music keys its
- * light/dark backdrop off. */
-function pickDominant(palette: any): number[] | null {
-  const swatches = Object.values(palette).filter(Boolean) as { rgb: number[]; population: number }[];
-  if (!swatches.length) return null;
-  swatches.sort((a, b) => b.population - a.population);
-  return swatches[0].rgb;
+/**
+ * Average luminance of the entire artwork via a tiny canvas sample.
+ *
+ * Why not Vibrant's swatches: Vibrant runs median-cut on quantised
+ * colour and only surfaces 6 "named" swatches (Vibrant, LightVibrant,
+ * DarkVibrant, Muted, LightMuted, DarkMuted). Near-black pixels often
+ * get filtered out of those buckets, so a mostly-black cover with a
+ * small white logo (Avicii "True", Joy Division, etc.) returns a high
+ * `population` on LightMuted and looks "bright" to the swatch logic.
+ *
+ * Averaging raw pixels is honest — black is black, white is white.
+ */
+function imageAvgLuma(url: string): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const size = 32;
+      const canvas = document.createElement('canvas');
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return reject(new Error('no 2d context'));
+      ctx.drawImage(img, 0, 0, size, size);
+      const data = ctx.getImageData(0, 0, size, size).data;
+      let sum = 0;
+      const count = size * size;
+      for (let i = 0; i < data.length; i += 4) {
+        sum += 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+      }
+      resolve(sum / count);
+    };
+    img.onerror = (e) => reject(e);
+    img.src = url;
+  });
 }
 
 function clamp(n: number): number {
@@ -150,7 +172,12 @@ export function useAlbumPalette(artworkUrl: string | null | undefined) {
     (async () => {
       try {
         const { Vibrant } = await import('node-vibrant/browser');
-        const palette = await Vibrant.from(sampleUrl).getPalette();
+        // Parallelise palette extraction with the raw-pixel luma read —
+        // both need the image loaded, browser will dedupe the request.
+        const [palette, avgLuma] = await Promise.all([
+          Vibrant.from(sampleUrl).getPalette(),
+          imageAvgLuma(sampleUrl).catch(() => 128), // fall back to mid-grey
+        ]);
         if (cancelled || lastUrlRef.current !== sampleUrl) return;
 
         const accent = pickAccent(palette);
@@ -158,11 +185,10 @@ export function useAlbumPalette(artworkUrl: string | null | undefined) {
         if (!accent) return;
 
         // Apple Music keys its Now Playing backdrop off the cover's
-        // dominant luminance: dark covers → black-grey wash, bright
-        // covers → white-grey wash. Mirror that here so the page surface
-        // flips between iOS pageBg (#0B0906) and a warm cream paper.
-        const dominant = pickDominant(palette) || accent;
-        const isLight = luma(dominant) > 150;
+        // overall luminance: dark covers → black-grey wash, bright covers
+        // → white-grey wash. Threshold biased slightly toward "dark" so
+        // moody covers don't accidentally flip to the light surface.
+        const isLight = avgLuma > 140;
 
         const root = document.documentElement;
         if (isLight) {
