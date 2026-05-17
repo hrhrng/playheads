@@ -79,8 +79,8 @@ export const ConversationItem = ({
       <button
         onClick={() => onSelect?.(conv.id)}
         className={`
-          w-full p-3 rounded-xl transition-colors flex items-center overflow-hidden
-          ${isActive ? 'bg-white text-gemini-text font-medium' : 'text-gemini-subtext hover:bg-white'}
+          w-full p-2.5 rounded-2xl transition-colors flex items-center overflow-hidden
+          ${isActive ? 'bg-chip-2 text-ink font-medium hairline' : 'text-ink-2 hover:bg-chip hover:text-ink'}
         `}
       >
         {/* Icon */}
@@ -103,11 +103,11 @@ export const ConversationItem = ({
             onKeyDown={handleRenameKeyDown}
             onBlur={handleRenameSave}
             onClick={(e) => e.stopPropagation()}
-            className="ml-3 flex-1 bg-transparent border-none outline-none text-sm font-medium text-gemini-text p-0 min-w-0"
+            className="ml-3 flex-1 bg-transparent border-none outline-none text-[14px] font-medium text-ink p-0 min-w-0"
           />
         ) : (
           <span
-            className={`ml-3 truncate text-sm font-medium text-left transition-[padding] duration-75 ease-out ${expanded ? `opacity-100 flex-1 group-hover:pr-7${menuOpen ? ' pr-7' : ''}` : 'opacity-0 w-0 ml-0 overflow-hidden'}`}
+            className={`ml-3 truncate text-[14px] font-medium text-left transition-[padding] duration-75 ease-out ${expanded ? `opacity-100 flex-1 group-hover:pr-7${menuOpen ? ' pr-7' : ''}` : 'opacity-0 w-0 ml-0 overflow-hidden'}`}
             onDoubleClick={(e) => {
               e.stopPropagation();
               e.preventDefault();
@@ -141,7 +141,7 @@ export const ConversationItem = ({
                 setMenuOpen(true);
               }
             }}
-            className={`p-1 rounded-lg text-gemini-subtext hover:bg-gemini-hover hover:text-gemini-text transition-all duration-200
+            className={`p-1 rounded-lg text-ink-3 hover:bg-chip-2 hover:text-ink transition-all duration-200
               ${menuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}
             `}
           >
@@ -158,7 +158,7 @@ export const ConversationItem = ({
       {menuOpen && createPortal(
         <div
           ref={menuRef}
-          className="fixed w-44 bg-white rounded-xl shadow-lg border border-gray-200 py-1 z-[9999]"
+          className="fixed w-44 glass-strong rounded-2xl shadow-glass py-1 z-[9999]"
           style={{ top: menuPos?.top ?? 0, left: menuPos?.left ?? 0 }}
         >
           <button
@@ -167,7 +167,7 @@ export const ConversationItem = ({
               onPin?.(conv.id, !conv.is_pinned);
               setMenuOpen(false);
             }}
-            className="w-full px-3 py-2 text-sm text-left flex items-center gap-2.5 text-gemini-text hover:bg-gemini-hover transition-colors"
+            className="w-full px-3 py-2 text-[13px] text-left flex items-center gap-2.5 text-ink hover:bg-chip transition-colors"
           >
             <svg className="w-4 h-4" fill={conv.is_pinned ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
@@ -180,7 +180,7 @@ export const ConversationItem = ({
               setMenuOpen(false);
               startRename();
             }}
-            className="w-full px-3 py-2 text-sm text-left flex items-center gap-2.5 text-gemini-text hover:bg-gemini-hover transition-colors"
+            className="w-full px-3 py-2 text-[13px] text-left flex items-center gap-2.5 text-ink hover:bg-chip transition-colors"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -193,7 +193,7 @@ export const ConversationItem = ({
               setMenuOpen(false);
               onDelete?.(conv.id);
             }}
-            className="w-full px-3 py-2 text-sm text-left flex items-center gap-2.5 text-red-600 hover:bg-red-50 transition-colors"
+            className="w-full px-3 py-2 text-[13px] text-left flex items-center gap-2.5 text-red-500 hover:bg-red-500/10 transition-colors"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"

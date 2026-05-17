@@ -45,13 +45,16 @@ export function ShareableCard({ children }: ShareableCardProps) {
 
   return (
     <div className="w-full max-w-[calc(100vw-48px)] animate-genui-slide-in">
-      <div className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm">
-        <div ref={captureRef} className="bg-white">
+      <div className="rounded-sheet glass overflow-hidden">
+        <div
+          ref={captureRef}
+          style={{ background: 'rgb(var(--page))' }}
+        >
           <div className="p-4">
             {children}
           </div>
-          <div className="px-4 pb-3 pt-1 flex items-center justify-between border-t border-gray-100">
-            <span className="text-[10px] text-gray-300 uppercase tracking-widest font-semibold">
+          <div className="px-4 pb-3 pt-1 flex items-center justify-between hairline-t">
+            <span className="text-[10px] text-ink-4 uppercase tracking-widest font-semibold">
               Playheads
             </span>
           </div>
@@ -61,7 +64,7 @@ export function ShareableCard({ children }: ShareableCardProps) {
         <button
           onClick={handleSave}
           disabled={isExporting}
-          className="flex items-center gap-1.5 text-[11px] text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-50"
+          className="flex items-center gap-1.5 text-[11px] text-ink-3 hover:text-ink transition-colors disabled:opacity-50"
         >
           {isExporting ? (
             <span className="animate-pulse">Saving...</span>

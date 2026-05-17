@@ -40,11 +40,11 @@ export const RecordPlayer = ({
 
   if (!currentTrack) {
     return (
-      <div className="flex flex-col items-center gap-6 opacity-30 select-none">
-        <div className="w-64 h-64 rounded-xl bg-gray-100 border border-dashed border-gray-300 flex items-center justify-center">
-          <span className="text-gray-400 font-mono text-xs">NO DISK</span>
+      <div className="flex flex-col items-center gap-6 opacity-40 select-none">
+        <div className="w-64 h-64 rounded-card bg-chip hairline flex items-center justify-center">
+          <span className="text-ink-3 font-mono text-xs tracking-widest">NO DISK</span>
         </div>
-        <div className="text-gray-300 font-mono text-xs uppercase tracking-widest">Idle</div>
+        <div className="text-ink-3 font-mono text-xs uppercase tracking-widest">Idle</div>
       </div>
     );
   }
@@ -54,33 +54,33 @@ export const RecordPlayer = ({
   const artworkUrl = formatArtwork(currentTrack.artworkUrl);
 
   return (
-    <div className="flex flex-col items-center gap-8 group w-full">
-      {/* Cover Art */}
+    <div className="flex flex-col items-center gap-7 group w-full">
+      {/* Cover Art — 10px radius, dual cover shadow, no border (iOS Spec.swift) */}
       <div className="relative pointer-events-auto">
-        <div className={`w-80 h-80 md:w-[420px] md:h-[420px] rounded-2xl shadow-2xl overflow-hidden relative bg-black border border-gray-800 transition-transform duration-700 ${!isPaused ? 'scale-100' : 'scale-95 opacity-90'}`}>
+        <div className={`w-72 h-72 md:w-[380px] md:h-[380px] rounded-card shadow-cover overflow-hidden relative transition-transform duration-700 ease-spring ${!isPaused ? 'scale-100' : 'scale-[0.97] opacity-95'}`}>
           {artworkUrl ? (
             <img src={artworkUrl} alt={trackName} className="w-full h-full object-cover" />
           ) : (
-            <div className="w-full h-full bg-gradient-to-br from-gray-800 to-black flex items-center justify-center">
-              <svg className="w-20 h-20 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="w-full h-full bg-chip flex items-center justify-center">
+              <svg className="w-20 h-20 text-ink-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M9 19V6l12-3v13M9 10l12-3" />
               </svg>
             </div>
           )}
 
-          {/* Play/Pause Overlay */}
+          {/* Play/Pause Overlay — glass capsule on hover */}
           <button
             onClick={togglePlay}
             disabled={isTransitioning}
-            className="absolute inset-0 flex items-center justify-center bg-black/20 hover:bg-black/40 transition-all opacity-0 group-hover:opacity-100 backdrop-blur-[2px] disabled:pointer-events-none disabled:opacity-50"
+            className="absolute inset-0 flex items-center justify-center bg-black/15 hover:bg-black/30 transition-all opacity-0 group-hover:opacity-100 disabled:pointer-events-none disabled:opacity-50"
           >
-            <div className="w-20 h-20 rounded-full bg-white/20 backdrop-blur-md border border-white/30 flex items-center justify-center transform hover:scale-110 transition-transform">
+            <div className="w-[68px] h-[68px] rounded-full bg-white/15 backdrop-blur-md border border-white/30 flex items-center justify-center transform hover:scale-110 transition-transform shadow-glass">
               {isPaused ? (
-                <svg className="w-8 h-8 text-white ml-1" fill="currentColor" viewBox="0 0 24 24">
+                <svg className="w-7 h-7 text-white ml-0.5" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M8 5v14l11-7z" />
                 </svg>
               ) : (
-                <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
+                <svg className="w-7 h-7 text-white" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
                 </svg>
               )}
@@ -89,13 +89,12 @@ export const RecordPlayer = ({
         </div>
       </div>
 
-      {/* Track Info */}
-      <div className="text-center space-y-2 max-w-lg px-4 w-full flex flex-col items-center">
-        <h2 className="text-3xl font-semibold text-gray-900 tracking-tight leading-tight line-clamp-1">
+      {/* Track Info — display font, ink hierarchy */}
+      <div className="text-center space-y-1.5 max-w-lg px-4 w-full flex flex-col items-center">
+        <h2 className="text-[26px] font-display font-medium text-ink tracking-tight leading-tight line-clamp-1">
           {trackName}
         </h2>
-        <p className="text-lg text-gray-500 font-medium">{artistName}</p>
-
+        <p className="text-[15px] text-ink-2 font-display">{artistName}</p>
       </div>
     </div>
   );

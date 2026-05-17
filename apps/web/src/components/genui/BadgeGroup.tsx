@@ -6,14 +6,9 @@ interface BadgeGroupProps {
   badges: { label: string; color?: string | null }[];
 }
 
-const DEFAULT_COLORS = [
-  'bg-blue-50 text-blue-700',
-  'bg-purple-50 text-purple-700',
-  'bg-green-50 text-green-700',
-  'bg-amber-50 text-amber-700',
-  'bg-rose-50 text-rose-700',
-  'bg-cyan-50 text-cyan-700',
-];
+// iOS treatment: uniform chip + hairline; mood accent drives any per-tag emphasis.
+// Per-badge `color` prop still wins via inline style if the agent supplies one.
+const DEFAULT_CLASS = 'bg-chip hairline text-ink-2';
 
 export function BadgeGroup({ badges }: BadgeGroupProps) {
   return (
@@ -22,7 +17,7 @@ export function BadgeGroup({ badges }: BadgeGroupProps) {
         <span
           key={`${badge.label}-${i}`}
           className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium ${
-            badge.color ? '' : DEFAULT_COLORS[i % DEFAULT_COLORS.length]
+            badge.color ? '' : DEFAULT_CLASS
           }`}
           style={badge.color ? { backgroundColor: `${badge.color}20`, color: badge.color } : undefined}
         >

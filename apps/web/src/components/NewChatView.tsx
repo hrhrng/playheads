@@ -93,13 +93,13 @@ export const NewChatView = ({
       {/* Center Content */}
       <div className="flex flex-col items-center w-full max-w-2xl space-y-8 z-20">
         {/* Heading */}
-        <h2 className="text-3xl font-medium text-gemini-subtext tracking-tight">
+        <h2 className="text-3xl font-display font-medium text-ink tracking-tight text-center">
           What's Going On?
         </h2>
 
-        {/* Input Area - Centered Style */}
+        {/* Input Area - Centered capsule */}
         <div className="w-full relative group">
-          <div className="relative bg-gemini-surface rounded-2xl shadow-sm border border-gemini-border flex items-center p-3 pl-5 pr-3 focus-within:shadow-md focus-within:border-gemini-border transition-all">
+          <div className="relative glass rounded-3xl flex items-end p-2 pl-5 pr-2 focus-within:bg-ink/10 transition-all">
             <textarea
               ref={textareaRef}
               rows={1}
@@ -112,19 +112,19 @@ export const NewChatView = ({
                 }
               }}
               placeholder={isDJSpeaking ? 'Push to Interrupt...' : 'Start a vibe...'}
-              className="flex-1 bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-gemini-text placeholder-gemini-subtext text-base resize-none py-3 max-h-32 no-scrollbar"
+              className="flex-1 bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-ink placeholder-ink-3 text-[15px] resize-none py-3 max-h-32 no-scrollbar font-sans"
               autoFocus
               disabled={isLoading}
             />
             <button
               onClick={handleSend}
               disabled={isLoading || !input.trim()}
-              className={`p-2 rounded-full transition-all flex-shrink-0 ${
+              className={`w-10 h-10 flex items-center justify-center rounded-full transition-all flex-shrink-0 self-end ${
                 isLoading
-                  ? 'bg-gemini-border text-white animate-pulse'
+                  ? 'bg-ink/30 text-page animate-pulse'
                   : input.trim()
-                  ? 'bg-gemini-text text-white hover:bg-black'
-                  : 'bg-gemini-hover text-gemini-border'
+                  ? 'bg-accent text-page hover:bg-accent-2'
+                  : 'bg-chip text-ink-4'
               }`}
             >
               {isLoading ? (
@@ -132,8 +132,8 @@ export const NewChatView = ({
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
               ) : (
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 19V5m0 0l-6 6m6-6l6 6" />
                 </svg>
               )}
             </button>
@@ -146,7 +146,7 @@ export const NewChatView = ({
             <button
               key={idx}
               onClick={() => handleSuggestionClick(text)}
-              className="px-4 py-2 bg-gemini-surface border border-gemini-border rounded-full text-sm text-gemini-subtext hover:text-gemini-text hover:border-gemini-border transition-all"
+              className="px-4 py-1.5 glass rounded-full text-[13px] text-ink-2 hover:text-ink hover:bg-ink/10 transition-all"
             >
               {text}
             </button>
@@ -159,29 +159,29 @@ export const NewChatView = ({
         <div className="absolute bottom-20 right-6 md:bottom-6 z-30">
           <div className="relative group cursor-pointer">
             {/* Glow effect */}
-            <div className="absolute inset-0 bg-gradient-to-r from-rose-400 to-orange-400 rounded-full blur-md opacity-40 group-hover:opacity-60 transition-opacity animate-pulse" />
+            <div className="absolute inset-0 bg-gradient-to-r from-accent to-accent-2 rounded-full blur-md opacity-40 group-hover:opacity-60 transition-opacity animate-pulse" />
 
-            {/* Record disc */}
-            <div className="relative w-12 h-12 rounded-full bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 shadow-lg flex items-center justify-center animate-spin-slow border-2 border-gray-700">
+            {/* Record disc — stays dark (vinyl). Center label uses mood accent. */}
+            <div className="relative w-12 h-12 rounded-full bg-gradient-to-br from-black via-neutral-900 to-black shadow-lg flex items-center justify-center animate-spin-slow border-2 border-neutral-800">
               {/* Grooves */}
-              <div className="absolute inset-1 rounded-full border border-gray-600/30" />
-              <div className="absolute inset-2 rounded-full border border-gray-600/20" />
-              <div className="absolute inset-3 rounded-full border border-gray-600/10" />
+              <div className="absolute inset-1 rounded-full border border-white/10" />
+              <div className="absolute inset-2 rounded-full border border-white/8" />
+              <div className="absolute inset-3 rounded-full border border-white/5" />
 
               {/* Center label */}
-              <div className="w-4 h-4 rounded-full bg-gradient-to-br from-rose-500 to-orange-500 flex items-center justify-center shadow-inner">
-                <div className="w-1.5 h-1.5 rounded-full bg-gray-900" />
+              <div className="w-4 h-4 rounded-full bg-gradient-to-br from-accent to-accent-2 flex items-center justify-center shadow-inner">
+                <div className="w-1.5 h-1.5 rounded-full bg-black" />
               </div>
             </div>
 
-            {/* Playing indicator dot */}
-            <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full animate-pulse shadow-lg" />
+            {/* Playing indicator dot — accent */}
+            <div className="absolute -top-1 -right-1 w-3 h-3 bg-accent rounded-full animate-pulse shadow-lg" />
           </div>
         </div>
       )}
 
       {/* Disclaimer / Footer */}
-      <div className="absolute bottom-20 md:bottom-6 text-center text-[9px] text-gemini-border tracking-[0.2em] uppercase">
+      <div className="absolute bottom-20 md:bottom-6 text-center text-[10px] text-ink-4 tracking-[0.25em] uppercase">
         The Playheads
       </div>
     </div>

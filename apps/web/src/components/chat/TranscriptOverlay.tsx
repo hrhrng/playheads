@@ -32,7 +32,7 @@ export const TranscriptOverlay = ({
 
   return (
     <div
-      className={`absolute inset-0 z-20 flex flex-col items-center justify-start pt-12 pb-4 bg-white/60 backdrop-blur-xl transition-opacity duration-500 ease-out ${
+      className={`absolute inset-0 z-20 flex flex-col items-center justify-start pt-12 pb-4 bg-page/60 backdrop-blur-glass transition-opacity duration-500 ease-out ${
         showHistory ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
       }`}
     >

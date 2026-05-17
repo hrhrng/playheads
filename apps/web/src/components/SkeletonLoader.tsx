@@ -10,9 +10,9 @@
  */
 export const SkeletonLoader = (): React.JSX.Element => {
   return (
-    <div className="flex h-full items-center justify-center bg-white rounded-3xl">
+    <div className="flex h-full items-center justify-center">
       {/* Logo with pulse animation - matches LoadingScreen in App.tsx */}
-      <div className="w-16 h-16 rounded-full overflow-hidden grayscale animate-pulse">
+      <div className="w-16 h-16 rounded-full overflow-hidden shadow-cover animate-pulse-soft">
         <img src="/logo.jpg" alt="Loading" className="w-full h-full object-cover" />
       </div>
     </div>

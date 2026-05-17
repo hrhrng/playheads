@@ -72,7 +72,7 @@ export function UserSettingsPopover({
       <button
         ref={triggerRef}
         onClick={handleToggle}
-        className="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold text-xs shrink-0 hover:bg-blue-600 transition-colors cursor-pointer"
+        className="w-8 h-8 rounded-full bg-accent text-page flex items-center justify-center font-semibold text-xs shrink-0 hover:bg-accent-2 transition-colors cursor-pointer"
       >
         {initials}
       </button>
@@ -82,24 +82,24 @@ export function UserSettingsPopover({
         <div
           ref={popoverRef}
           style={{ bottom: position.bottom, left: position.left }}
-          className="fixed w-56 bg-white rounded-xl shadow-lg border border-gemini-border py-2 z-50"
+          className="fixed w-56 glass-strong rounded-2xl shadow-glass py-2 z-50"
         >
           {/* User info header */}
-          <div className="px-4 py-3 border-b border-gemini-border">
-            <p className="text-sm text-gemini-subtext truncate">{userEmail}</p>
+          <div className="px-4 py-3 hairline-b">
+            <p className="text-[13px] text-ink-2 truncate">{userEmail}</p>
           </div>
 
           {/* Menu items */}
           <div className="py-1">
             {/* Settings */}
             <button
-              className="w-full px-4 py-2.5 text-left text-sm text-gemini-text hover:bg-gemini-hover transition-colors flex items-center gap-3"
+              className="w-full px-4 py-2.5 text-left text-[13px] text-ink hover:bg-chip transition-colors flex items-center gap-3"
               onClick={() => {
                 setOpen(false);
                 onOpenSettings();
               }}
             >
-              <svg className="w-4 h-4 text-gemini-subtext shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg className="w-4 h-4 text-ink-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="3" />
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
               </svg>
@@ -108,10 +108,10 @@ export function UserSettingsPopover({
 
             {/* Help */}
             <button
-              className="w-full px-4 py-2.5 text-left text-sm text-gemini-text hover:bg-gemini-hover transition-colors flex items-center gap-3"
+              className="w-full px-4 py-2.5 text-left text-[13px] text-ink hover:bg-chip transition-colors flex items-center gap-3"
               onClick={() => setOpen(false)}
             >
-              <svg className="w-4 h-4 text-gemini-subtext shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg className="w-4 h-4 text-ink-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="10" />
                 <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
                 <line x1="12" y1="17" x2="12.01" y2="17" />
@@ -121,15 +121,15 @@ export function UserSettingsPopover({
           </div>
 
           {/* Divider + Logout */}
-          <div className="border-t border-gemini-border mt-1 pt-1">
+          <div className="hairline-t mt-1 pt-1">
             <button
               onClick={() => {
                 onLogout();
                 setOpen(false);
               }}
-              className="w-full px-4 py-2.5 text-left text-sm text-gemini-text hover:bg-gemini-hover transition-colors flex items-center gap-3"
+              className="w-full px-4 py-2.5 text-left text-[13px] text-ink hover:bg-chip transition-colors flex items-center gap-3"
             >
-              <svg className="w-4 h-4 text-gemini-subtext shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg className="w-4 h-4 text-ink-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
                 <polyline points="16 17 21 12 16 7" />
                 <line x1="21" y1="12" x2="9" y2="12" />

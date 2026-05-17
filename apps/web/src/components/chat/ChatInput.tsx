@@ -114,20 +114,20 @@ export const ChatInput = ({
                 <img
                   src={URL.createObjectURL(file)}
                   alt={file.name}
-                  className="w-16 h-16 object-cover rounded-xl border border-gray-200"
+                  className="w-16 h-16 object-cover rounded-card hairline"
                 />
               ) : (
-                <div className="w-16 h-16 rounded-xl border border-gray-200 bg-gray-50 flex flex-col items-center justify-center p-1">
-                  <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="w-16 h-16 rounded-card hairline bg-chip flex flex-col items-center justify-center p-1">
+                  <svg className="w-5 h-5 text-ink-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19V6l12-3v13M9 10l12-3" />
                   </svg>
-                  <span className="text-[8px] text-gray-400 truncate w-full text-center mt-1">{file.name}</span>
+                  <span className="text-[8px] text-ink-3 truncate w-full text-center mt-1">{file.name}</span>
                 </div>
               )}
               {onRemoveAttachment && (
                 <button
                   onClick={() => onRemoveAttachment(index)}
-                  className="absolute -top-1 -right-1 w-4 h-4 bg-gray-800 text-white rounded-full text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="absolute -top-1 -right-1 w-4 h-4 bg-ink text-page rounded-full text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                 >
                   ×
                 </button>
@@ -137,17 +137,17 @@ export const ChatInput = ({
         </div>
       )}
 
-      <div className="bg-gemini-bg rounded-2xl p-2 pl-3 pr-2 flex items-center gap-2 group focus-within:bg-white focus-within:shadow-md transition-all border border-transparent focus-within:border-gemini-border">
+      <div className="glass rounded-3xl py-1.5 pl-3 pr-1.5 flex items-end gap-2 transition-all focus-within:bg-ink/10">
         {/* Attachment Button */}
         {onAttach && (
           <>
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="p-1.5 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors shrink-0"
+              className="p-1.5 rounded-full text-ink-3 hover:text-ink hover:bg-chip transition-colors shrink-0 self-end mb-1.5"
               title="Attach image or audio"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+              <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.8">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
               </svg>
             </button>
             <input
@@ -168,7 +168,7 @@ export const ChatInput = ({
           onChange={(e) => onInputChange(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={getPlaceholder()}
-          className="flex-1 bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-gemini-text placeholder-gray-400 text-sm resize-none py-2.5 max-h-32 no-scrollbar"
+          className="flex-1 bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-ink placeholder-ink-3 text-[15px] leading-snug resize-none py-2 max-h-32 no-scrollbar font-sans"
           disabled={isLoading}
         />
 
@@ -196,28 +196,29 @@ export const ChatInput = ({
 
         {/* Voice/Send Dual Button */}
         {hasInput ? (
-          /* Send button */
+          /* Send button — filled circle with accent when ready */
           <button
             onClick={onSend}
             disabled={isLoading}
-            className={`p-2 rounded-full transition-all shrink-0 ${
+            className={`w-9 h-9 flex items-center justify-center rounded-full transition-all shrink-0 self-end ${
               isLoading
-                ? 'bg-gray-300 text-white animate-pulse'
-                : 'bg-gray-800 text-white hover:bg-black'
+                ? 'bg-ink/30 text-page animate-pulse'
+                : 'bg-accent text-page hover:bg-accent-2'
             }`}
+            aria-label="Send"
           >
             {isLoading ? (
               <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
             ) : (
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 10l7-7m0 0l7 7m-7-7v18" />
+              <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 19V5m0 0l-6 6m6-6l6 6" />
               </svg>
             )}
           </button>
         ) : (
-          /* Voice button */
+          /* Voice button — chip → accent when listening */
           <button
             onPointerDown={handleVoicePointerDown}
             onPointerUp={handleVoicePointerUp}
@@ -228,15 +229,16 @@ export const ChatInput = ({
               }
             }}
             disabled={isLoading}
-            className={`p-2 rounded-full transition-all shrink-0 ${
+            className={`w-9 h-9 flex items-center justify-center rounded-full transition-all shrink-0 self-end ${
               isListening
-                ? 'bg-red-500 text-white animate-pulse'
-                : 'bg-gray-200 text-gray-400 hover:bg-gray-300 hover:text-gray-600'
+                ? 'bg-accent text-page animate-pulse'
+                : 'bg-chip-2 text-ink-2 hover:bg-chip-hover hover:text-ink'
             }`}
             title="Tap to dictate, hold for voice mode"
+            aria-label="Voice"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4M12 15a3 3 0 003-3V5a3 3 0 00-6 0v7a3 3 0 003 3z" />
+            <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.8">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4M12 15a3 3 0 003-3V5a3 3 0 00-6 0v7a3 3 0 003 3z" />
             </svg>
           </button>
         )}

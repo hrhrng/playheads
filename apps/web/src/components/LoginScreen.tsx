@@ -28,25 +28,25 @@ export function LoginScreen({ email, setEmail, loading, message, onLogin }: Logi
   };
 
   return (
-    <div className="min-h-screen w-full bg-air-50 flex flex-col items-center justify-center p-6 relative">
-      <div className="flex flex-col items-center space-y-12 max-w-sm w-full animate-fade-in">
+    <div className="min-h-screen w-full flex flex-col items-center justify-center p-6 relative">
+      <div className="flex flex-col items-center space-y-10 max-w-sm w-full animate-fade-in">
         {/* Logo */}
-        <div className="w-40 h-40 rounded-full overflow-hidden grayscale hover:grayscale-0 transition-all duration-700">
+        <div className="w-36 h-36 rounded-full overflow-hidden shadow-cover">
           <img src="/logo.jpg" alt="Playhead" className="w-full h-full object-cover scale-105" />
         </div>
 
         {/* Title */}
         <div className="text-center space-y-3">
-          <h1 className="text-2xl font-semibold tracking-tight text-air-900 font-sans">The Playheads</h1>
-          <div className="h-px w-12 bg-air-200 mx-auto" />
-          <p className="text-xs font-mono text-air-400 uppercase tracking-widest">Return to Music</p>
+          <h1 className="text-2xl font-display font-medium tracking-tight text-ink">The Playheads</h1>
+          <div className="h-px w-12 bg-rule mx-auto" />
+          <p className="text-[11px] font-mono text-ink-3 uppercase tracking-[0.25em]">Return to Music</p>
         </div>
 
         {/* Login Form */}
-        <div className="w-full space-y-4 pt-4">
+        <div className="w-full space-y-4 pt-2">
           {message && (
-            <div className={`p-3 text-sm rounded-md text-center ${
-              message.type === 'error' ? 'bg-red-50 text-red-600' : 'bg-green-50 text-green-600'
+            <div className={`p-3 text-sm rounded-2xl text-center hairline ${
+              message.type === 'error' ? 'bg-red-500/10 text-red-500' : 'bg-accent/10 text-accent'
             }`}>
               {message.text}
             </div>
@@ -60,12 +60,12 @@ export function LoginScreen({ email, setEmail, loading, message, onLogin }: Logi
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full h-12 px-4 rounded-lg border border-air-200 focus:outline-none focus:border-air-900 transition-colors"
+              className="w-full h-12 px-5 rounded-full glass text-ink placeholder-ink-3 focus:outline-none focus:bg-ink/10 transition-colors"
             />
             <button
               type="submit"
               disabled={loading}
-              className="w-full h-12 rounded-lg bg-black text-white font-medium text-sm transition-colors flex items-center justify-center gap-3 hover:bg-gray-800 disabled:opacity-50"
+              className="w-full h-12 rounded-full bg-ink text-page font-medium text-sm transition-colors flex items-center justify-center gap-3 hover:bg-ink/85 disabled:opacity-50"
             >
               {loading ? 'Sending Magic Link...' : 'Sign In with Email'}
             </button>
@@ -73,16 +73,16 @@ export function LoginScreen({ email, setEmail, loading, message, onLogin }: Logi
 
           {/* Divider */}
           <div className="flex items-center gap-3">
-            <div className="flex-1 h-px bg-air-200" />
-            <span className="text-xs text-air-400 font-mono">or</span>
-            <div className="flex-1 h-px bg-air-200" />
+            <div className="flex-1 h-px bg-rule" />
+            <span className="text-[11px] text-ink-3 font-mono uppercase tracking-widest">or</span>
+            <div className="flex-1 h-px bg-rule" />
           </div>
 
           {/* Social Login Buttons */}
           <div className="space-y-3">
             <button
               onClick={() => handleSocialLogin('apple')}
-              className="w-full h-12 rounded-lg bg-black text-white font-medium text-sm transition-colors flex items-center justify-center gap-3 hover:bg-gray-800"
+              className="w-full h-12 rounded-full bg-ink text-page font-medium text-sm transition-colors flex items-center justify-center gap-3 hover:bg-ink/85"
             >
               <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M17.05 20.28c-.98.95-2.05.88-3.08.4-1.09-.5-2.08-.48-3.24 0-1.44.62-2.2.44-3.06-.4C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
@@ -92,7 +92,7 @@ export function LoginScreen({ email, setEmail, loading, message, onLogin }: Logi
 
             <button
               onClick={() => handleSocialLogin('google')}
-              className="w-full h-12 rounded-lg bg-white text-air-900 font-medium text-sm border border-air-200 transition-colors flex items-center justify-center gap-3 hover:bg-air-50"
+              className="w-full h-12 rounded-full glass text-ink font-medium text-sm transition-colors flex items-center justify-center gap-3 hover:bg-ink/10"
             >
               <svg className="w-5 h-5" viewBox="0 0 24 24">
                 <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/>
@@ -105,7 +105,7 @@ export function LoginScreen({ email, setEmail, loading, message, onLogin }: Logi
           </div>
         </div>
 
-        <div className="absolute bottom-8 text-air-300 text-[10px] font-mono">The Playheads</div>
+        <div className="absolute bottom-8 text-ink-4 text-[10px] font-mono uppercase tracking-widest">The Playheads</div>
       </div>
     </div>
   );

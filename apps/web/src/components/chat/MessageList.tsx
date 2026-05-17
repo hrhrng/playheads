@@ -95,8 +95,9 @@ function AssistantMessage({
   const spec = useMemo(() => normalizeSpec(rawSpec), [rawSpec]);
 
   // Render all parts (tool calls, thinking) + GenUI spec if present
+  // Agent voice: transparent surface with a 2px accent rule on the left, ink prose.
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 pl-4 border-l-2 border-accent/70">
       {/* Tool calls and thinking — always render from mapped parts */}
       {msg.parts.map((part, pIdx) => {
         if (part.type === 'text') {
@@ -104,7 +105,7 @@ function AssistantMessage({
           // Otherwise use the raw text part
           if (hasSpec) return null; // text rendered separately below
           return (
-            <div key={`text-${pIdx}`} className="text-gray-800 text-[15px] leading-relaxed">
+            <div key={`text-${pIdx}`} className="text-ink text-[15px] leading-relaxed">
               <MarkdownMessage content={part.content} />
             </div>
           );
@@ -131,7 +132,7 @@ function AssistantMessage({
       {hasSpec && spec && (
         <>
           {text && (
-            <div className="text-gray-800 text-[15px] leading-relaxed">
+            <div className="text-ink text-[15px] leading-relaxed">
               <MarkdownMessage content={text} />
             </div>
           )}
@@ -159,7 +160,7 @@ export const MessageList = ({ messages, rawMessages = [], isLoading, queueOps, s
 
   return (
     <GenUIProvider queueOps={queueOps || null} storefront={storefront} playTrackById={playTrackById}>
-      <div className="space-y-6 pb-12">
+      <div className="space-y-5 pb-12">
         {messages.map((msg, idx) => (
           <div
             key={idx}
@@ -167,16 +168,16 @@ export const MessageList = ({ messages, rawMessages = [], isLoading, queueOps, s
               msg.role === 'user' ? 'items-end' : 'items-start'
             }`}
           >
-            <div className={`max-w-[90%] ${msg.role === 'user' ? 'ml-auto' : ''}`}>
+            <div className={`${msg.role === 'user' ? 'max-w-[76%] ml-auto' : 'w-full'}`}>
               {isModernMessage(msg) ? (
                 msg.role === 'user' ? (
-                  // User message
+                  // User message — chip capsule, ink text
                   <div className="space-y-3">
                     {msg.parts.map((part, pIdx) =>
                       part.type === 'text' ? (
                         <div
                           key={`text-${pIdx}`}
-                          className="inline-block ml-auto bg-gray-100 rounded-2xl rounded-br-md px-4 py-2.5 text-[15px] leading-relaxed text-gray-800"
+                          className="inline-block ml-auto bg-chip-2 hairline rounded-3xl rounded-br-lg px-4 py-2.5 text-[15px] leading-relaxed text-ink"
                         >
                           <MarkdownMessage content={part.content} />
                         </div>
@@ -195,8 +196,8 @@ export const MessageList = ({ messages, rawMessages = [], isLoading, queueOps, s
                 <div
                   className={`text-[15px] leading-relaxed ${
                     msg.role === 'user'
-                      ? 'inline-block ml-auto bg-gray-100 rounded-2xl rounded-br-md px-4 py-2.5 text-gray-800'
-                      : 'text-gray-800'
+                      ? 'inline-block ml-auto bg-chip-2 hairline rounded-3xl rounded-br-lg px-4 py-2.5 text-ink'
+                      : 'text-ink pl-4 border-l-2 border-accent/70'
                   }`}
                 >
                   {msg.content}
@@ -207,8 +208,8 @@ export const MessageList = ({ messages, rawMessages = [], isLoading, queueOps, s
         ))}
 
         {isLoading && (
-          <div className="flex items-start">
-            <span className="text-sm text-blue-600 font-medium animate-pulse tracking-widest">
+          <div className="flex items-start pl-4 border-l-2 border-accent/70">
+            <span className="text-[13px] text-accent font-medium animate-pulse tracking-widest">
               ON AIR...
             </span>
           </div>

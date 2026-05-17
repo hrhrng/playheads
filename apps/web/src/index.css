@@ -1,95 +1,168 @@
+/* ---------------------------------------------------------------
+ * Noto Serif SC — bilingual (Latin + CJK) editorial serif served by
+ * Google Fonts. Google chunks the file via unicode-range, so the
+ * client only downloads the glyph ranges actually used on the page
+ * (~50KB Latin + small CJK chunks on demand).
+ * ------------------------------------------------------------- */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Safe-area inset support for iPhone notch / home indicator */
-@supports (padding-bottom: env(safe-area-inset-bottom)) {
-  .pb-safe {
-    padding-bottom: env(safe-area-inset-bottom);
-  }
-  .mb-safe {
-    margin-bottom: env(safe-area-inset-bottom);
+/* ---------------------------------------------------------------
+ * Mood-driven design tokens.
+ *
+ * Light + dark share the same accent family; only the page surface and
+ * ink luminance flip. The :root vars below are LIGHT defaults; the
+ * `@media (prefers-color-scheme: dark)` block overrides for dark mode.
+ *
+ * `--ink` is the single text colour; the alpha steps in tailwind.config.js
+ * (ink/ink-2/ink-3/ink-4) derive from it, so we never hand-tune secondary
+ * text colours per surface — they just inherit.
+ * ------------------------------------------------------------- */
+:root {
+  /* Light mode — warm cream surface with deep amber ink */
+  --page: 244 238 226;          /* #F4EEE2 — warm paper */
+  --ink: 30 20 10;              /* #1E140A — near-black brown */
+  --accent: 198 132 40;         /* #C68428 — burnt amber */
+  --accent-2: 168 95 28;        /* #A85F1C — deeper warm */
+  /* Mood blob colors — radial-gradient stops behind the chrome */
+  --blob-a: 244 220 170;
+  --blob-b: 230 200 150;
+  --blob-c: 244 238 226;
+  --blob-d: 250 240 210;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* iOS Amber mood transposed to web — see ios/Theme.swift `.amber` */
+    --page: 11 9 6;               /* #0B0906 */
+    --ink: 244 233 206;           /* #F4E9CE */
+    --accent: 245 176 74;         /* #F5B04A */
+    --accent-2: 240 135 56;       /* #F08738 */
+    --blob-a: 60 31 16;           /* #3C1F10 — c5 */
+    --blob-b: 43 24 16;           /* #2B1810 — c3 */
+    --blob-c: 26 15 8;            /* #1A0F08 — c4 (base) */
+    --blob-d: 17 11 6;
   }
 }
 
-/* Bottom sheet slide-up animation */
+/* ---------------------------------------------------------------
+ * Page surface — painterly mood blobs layered behind transparent chrome.
+ * The blobs sit on the body; everything above floats on glass.
+ * ------------------------------------------------------------- */
+body {
+  @apply text-ink antialiased;
+  font-family: "Noto Serif SC", -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", serif;
+  background-color: rgb(var(--page));
+  background-image:
+    radial-gradient(60% 50% at 18% 12%, rgb(var(--blob-a) / 0.85) 0%, transparent 70%),
+    radial-gradient(50% 45% at 88% 18%, rgb(var(--blob-b) / 0.65) 0%, transparent 72%),
+    radial-gradient(55% 50% at 78% 88%, rgb(var(--blob-d) / 0.70) 0%, transparent 75%),
+    radial-gradient(50% 45% at 22% 92%, rgb(var(--blob-c) / 0.55) 0%, transparent 75%);
+  background-attachment: fixed;
+}
+body::selection { background: rgb(var(--accent)); color: rgb(var(--page)); }
+
+/* ---------------------------------------------------------------
+ * Safe-area inset support for iPhone notch / home indicator
+ * ------------------------------------------------------------- */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+  .mb-safe { margin-bottom: env(safe-area-inset-bottom); }
+}
+
+/* ---------------------------------------------------------------
+ * Animations (preserved from previous theme + iOS spring additions)
+ * ------------------------------------------------------------- */
 @keyframes slide-up {
   from { transform: translateY(100%); }
   to   { transform: translateY(0); }
 }
-
 .animate-slide-up {
-  animation: slide-up 0.3s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+  animation: slide-up 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
-/* Animations */
 @keyframes music-bar {
-
-  0%,
-  100% {
-    height: 20%;
-  }
-
-  50% {
-    height: 100%;
-  }
+  0%, 100% { height: 20%; }
+  50%      { height: 100%; }
 }
+.animate-music-bar-1 { animation: music-bar 0.8s ease-in-out infinite; }
+.animate-music-bar-2 { animation: music-bar 0.8s ease-in-out infinite 0.2s; }
+.animate-music-bar-3 { animation: music-bar 0.8s ease-in-out infinite 0.4s; }
 
-.animate-music-bar-1 {
-  animation: music-bar 0.8s ease-in-out infinite;
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.animate-spin-slow { animation: spin 3s linear infinite; }
+
+@keyframes lyric-slide-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
+.animate-lyric-slide-in { animation: lyric-slide-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
 
-.animate-music-bar-2 {
-  animation: music-bar 0.8s ease-in-out infinite 0.2s;
+@keyframes lyric-tap {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(0.97); }
+  100% { transform: scale(1); }
 }
+.animate-lyric-tap { animation: lyric-tap 0.2s ease-out; }
 
-.animate-music-bar-3 {
-  animation: music-bar 0.8s ease-in-out infinite 0.4s;
-}
-
-.animate-spin-slow {
-  animation: spin 3s linear infinite;
-}
-
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-
-  to {
-    transform: rotate(360deg);
-  }
-}
-
+/* ---------------------------------------------------------------
+ * Components — glass + pill primitives, nav buttons
+ * ------------------------------------------------------------- */
 @layer components {
-  /* Unified navigation button style for sidebar */
-  .nav-btn {
-    @apply p-3 rounded-xl text-gemini-subtext hover:bg-white hover:text-gemini-text transition-colors;
+  /* Glass surface: backdrop blur + veil overlay + hairline border */
+  .glass {
+    background-color: rgb(var(--ink) / 0.06);
+    backdrop-filter: blur(22px) saturate(140%);
+    -webkit-backdrop-filter: blur(22px) saturate(140%);
+    border: 1px solid rgb(var(--ink) / 0.16);
+  }
+  .glass-strong {
+    background-color: rgb(var(--ink) / 0.10);
+    backdrop-filter: blur(28px) saturate(160%);
+    -webkit-backdrop-filter: blur(28px) saturate(160%);
+    border: 1px solid rgb(var(--ink) / 0.20);
+  }
+  .hairline { border: 1px solid rgb(var(--ink) / 0.16); }
+  .hairline-t { border-top: 1px solid rgb(var(--ink) / 0.16); }
+  .hairline-b { border-bottom: 1px solid rgb(var(--ink) / 0.16); }
+  .hairline-l { border-left: 1px solid rgb(var(--ink) / 0.16); }
+  .hairline-r { border-right: 1px solid rgb(var(--ink) / 0.16); }
+
+  /* Capsule pill (composer, buttons, chips) */
+  .pill {
+    @apply rounded-full;
+    background-color: rgb(var(--ink) / 0.08);
+    border: 1px solid rgb(var(--ink) / 0.16);
   }
 
-  /* Unified spacing for sidebar fixed items (burger, new chat, avatar) */
-  .nav-item {
-    @apply px-4 py-2;
+  /* Sidebar nav button (iOS-style, ink-2 → ink on hover) */
+  .nav-btn {
+    @apply p-3 rounded-2xl text-ink-2 transition-colors;
   }
-  .nav-item:first-child {
-    @apply pt-4;
+  .nav-btn:hover {
+    background-color: rgb(var(--ink) / 0.08);
+    color: rgb(var(--ink));
   }
-  .nav-item:last-child {
-    @apply pb-2;
-  }
+
+  /* Sidebar fixed-item spacing */
+  .nav-item { @apply px-3 py-1.5; }
+  .nav-item:first-child { @apply pt-3; }
+  .nav-item:last-child  { @apply pb-2; }
 }
 
+/* ---------------------------------------------------------------
+ * Utilities — scroll hiding, lyric edge fade
+ * ------------------------------------------------------------- */
 @layer utilities {
-  .no-scrollbar::-webkit-scrollbar {
-    display: none;
-  }
-
+  .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
 
-  /* Lyrics scroll container — fade edges */
   .lyrics-mask {
     mask-image: linear-gradient(
       to bottom,
@@ -108,122 +181,95 @@
   }
 }
 
-/* Lyric line slide-in animation */
-@keyframes lyric-slide-in {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-.animate-lyric-slide-in {
-  animation: lyric-slide-in 0.35s ease-out forwards;
-}
+/* ---------------------------------------------------------------
+ * GenUI quirks (timeline last-era spacing, export mode)
+ * ------------------------------------------------------------- */
+.genui-era:last-child { padding-bottom: 0 !important; }
+.genui-era:last-child .genui-era-line { display: none; }
 
-/* Lyric line tap feedback */
-@keyframes lyric-tap {
-  0%   { transform: scale(1); }
-  50%  { transform: scale(0.97); }
-  100% { transform: scale(1); }
-}
-.animate-lyric-tap {
-  animation: lyric-tap 0.2s ease-out;
-}
+.genui-export-mode button { display: none !important; }
+.genui-export-mode .group:hover > * { opacity: 1 !important; }
 
-/* GenUI timeline — hide connecting line on last era */
-.genui-era:last-child {
-  padding-bottom: 0 !important;
-}
-.genui-era:last-child .genui-era-line {
-  display: none;
-}
-
-/* GenUI export mode — hide interactive elements for screenshot */
-.genui-export-mode button {
-  display: none !important;
-}
-.genui-export-mode .group:hover > * {
-  opacity: 1 !important;
-}
-
-body {
-  @apply bg-gemini-bg text-gemini-text font-sans selection:bg-gemini-primary selection:text-white antialiased;
-}
-
-/* Progress bar range input — custom thumb, cross-browser */
+/* ---------------------------------------------------------------
+ * Range/progress input — ink-coloured thumb, hairline track
+ * ------------------------------------------------------------- */
 input[type="range"].progress-bar::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 16px;
-  height: 16px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  background: rgb(var(--ink));
+  box-shadow: 0 2px 4px rgba(0,0,0,0.35);
   cursor: pointer;
-  margin-top: -6px;
+  margin-top: -4px;
 }
 input[type="range"].progress-bar::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   border: none;
-  background: #fff;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  background: rgb(var(--ink));
+  box-shadow: 0 2px 4px rgba(0,0,0,0.35);
   cursor: pointer;
 }
 input[type="range"].progress-bar::-webkit-slider-runnable-track {
   height: 4px;
   border-radius: 2px;
+  background: rgb(var(--ink) / 0.18);
 }
 input[type="range"].progress-bar::-moz-range-track {
   height: 4px;
   border-radius: 2px;
-  background: #e5e5e5;
+  background: rgb(var(--ink) / 0.18);
 }
 input[type="range"].progress-bar::-moz-range-progress {
   height: 4px;
   border-radius: 2px;
-  background: #1a1a1a;
+  background: rgb(var(--ink));
 }
 
-/* Gemini Scrollbar (Subtle) */
-::-webkit-scrollbar {
-  width: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
+/* ---------------------------------------------------------------
+ * Scrollbar — thin ink-derived
+ * ------------------------------------------------------------- */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: #E3E3E3;
-  /* gemini-border */
+  background: rgb(var(--ink) / 0.16);
   border-radius: 4px;
 }
-
 ::-webkit-scrollbar-thumb:hover {
-  background: #C4C7C5;
-  /* Darker gray for hover state */
+  background: rgb(var(--ink) / 0.28);
 }
 
-/* Prose (Markdown) Custom Styles — compact & refined */
+/* ---------------------------------------------------------------
+ * Prose (Markdown) — colors derive from ink so dark/light flip for free
+ * ------------------------------------------------------------- */
 .prose {
-  color: #374151;
-  font-size: 0.875rem;
-  line-height: 1.7;
+  color: rgb(var(--ink) / 0.86);
+  font-size: 0.95rem;
+  line-height: 1.75;
+  font-family: "Noto Serif SC", -apple-system, "PingFang SC", "Noto Sans SC", serif;
 }
 
 .prose code {
-  background-color: #f3f4f6;
-  padding: 0.15em 0.35em;
-  border-radius: 0.25rem;
-  font-size: 0.8em;
+  background-color: rgb(var(--ink) / 0.08);
+  padding: 0.15em 0.4em;
+  border-radius: 0.3rem;
+  font-size: 0.85em;
   font-weight: 500;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  color: rgb(var(--ink));
 }
 
 .prose pre {
-  background-color: #1f2937;
-  color: #f9fafb;
-  padding: 0.875rem;
-  border-radius: 0.5rem;
+  background-color: rgb(var(--ink) / 0.08);
+  border: 1px solid rgb(var(--ink) / 0.12);
+  color: rgb(var(--ink));
+  padding: 0.9rem;
+  border-radius: 0.625rem;
   overflow-x: auto;
-  font-size: 0.8rem;
+  font-size: 0.825rem;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
 }
 
 .prose pre code {
@@ -254,39 +300,40 @@ input[type="range"].progress-bar::-moz-range-progress {
 
 .prose strong {
   font-weight: 600;
-  color: #1f2937;
+  color: rgb(var(--ink));
 }
 
-.prose em {
-  font-style: italic;
-}
+.prose em { font-style: italic; }
 
 .prose a {
-  color: #2563eb;
+  color: rgb(var(--accent));
   text-decoration: underline;
+  text-decoration-color: rgb(var(--accent) / 0.5);
+  text-underline-offset: 2px;
 }
-
 .prose a:hover {
-  color: #1d4ed8;
+  color: rgb(var(--accent-2));
+  text-decoration-color: rgb(var(--accent-2));
 }
 
 .prose blockquote {
-  border-left: 3px solid #e5e7eb;
-  padding-left: 0.875rem;
+  border-left: 2px solid rgb(var(--accent) / 0.6);
+  padding-left: 0.9rem;
   font-style: italic;
-  color: #6b7280;
+  color: rgb(var(--ink) / 0.72);
 }
 
 .prose h1, .prose h2, .prose h3 {
   font-weight: 600;
-  color: #1f2937;
-  margin-top: 0.75em;
+  color: rgb(var(--ink));
+  margin-top: 0.8em;
   margin-bottom: 0.4em;
+  letter-spacing: -0.01em;
 }
 
-.prose h1 { font-size: 1.125rem; }
-.prose h2 { font-size: 1rem; }
-.prose h3 { font-size: 0.9375rem; }
+.prose h1 { font-size: 1.2rem; }
+.prose h2 { font-size: 1.05rem; }
+.prose h3 { font-size: 0.95rem; }
 
 .prose p {
   margin-top: 0.4em;

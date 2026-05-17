@@ -37,12 +37,12 @@ const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
 function GeneralTab() {
   return (
     <div>
-      <h2 className="text-lg font-semibold text-gemini-text mb-6">General</h2>
-      <div className="space-y-0 divide-y divide-gemini-border">
+      <h2 className="text-lg font-display font-medium text-ink mb-6">General</h2>
+      <div className="space-y-0 divide-y divide-rule">
         {/* Appearance */}
         <div className="flex items-center justify-between py-4">
-          <span className="text-sm text-gemini-text">Appearance</span>
-          <select className="text-sm text-gemini-subtext bg-transparent border border-gemini-border rounded-lg px-3 py-1.5 cursor-pointer hover:border-gemini-text transition-colors outline-none">
+          <span className="text-sm text-ink">Appearance</span>
+          <select className="text-sm text-ink-2 bg-transparent hairline rounded-full px-3 py-1.5 cursor-pointer hover:text-ink transition-colors outline-none">
             <option>System</option>
             <option>Light</option>
             <option>Dark</option>
@@ -51,8 +51,8 @@ function GeneralTab() {
 
         {/* Language */}
         <div className="flex items-center justify-between py-4">
-          <span className="text-sm text-gemini-text">Language</span>
-          <select className="text-sm text-gemini-subtext bg-transparent border border-gemini-border rounded-lg px-3 py-1.5 cursor-pointer hover:border-gemini-text transition-colors outline-none">
+          <span className="text-sm text-ink">Language</span>
+          <select className="text-sm text-ink-2 bg-transparent hairline rounded-full px-3 py-1.5 cursor-pointer hover:text-ink transition-colors outline-none">
             <option>Auto-detect</option>
             <option>English</option>
             <option>中文</option>
@@ -74,12 +74,12 @@ function IntegrationsTab({
 }) {
   return (
     <div>
-      <h2 className="text-lg font-semibold text-gemini-text mb-6">Integrations</h2>
-      <div className="space-y-0 divide-y divide-gemini-border">
+      <h2 className="text-lg font-display font-medium text-ink mb-6">Integrations</h2>
+      <div className="space-y-0 divide-y divide-rule">
         {/* Apple Music */}
         <div className="flex items-center justify-between py-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-pink-500 to-red-500 flex items-center justify-center shrink-0">
+            <div className="w-9 h-9 rounded-card bg-gradient-to-br from-pink-500 to-red-500 flex items-center justify-center shrink-0">
               <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M9 18V5l12-2v13" />
                 <circle cx="6" cy="18" r="3" />
@@ -87,8 +87,8 @@ function IntegrationsTab({
               </svg>
             </div>
             <div>
-              <p className="text-sm font-medium text-gemini-text">Apple Music</p>
-              <p className="text-xs text-gemini-subtext">
+              <p className="text-sm font-medium text-ink">Apple Music</p>
+              <p className="text-xs text-ink-3">
                 {isAppleMusicAuthorized ? 'Connected' : 'Enable full playback and recommendations'}
               </p>
             </div>
@@ -96,14 +96,14 @@ function IntegrationsTab({
           {isAppleMusicAuthorized ? (
             <button
               onClick={onDisconnect}
-              className="text-sm px-4 py-1.5 rounded-lg border border-gemini-border text-gemini-subtext hover:border-red-300 hover:text-red-600 transition-colors"
+              className="text-sm px-4 py-1.5 rounded-full hairline text-ink-2 hover:text-red-500 hover:border-red-500/40 transition-colors"
             >
               Disconnect
             </button>
           ) : (
             <button
               onClick={onConnect}
-              className="text-sm px-4 py-1.5 rounded-lg border border-gemini-primary text-gemini-primary hover:bg-gemini-primary hover:text-white transition-colors"
+              className="text-sm px-4 py-1.5 rounded-full border border-accent text-accent hover:bg-accent hover:text-page transition-colors"
             >
               Connect
             </button>
@@ -148,14 +148,14 @@ export function SettingsModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/35 backdrop-blur-sm" onClick={onClose} />
 
       {/* Dialog */}
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl h-[480px] flex overflow-hidden animate-scale-in">
+      <div className="relative glass-strong rounded-sheet shadow-glass w-full max-w-2xl h-[480px] flex overflow-hidden animate-scale-in">
         {/* Close button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 p-1.5 rounded-lg text-gemini-subtext hover:text-gemini-text hover:bg-gemini-hover transition-colors z-10"
+          className="absolute top-4 right-4 p-1.5 rounded-full text-ink-2 hover:text-ink hover:bg-chip transition-colors z-10"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
@@ -163,15 +163,15 @@ export function SettingsModal({
         </button>
 
         {/* Left sidebar */}
-        <nav className="w-48 shrink-0 border-r border-gemini-border py-4 px-3 flex flex-col gap-1">
+        <nav className="w-48 shrink-0 hairline-r py-4 px-3 flex flex-col gap-1">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`w-full px-3 py-2 rounded-lg text-sm text-left flex items-center gap-2.5 transition-colors ${
+              className={`w-full px-3 py-2 rounded-2xl text-sm text-left flex items-center gap-2.5 transition-colors ${
                 activeTab === tab.id
-                  ? 'bg-gemini-hover font-medium text-gemini-text'
-                  : 'text-gemini-subtext hover:bg-gemini-hover hover:text-gemini-text'
+                  ? 'bg-chip-2 font-medium text-ink'
+                  : 'text-ink-2 hover:bg-chip hover:text-ink'
               }`}
             >
               {tab.icon}

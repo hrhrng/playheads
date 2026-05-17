@@ -24,13 +24,13 @@ export const ThinkingProcess = ({ content }: ThinkingProcessProps): React.JSX.El
     <div className="group">
       <button
         type="button"
-        className="flex items-center gap-2 w-full text-left py-1 text-xs text-gray-500 hover:text-gray-700 transition-colors"
+        className="flex items-center gap-2 w-full text-left py-1 text-[12px] text-ink-3 hover:text-ink transition-colors"
         onClick={() => setIsExpanded(!isExpanded)}
       >
-        <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-violet-300" />
+        <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-accent-2/70" />
         <span className="font-medium">Thinking</span>
         <svg
-          className={`w-3 h-3 ml-auto shrink-0 text-gray-300 transition-transform duration-200 ${
+          className={`w-3 h-3 ml-auto shrink-0 text-ink-4 transition-transform duration-200 ${
             isExpanded ? 'rotate-90' : ''
           }`}
           fill="none"
@@ -42,8 +42,8 @@ export const ThinkingProcess = ({ content }: ThinkingProcessProps): React.JSX.El
       </button>
 
       {isExpanded && (
-        <div className="ml-3.5 pl-3 border-l border-gray-100 pb-2">
-          <p className="text-[11px] text-gray-500 italic leading-relaxed whitespace-pre-wrap">
+        <div className="ml-3.5 pl-3 hairline-l pb-2">
+          <p className="text-[12px] text-ink-3 italic leading-relaxed whitespace-pre-wrap">
             {content}
           </p>
         </div>

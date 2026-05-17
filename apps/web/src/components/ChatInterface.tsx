@@ -282,13 +282,13 @@ export const ChatInterface = ({
 
   // Main chat interface
   return (
-    <div className="flex flex-col h-full relative bg-white rounded-3xl overflow-hidden shadow-sm border border-white">
+    <div className="flex flex-col h-full relative overflow-hidden">
       {/* Hero Stage */}
       <div className="flex-1 flex flex-col items-center justify-center relative pb-48">
-        {/* Visualizer Background */}
+        {/* Visualizer Background — soft accent halo when playing */}
         {isPlaying && (
-          <div className="absolute inset-0 flex items-center justify-center opacity-10 pointer-events-none">
-            <div className="w-96 h-96 bg-blue-500 rounded-full blur-3xl animate-pulse" />
+          <div className="absolute inset-0 flex items-center justify-center opacity-20 pointer-events-none">
+            <div className="w-96 h-96 bg-accent rounded-full blur-3xl animate-pulse" />
           </div>
         )}
 
@@ -321,7 +321,7 @@ export const ChatInterface = ({
                 <div className={`mt-4 flex justify-center transition-opacity duration-200 ${showHistory || !currentTrack ? 'opacity-0 pointer-events-none' : ''}`}>
                   <button
                     onClick={onLinkApple}
-                    className="text-sm text-pink-500 hover:text-pink-600 transition-colors font-medium flex items-center gap-1.5"
+                    className="text-[13px] text-accent hover:text-accent-2 transition-colors font-medium flex items-center gap-1.5"
                   >
                     <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M9 18V5l12-2v13" />
@@ -333,20 +333,20 @@ export const ChatInterface = ({
                 </div>
               )}
               {isAppleMusicAuthorized && (playbackTime?.total || 0) > 0 && (
-                <div className={`max-w-sm mx-auto px-2 mt-4 flex items-center gap-2 transition-opacity duration-200 ${showHistory || !currentTrack ? 'opacity-0 pointer-events-none' : ''}`}>
-                  <span className="text-xs font-mono text-gray-400 tabular-nums shrink-0">
+                <div className={`max-w-sm mx-auto px-2 mt-4 flex items-center gap-3 transition-opacity duration-200 ${showHistory || !currentTrack ? 'opacity-0 pointer-events-none' : ''}`}>
+                  <span className="text-[11px] font-mono text-ink-3 tabular-nums shrink-0">
                     {formatTime(seekDisplayValue)}
                   </span>
                   <div className="relative flex-1 h-5 flex items-center">
-                    <div className="w-full h-1.5 bg-gray-100 rounded-full pointer-events-none overflow-hidden">
+                    <div className="w-full h-1 bg-ink/15 rounded-full pointer-events-none overflow-hidden">
                       <div
-                        className="h-full bg-gray-900 rounded-full"
+                        className="h-full bg-ink rounded-full"
                         style={{ width: `${Math.min(100, (seekDisplayValue / (playbackTime?.total || 1)) * 100)}%` }}
                       />
                     </div>
                     <div
-                      className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow border border-gray-300 pointer-events-none"
-                      style={{ left: `calc(${Math.min(100, (seekDisplayValue / (playbackTime?.total || 1)) * 100)}% - 6px)` }}
+                      className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-ink rounded-full shadow pointer-events-none"
+                      style={{ left: `calc(${Math.min(100, (seekDisplayValue / (playbackTime?.total || 1)) * 100)}% - 5px)` }}
                     />
                     <input
                       type="range"
@@ -359,7 +359,7 @@ export const ChatInterface = ({
                       className="absolute inset-0 w-full opacity-0 cursor-pointer"
                     />
                   </div>
-                  <span className="text-xs font-mono text-gray-400 tabular-nums shrink-0">
+                  <span className="text-[11px] font-mono text-ink-3 tabular-nums shrink-0">
                     {formatTime(playbackTime?.total || 0)}
                   </span>
                 </div>
@@ -397,7 +397,7 @@ export const ChatInterface = ({
       </div>
 
       {/* Command Console - Fixed at Bottom, hidden when lyrics are open */}
-      <div className={`absolute bottom-0 left-0 right-0 px-6 pb-5 pt-10 z-30 bg-gradient-to-t from-white via-white/95 to-transparent transition-all duration-300 ${
+      <div className={`absolute bottom-0 left-0 right-0 px-6 pb-5 pt-10 z-30 bg-gradient-to-t from-page via-page/90 to-transparent transition-all duration-300 ${
         showLyrics && !showHistory ? 'opacity-0 pointer-events-none translate-y-4' : 'opacity-100 pointer-events-auto translate-y-0'
       }`}>
         {/* Toggle Button + Mobile Playlist Button */}
@@ -415,17 +415,17 @@ export const ChatInterface = ({
 
               if (hasArt && showHistory) {
                 return (
-                  <div className="w-8 h-8 rounded-full overflow-hidden ring-2 ring-gray-200">
+                  <div className="w-8 h-8 rounded-full overflow-hidden ring-2 ring-rule">
                     <img src={artUrl} alt="" className="w-full h-full object-cover" />
                   </div>
                 );
               }
 
               return (
-                <div className={`w-8 h-8 rounded-full border flex items-center justify-center transition-colors duration-200 ${
+                <div className={`w-8 h-8 rounded-full hairline flex items-center justify-center transition-colors duration-200 ${
                   showHistory
-                    ? 'bg-gray-800 text-white border-gray-800'
-                    : 'bg-white text-gray-400 border-gray-200 hover:text-gray-600 hover:border-gray-300'
+                    ? 'bg-ink text-page border-ink'
+                    : 'bg-chip text-ink-3 hover:text-ink hover:bg-chip-2'
                 }`}>
                   {showHistory ? (
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -445,7 +445,7 @@ export const ChatInterface = ({
           {hasPlaylist && (
             <button
               onClick={openPlaylist}
-              className="md:hidden ml-auto w-8 h-8 rounded-full border border-gray-200 bg-white flex items-center justify-center text-gray-400 hover:text-gray-600 hover:border-gray-300 transition-colors"
+              className="md:hidden ml-auto w-8 h-8 rounded-full hairline bg-chip flex items-center justify-center text-ink-3 hover:text-ink hover:bg-chip-2 transition-colors"
               title="View Playlist"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

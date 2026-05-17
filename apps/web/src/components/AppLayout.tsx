@@ -194,18 +194,18 @@ export const AppLayout = ({
       <div className="nav-item">
         <button
           onClick={handleNewChat}
-          className="w-full p-3 rounded-xl text-gemini-subtext hover:bg-gemini-hover transition-colors flex items-center overflow-hidden whitespace-nowrap"
+          className="w-full p-3 rounded-2xl text-ink-2 hover:bg-chip hover:text-ink transition-colors flex items-center overflow-hidden whitespace-nowrap"
         >
           <div className="w-6 flex justify-center shrink-0">
             <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
           </div>
-          <span className={`ml-3 truncate text-sm font-medium text-left transition-all duration-300 ${isMobile || expanded ? 'opacity-100 flex-1' : 'opacity-0 w-0 ml-0 overflow-hidden'}`}>New Chat</span>
+          <span className={`ml-3 truncate text-[15px] font-medium text-left transition-all duration-300 ${isMobile || expanded ? 'opacity-100 flex-1' : 'opacity-0 w-0 ml-0 overflow-hidden'}`}>New Chat</span>
         </button>
       </div>
 
       {/* Scrollable conversation container — only when expanded */}
       {(isMobile || expanded) && (
-        <div className="bg-gemini-hover/50 rounded-3xl mx-2 py-4 flex flex-col gap-2 overflow-hidden overflow-y-auto max-h-[calc(100vh-200px)]">
+        <div className="glass rounded-3xl mx-2 py-3 flex flex-col gap-1 overflow-hidden overflow-y-auto max-h-[calc(100vh-200px)]">
           {/* Conversation List */}
           <ConversationList
             conversations={conversations}
@@ -234,8 +234,8 @@ export const AppLayout = ({
             />
           </div>
           <div className={`ml-3 flex flex-col text-sm transition-all duration-300 ${isMobile || expanded ? 'opacity-100 flex-1' : 'opacity-0 w-0 ml-0 overflow-hidden'}`}>
-            <span className="font-medium text-gemini-text">{userName}</span>
-            <span className="text-[10px] text-gemini-subtext truncate">{userEmail}</span>
+            <span className="font-medium text-ink">{userName}</span>
+            <span className="text-[10px] text-ink-3 truncate">{userEmail}</span>
           </div>
         </div>
       </div>
@@ -246,21 +246,21 @@ export const AppLayout = ({
 
   return (
     <PlaylistSheetContext.Provider value={{ openPlaylist: () => { onOpenPlaylist?.(); setMobilePlaylistOpen(true); }, hasPlaylist, isMobileSheet: false }}>
-      <div className="flex flex-col h-screen bg-gemini-bg font-sans text-gemini-text overflow-hidden selection:bg-gemini-primary selection:text-white">
+      <div className="flex flex-col h-screen font-sans text-ink overflow-hidden">
 
         {/* Mobile Top Bar */}
-        <div className="flex md:hidden items-center h-14 px-2 shrink-0 border-b border-gemini-border/50">
+        <div className="flex md:hidden items-center h-14 px-2 shrink-0 hairline-b">
           <button
             onClick={() => setMobileNavOpen(true)}
-            className="p-2.5 rounded-xl text-gemini-subtext hover:bg-gemini-hover transition-colors"
+            className="p-2.5 rounded-2xl text-ink-2 hover:bg-chip hover:text-ink transition-colors"
             aria-label="Open menu"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
           </button>
-          <span className="flex-1 text-center text-sm font-medium text-gemini-text">Playheads</span>
+          <span className="flex-1 text-center text-[15px] font-medium text-ink tracking-tight">Playheads</span>
           <button
             onClick={onNewChat}
-            className="p-2.5 rounded-xl text-gemini-subtext hover:bg-gemini-hover transition-colors"
+            className="p-2.5 rounded-2xl text-ink-2 hover:bg-chip hover:text-ink transition-colors"
             aria-label="New chat"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
@@ -281,17 +281,17 @@ export const AppLayout = ({
               onMouseDown={handleResizeStart}
               className={`
                 absolute right-0 top-10 bottom-0 w-0.5 cursor-ew-resize z-30
-                hover:bg-blue-400 transition-colors
-                ${isResizing ? 'bg-blue-500' : 'bg-transparent'}
+                hover:bg-accent/60 transition-colors
+                ${isResizing ? 'bg-accent' : 'bg-transparent'}
               `}
               title="Drag to resize"
             />
             {navContent(false)}
           </nav>
 
-          {/* 2. Main Content Area (Rounded White Card) */}
-          <main className="flex-1 h-full md:pt-4 relative z-10 min-w-0">
-            <div className="bg-white h-full w-full md:rounded-t-3xl shadow-sm overflow-hidden border border-white relative flex flex-col">
+          {/* 2. Main Content Area — transparent so the mood blobs paint through */}
+          <main className="flex-1 h-full relative z-10 min-w-0">
+            <div className="h-full w-full overflow-hidden relative flex flex-col">
               {children}
             </div>
           </main>
@@ -312,9 +312,9 @@ export const AppLayout = ({
               onClick={() => setMobileNavOpen(false)}
             />
             {/* Drawer */}
-            <nav className="fixed inset-y-0 left-0 w-72 z-50 md:hidden bg-gemini-bg flex flex-col shadow-2xl">
+            <nav className="fixed inset-y-0 left-0 w-72 z-50 md:hidden glass-strong flex flex-col shadow-2xl">
               {/* Close button */}
-              <div className="mb-4 px-4">
+              <div className="mb-2 px-4 pt-3">
                 <button
                   onClick={() => setMobileNavOpen(false)}
                   className="nav-btn"
@@ -337,10 +337,10 @@ export const AppLayout = ({
               onClick={() => setMobilePlaylistOpen(false)}
             />
             {/* Sheet */}
-            <div className="fixed inset-x-0 bottom-0 z-50 md:hidden rounded-t-3xl overflow-hidden bg-gemini-bg animate-slide-up" style={{ maxHeight: '70vh' }}>
+            <div className="fixed inset-x-0 bottom-0 z-50 md:hidden rounded-t-sheet overflow-hidden glass-strong animate-slide-up" style={{ maxHeight: '70vh' }}>
               {/* Drag handle */}
               <div className="flex justify-center pt-3 pb-1">
-                <div className="w-10 h-1 bg-gray-300 rounded-full" />
+                <div className="w-10 h-1 bg-ink/30 rounded-full" />
               </div>
               {/* Playlist content — fill remaining height, isMobileSheet=true */}
               <PlaylistSheetContext.Provider value={{ openPlaylist: () => {}, hasPlaylist: true, isMobileSheet: true }}>
