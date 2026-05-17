@@ -21,33 +21,20 @@
  * (ink/ink-2/ink-3/ink-4) derive from it, so we never hand-tune secondary
  * text colours per surface — they just inherit.
  * ------------------------------------------------------------- */
+/* Single-mode (dark only) — matches iOS. `color-scheme: dark` tells the
+ * browser to render native controls (form widgets, scrollbar, etc.) on
+ * the dark variant regardless of the OS theme. */
 :root {
-  /* Light mode defaults. `--accent` + `--blob-*` get overwritten in JS by
-   * useAlbumPalette while a track is playing, then cleared back to these
-   * on empty/idle. `--has-mood` toggles the blob layer's opacity. */
-  --page: 248 246 242;          /* #F8F6F2 — warm-neutral paper */
-  --ink: 30 26 22;              /* #1E1A16 — near-black, slight warmth */
-  --accent: 30 26 22;           /* neutral until artwork drives it */
-  --accent-2: 60 52 44;
-  --blob-a: 30 26 22;
-  --blob-b: 30 26 22;
-  --blob-c: 30 26 22;
-  --blob-d: 30 26 22;
+  color-scheme: dark;
+  --page: 11 9 6;               /* #0B0906 — iOS Color.pageBg */
+  --ink: 216 207 191;           /* #D8CFBF — iOS Color.pageInk */
+  --accent: 216 207 191;        /* neutral until useAlbumPalette overwrites */
+  --accent-2: 180 170 152;
+  --blob-a: 216 207 191;
+  --blob-b: 216 207 191;
+  --blob-c: 216 207 191;
+  --blob-d: 216 207 191;
   --has-mood: 0;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    /* Dark mode — iOS Color.pageBg / pageInk (Theme.swift). */
-    --page: 11 9 6;               /* #0B0906 — pageBg */
-    --ink: 216 207 191;           /* #D8CFBF — pageInk */
-    --accent: 216 207 191;
-    --accent-2: 180 170 152;
-    --blob-a: 216 207 191;
-    --blob-b: 216 207 191;
-    --blob-c: 216 207 191;
-    --blob-d: 216 207 191;
-  }
 }
 
 /* ---------------------------------------------------------------
@@ -62,32 +49,23 @@ body {
   position: relative;
 }
 
-/* Mood blob layer.
- *
- * iOS uses heavy painterly blobs because its page is solid #0B0906 — the
- * blobs add colour to an otherwise-black canvas. Light mode here starts
- * from cream paper, so the same blobs would just wash the whole page
- * white. We therefore only paint them in dark mode.
- *
- * Light mode still gets the accent colour (buttons / now-playing inherit
- * the vibrant swatch via `--accent`), just without the bg fill.
- */
-@media (prefers-color-scheme: dark) {
-  body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    z-index: -1;
-    pointer-events: none;
-    background-image:
-      radial-gradient(55% 45% at 18% 12%, rgb(var(--blob-a) / 0.55) 0%, transparent 70%),
-      radial-gradient(45% 40% at 88% 18%, rgb(var(--blob-b) / 0.45) 0%, transparent 72%),
-      radial-gradient(50% 45% at 78% 88%, rgb(var(--blob-d) / 0.50) 0%, transparent 75%),
-      radial-gradient(45% 40% at 22% 92%, rgb(var(--blob-c) / 0.40) 0%, transparent 75%);
-    opacity: var(--has-mood, 0);
-    transition: opacity 0.6s cubic-bezier(0.22, 1, 0.36, 1),
-                background-image 0.6s cubic-bezier(0.22, 1, 0.36, 1);
-  }
+/* Mood blob layer — sits on top of the dark page bg, adds painterly
+ * colour pulled from the current track's artwork. `--has-mood` toggles
+ * opacity 0 ↔ 1 so empty/idle stays pure #0B0906. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    radial-gradient(55% 45% at 18% 12%, rgb(var(--blob-a) / 0.55) 0%, transparent 70%),
+    radial-gradient(45% 40% at 88% 18%, rgb(var(--blob-b) / 0.45) 0%, transparent 72%),
+    radial-gradient(50% 45% at 78% 88%, rgb(var(--blob-d) / 0.50) 0%, transparent 75%),
+    radial-gradient(45% 40% at 22% 92%, rgb(var(--blob-c) / 0.40) 0%, transparent 75%);
+  opacity: var(--has-mood, 0);
+  transition: opacity 0.6s cubic-bezier(0.22, 1, 0.36, 1),
+              background-image 0.6s cubic-bezier(0.22, 1, 0.36, 1);
 }
 body::selection { background: rgb(var(--accent)); color: rgb(var(--page)); }
 

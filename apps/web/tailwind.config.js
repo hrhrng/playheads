@@ -4,11 +4,11 @@ export default {
         "./index.html",
         "./src/**/*.{js,ts,jsx,tsx}",
     ],
-    darkMode: 'media',
+    // Dark only — matches iOS. No `dark:` variants used.
     theme: {
         extend: {
             colors: {
-                // iOS Playheads palette — driven by CSS vars so dark/light flip cleanly
+                // iOS Playheads palette — driven by CSS vars on :root.
                 // Page surface (the painterly mood blob background blends behind this)
                 page: 'rgb(var(--page) / <alpha-value>)',
                 // Ink scale (text & icons; 4 stops)
