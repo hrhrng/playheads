@@ -203,9 +203,11 @@ export const AppLayout = ({
         </button>
       </div>
 
-      {/* Scrollable conversation container — only when expanded */}
+      {/* Scrollable conversation list — plain rows, no enclosing card.
+         iOS-style: only the active row carries a chip; the list itself
+         just scrolls. */}
       {(isMobile || expanded) && (
-        <div className="glass rounded-3xl mx-2 py-3 flex flex-col gap-1 overflow-hidden overflow-y-auto max-h-[calc(100vh-200px)]">
+        <div className="flex flex-col gap-0.5 overflow-hidden overflow-y-auto max-h-[calc(100vh-180px)] pt-1">
           {/* Conversation List */}
           <ConversationList
             conversations={conversations}
