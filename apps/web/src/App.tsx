@@ -8,6 +8,7 @@ import { Routes, Route, useLocation } from 'react-router-dom';
 import { HomeRoute, ChatRoute } from './routes';
 import { useMusicProvider } from './hooks/useMusicProvider';
 import useAppleMusicLink from './hooks/useAppleMusicLink';
+import { useAlbumPalette } from './hooks/useAlbumPalette';
 import { useDevTools } from './utils/devTools';
 import { useAuth } from './hooks/useAuth';
 import { useConversations } from './hooks/useConversations';
@@ -78,6 +79,10 @@ function App() {
     storedMusicUserToken,
     isTokenChecked,
   });
+
+  // Album-driven palette: extract colours from the current track's artwork
+  // and pipe them into CSS vars on <html>. Empty state stays neutral.
+  useAlbumPalette(playback.currentTrack?.artworkUrl);
 
   // Music actions dispatched by agent tool results
   const musicActions: MusicActions = useMemo(() => ({

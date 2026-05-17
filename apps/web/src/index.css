@@ -22,36 +22,60 @@
  * text colours per surface — they just inherit.
  * ------------------------------------------------------------- */
 :root {
-  /* Light mode — neutral paper. Matches iOS empty-state aesthetic, no mood
-   * tint; mood-driven gradients will be layered in later when a track is
-   * playing (see ios/ContentView.swift BlurredMoodBackground). */
+  /* Light mode defaults. `--accent` + `--blob-*` get overwritten in JS by
+   * useAlbumPalette while a track is playing, then cleared back to these
+   * on empty/idle. `--has-mood` toggles the blob layer's opacity. */
   --page: 248 246 242;          /* #F8F6F2 — warm-neutral paper */
   --ink: 30 26 22;              /* #1E1A16 — near-black, slight warmth */
-  --accent: 30 26 22;           /* same as ink — neutral, no mood color */
-  --accent-2: 60 52 44;         /* deeper neutral for hover/contrast */
+  --accent: 30 26 22;           /* neutral until artwork drives it */
+  --accent-2: 60 52 44;
+  --blob-a: 30 26 22;
+  --blob-b: 30 26 22;
+  --blob-c: 30 26 22;
+  --blob-d: 30 26 22;
+  --has-mood: 0;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    /* Dark mode — iOS Color.pageBg / pageInk (Theme.swift). Pure neutral
-     * deep brown-black, mood-agnostic. Accents stay neutral until a track
-     * drives the mood. */
+    /* Dark mode — iOS Color.pageBg / pageInk (Theme.swift). */
     --page: 11 9 6;               /* #0B0906 — pageBg */
     --ink: 216 207 191;           /* #D8CFBF — pageInk */
-    --accent: 216 207 191;        /* same as ink — neutral */
+    --accent: 216 207 191;
     --accent-2: 180 170 152;
+    --blob-a: 216 207 191;
+    --blob-b: 216 207 191;
+    --blob-c: 216 207 191;
+    --blob-d: 216 207 191;
   }
 }
 
 /* ---------------------------------------------------------------
- * Page surface — flat neutral paper. Mood-driven gradient blobs were
- * removed in favour of the empty-state aesthetic; they will come back
- * scoped behind the player when artwork-driven palettes ship.
+ * Page surface — flat neutral paper. Mood blobs paint into a fixed
+ * pseudo-element so the colour transition is smooth and isolated from
+ * the page chrome above. `--has-mood` flips opacity 0 ↔ 1.
  * ------------------------------------------------------------- */
 body {
   @apply text-ink antialiased;
   font-family: "Noto Serif SC", -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", serif;
   background-color: rgb(var(--page));
+  position: relative;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    radial-gradient(60% 50% at 18% 12%, rgb(var(--blob-a) / 0.85) 0%, transparent 70%),
+    radial-gradient(50% 45% at 88% 18%, rgb(var(--blob-b) / 0.65) 0%, transparent 72%),
+    radial-gradient(55% 50% at 78% 88%, rgb(var(--blob-d) / 0.70) 0%, transparent 75%),
+    radial-gradient(50% 45% at 22% 92%, rgb(var(--blob-c) / 0.55) 0%, transparent 75%);
+  opacity: var(--has-mood, 0);
+  transition: opacity 0.6s cubic-bezier(0.22, 1, 0.36, 1),
+              background-image 0.6s cubic-bezier(0.22, 1, 0.36, 1);
 }
 body::selection { background: rgb(var(--accent)); color: rgb(var(--page)); }
 
