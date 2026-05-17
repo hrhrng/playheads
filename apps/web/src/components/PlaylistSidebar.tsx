@@ -288,7 +288,7 @@ export const PlaylistSidebar = ({
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="text-[13px] font-medium font-display text-accent truncate leading-snug">{nowPlaying.title}</div>
+                        <div className="text-[13px] font-semibold font-display text-ink truncate leading-snug">{nowPlaying.title}</div>
                         <div className="text-[11px] text-ink-3 truncate">{nowPlaying.artist}</div>
                       </div>
                     </div>

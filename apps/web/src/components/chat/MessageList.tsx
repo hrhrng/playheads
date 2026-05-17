@@ -95,9 +95,9 @@ function AssistantMessage({
   const spec = useMemo(() => normalizeSpec(rawSpec), [rawSpec]);
 
   // Render all parts (tool calls, thinking) + GenUI spec if present
-  // Agent voice: transparent surface with a 2px accent rule on the left, ink prose.
+  // Agent voice: transparent surface with a 2px ink rule on the left, ink prose.
   return (
-    <div className="space-y-3 pl-4 border-l-2 border-accent/70">
+    <div className="space-y-3 pl-4 border-l-2 border-ink/25">
       {/* Tool calls and thinking — always render from mapped parts */}
       {msg.parts.map((part, pIdx) => {
         if (part.type === 'text') {
@@ -197,7 +197,7 @@ export const MessageList = ({ messages, rawMessages = [], isLoading, queueOps, s
                   className={`text-[15px] leading-relaxed ${
                     msg.role === 'user'
                       ? 'inline-block ml-auto bg-chip-2 hairline rounded-3xl rounded-br-lg px-4 py-2.5 text-ink'
-                      : 'text-ink pl-4 border-l-2 border-accent/70'
+                      : 'text-ink pl-4 border-l-2 border-ink/25'
                   }`}
                 >
                   {msg.content}
@@ -208,8 +208,8 @@ export const MessageList = ({ messages, rawMessages = [], isLoading, queueOps, s
         ))}
 
         {isLoading && (
-          <div className="flex items-start pl-4 border-l-2 border-accent/70">
-            <span className="text-[13px] text-accent font-medium animate-pulse tracking-widest">
+          <div className="flex items-start pl-4 border-l-2 border-ink/25">
+            <span className="text-[13px] text-ink-2 font-semibold animate-pulse tracking-widest">
               ON AIR...
             </span>
           </div>
