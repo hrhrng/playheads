@@ -1,23 +1,28 @@
 /**
- * useAlbumPalette — extracts a palette from a track's artwork and pipes it
- * into CSS custom properties on `<html>`. Drives the mood-aware accent +
- * background blobs that mirror iOS BlurredMoodBackground.
+ * useAlbumPalette — extracts an Apple-Music-style palette from a track's
+ * artwork and pipes it into CSS custom properties on <html>.
  *
- * Strategy:
- * - Vibrant.from(url).getPalette() → swatches keyed by Vibrant / DarkMuted / …
- * - Pick a contrast-safe `--accent` (Vibrant fallback chain) and 4 darker
- *   blob colours for the radial-gradient bg.
- * - Apply via documentElement.style so a single CSS transition on body
- *   handles the fade between tracks.
- * - When `artworkUrl` is null/empty we reset the props, so the neutral
- *   empty-state look comes back automatically.
+ * Old strategy was Vibrant-led: pick `Vibrant.rgb` as accent and use it
+ * everywhere. Vibrant biases toward the most *saturated* swatch, which
+ * on multi-colour covers (Imagine Dragons "Evolve"'s rainbow spectrum
+ * is the canonical bad case) consistently surfaces a warm yellow/orange,
+ * regardless of what the cover actually feels like.
  *
- * The 25 MB Vibrant chunk is dynamic-imported so the empty/idle UI never
- * pays for it.
+ * New strategy keys off the cover's **average colour** instead:
+ *  - mood base = downsampled mean RGB → drives blob bg tone
+ *  - accent    = Vibrant (still useful for buttons that need to pop)
+ *  - light/dark = mean luma threshold (already correct)
+ *
+ * The Vibrant chunk is dynamic-imported so empty/idle UI never pays for it.
  */
 import { useEffect, useRef } from 'react';
 
 type RGB = [number, number, number];
+
+interface ImageStats {
+  avgLuma: number;
+  avgRgb: RGB;
+}
 
 const PROPS = [
   '--page', '--ink',
@@ -27,18 +32,12 @@ const PROPS = [
 ] as const;
 
 /**
- * Average luminance of the entire artwork via a tiny canvas sample.
- *
- * Why not Vibrant's swatches: Vibrant runs median-cut on quantised
- * colour and only surfaces 6 "named" swatches (Vibrant, LightVibrant,
- * DarkVibrant, Muted, LightMuted, DarkMuted). Near-black pixels often
- * get filtered out of those buckets, so a mostly-black cover with a
- * small white logo (Avicii "True", Joy Division, etc.) returns a high
- * `population` on LightMuted and looks "bright" to the swatch logic.
- *
- * Averaging raw pixels is honest — black is black, white is white.
+ * Sample the artwork at 32×32 and return (a) mean Rec.601 luma and
+ * (b) mean RGB. Honest pixel stats — black is black, rainbow is
+ * grey-brown — so we don't get the Vibrant-style "warm-yellow bias" on
+ * multi-colour covers.
  */
-function imageAvgLuma(url: string): Promise<number> {
+function readImageStats(url: string): Promise<ImageStats> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
@@ -51,12 +50,18 @@ function imageAvgLuma(url: string): Promise<number> {
       if (!ctx) return reject(new Error('no 2d context'));
       ctx.drawImage(img, 0, 0, size, size);
       const data = ctx.getImageData(0, 0, size, size).data;
-      let sum = 0;
+      let r = 0, g = 0, b = 0, luma = 0;
       const count = size * size;
       for (let i = 0; i < data.length; i += 4) {
-        sum += 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+        r += data[i];
+        g += data[i + 1];
+        b += data[i + 2];
+        luma += 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
       }
-      resolve(sum / count);
+      resolve({
+        avgLuma: luma / count,
+        avgRgb: [r / count, g / count, b / count],
+      });
     };
     img.onerror = (e) => reject(e);
     img.src = url;
@@ -71,7 +76,7 @@ function toRgbTuple(rgb: number[]): string {
   return `${clamp(rgb[0])} ${clamp(rgb[1])} ${clamp(rgb[2])}`;
 }
 
-/** Mix `c` toward black by `amt` (0..1). Used to deepen swatches into blob bg. */
+/** Mix `c` toward black by `amt` (0..1). */
 function darken(rgb: number[], amt: number): RGB {
   return [
     clamp(rgb[0] * (1 - amt)),
@@ -80,7 +85,7 @@ function darken(rgb: number[], amt: number): RGB {
   ];
 }
 
-/** Mix `c` toward white by `amt` (0..1). Used for the light-mode blob halo. */
+/** Mix `c` toward white by `amt` (0..1). */
 function lighten(rgb: number[], amt: number): RGB {
   return [
     clamp(rgb[0] + (255 - rgb[0]) * amt),
@@ -89,19 +94,40 @@ function lighten(rgb: number[], amt: number): RGB {
   ];
 }
 
+/** Saturation distance from grey — small values mean "almost grey". */
+function saturation(rgb: number[]): number {
+  const max = Math.max(rgb[0], rgb[1], rgb[2]);
+  const min = Math.min(rgb[0], rgb[1], rgb[2]);
+  return max === 0 ? 0 : (max - min) / max;
+}
+
 /**
- * Sub-pick the best accent: prefer Vibrant, fall back through LightVibrant /
- * Muted / DarkVibrant. iOS uses c1 (brightest mood colour) for accents — this
- * mirrors that priority order.
+ * Pick an accent that *pops* but does not overrule the mood base. We
+ * prefer Vibrant, but if Vibrant is wildly more saturated than the
+ * cover average (the rainbow-spectrum trap), fall back to a Muted /
+ * DarkMuted swatch instead — these track the cover's real tone better.
  */
-function pickAccent(palette: any): number[] | null {
-  return (
-    palette?.Vibrant?.rgb ||
-    palette?.LightVibrant?.rgb ||
-    palette?.Muted?.rgb ||
-    palette?.DarkVibrant?.rgb ||
-    null
-  );
+function pickAccent(palette: any, avgRgb: RGB): number[] | null {
+  const candidates: number[][] = [
+    palette?.Vibrant?.rgb,
+    palette?.LightVibrant?.rgb,
+    palette?.Muted?.rgb,
+    palette?.DarkVibrant?.rgb,
+    palette?.DarkMuted?.rgb,
+    palette?.LightMuted?.rgb,
+  ].filter(Boolean) as number[][];
+
+  if (!candidates.length) return null;
+
+  const avgSat = saturation(avgRgb);
+  // If the cover is mostly desaturated (e.g. an inky black cover with
+  // a colourful highlight), don't let a single saturated swatch hijack
+  // the accent — prefer a swatch closer to the cover's actual feel.
+  if (avgSat < 0.15) {
+    const calm = candidates.find(c => saturation(c) < 0.5);
+    if (calm) return calm;
+  }
+  return candidates[0];
 }
 
 function pickSecondary(palette: any): number[] | null {
@@ -114,34 +140,25 @@ function pickSecondary(palette: any): number[] | null {
 }
 
 /**
- * Build 4 blob colours from the palette.
- *
- * Dark page → lighten the swatches a touch so they read as a coloured
- * halo on the deep brown surface.
- * Light page → darken the swatches significantly so they show up as a
- * tinted wash on the cream paper instead of disappearing into white.
+ * Build 4 blob colours from the cover's *average* RGB. Each blob is a
+ * subtle shift away from the base (slightly brighter, slightly cooler,
+ * slightly warmer) so the mood layer has motion without trapping the
+ * eye on a single Vibrant swatch.
  */
-function buildBlobs(palette: any, isLight: boolean): RGB[] {
-  const accent = palette?.Vibrant?.rgb || palette?.LightVibrant?.rgb || [60, 40, 30];
-  const muted = palette?.Muted?.rgb || palette?.LightMuted?.rgb || accent;
-  const dark = palette?.DarkMuted?.rgb || palette?.DarkVibrant?.rgb || accent;
-  const base = palette?.DarkVibrant?.rgb || palette?.DarkMuted?.rgb || accent;
+function buildBlobs(avgRgb: RGB, isLight: boolean): RGB[] {
+  const base = avgRgb;
+  // 4 sibling tones around the base mood.
+  const a = lighten(base, isLight ? -0.05 : 0.08); // slightly punchier
+  const b = darken(base, 0.10);                    // slightly deeper
+  const c = lighten([base[0], base[2], base[1]], 0.04); // hue shuffle
+  const d = darken([base[2], base[0], base[1]], 0.10);  // hue shuffle
 
   if (isLight) {
-    return [
-      darken(accent, 0.30),
-      darken(muted, 0.25),
-      darken(dark, 0.10),
-      darken(base, 0.20),
-    ];
+    // Light page — darken so the wash is visible on cream paper.
+    return [darken(a, 0.25), darken(b, 0.20), darken(c, 0.15), darken(d, 0.20)];
   }
-  // Dark page — keep swatches saturated, lighten gently so the glow reads.
-  return [
-    lighten(darken(accent, 0.35), 0.05),
-    lighten(darken(muted, 0.30), 0.05),
-    darken(dark, 0.20),
-    darken(base, 0.35),
-  ];
+  // Dark page — gently lift so the wash glows without washing out the bg.
+  return [darken(a, 0.30), darken(b, 0.40), darken(c, 0.35), darken(d, 0.45)];
 }
 
 function clearVars() {
@@ -172,39 +189,33 @@ export function useAlbumPalette(artworkUrl: string | null | undefined) {
     (async () => {
       try {
         const { Vibrant } = await import('node-vibrant/browser');
-        // Parallelise palette extraction with the raw-pixel luma read —
-        // both need the image loaded, browser will dedupe the request.
-        const [palette, avgLuma] = await Promise.all([
+        const [palette, stats] = await Promise.all([
           Vibrant.from(sampleUrl).getPalette(),
-          imageAvgLuma(sampleUrl).catch(() => 128), // fall back to mid-grey
+          readImageStats(sampleUrl).catch(() => ({
+            avgLuma: 128,
+            avgRgb: [128, 128, 128] as RGB,
+          })),
         ]);
         if (cancelled || lastUrlRef.current !== sampleUrl) return;
 
-        const accent = pickAccent(palette);
+        const accent = pickAccent(palette, stats.avgRgb);
         const accent2 = pickSecondary(palette);
         if (!accent) return;
 
-        // Apple Music keys its Now Playing backdrop off the cover's
-        // overall luminance: dark covers → black-grey wash, bright covers
-        // → white-grey wash. Threshold biased slightly toward "dark" so
-        // moody covers don't accidentally flip to the light surface.
-        const isLight = avgLuma > 140;
+        // Apple-Music-style: dark cover → dark page, bright cover →
+        // cream page. Threshold leans dark so moody covers don't flip.
+        const isLight = stats.avgLuma > 140;
 
         const root = document.documentElement;
         if (isLight) {
-          // Light-mode page: warm cream paper + dark ink. Blobs use
-          // *darkened* swatches so they read on the lighter surface
-          // instead of washing it white.
           root.style.setProperty('--page', '245 240 232');
           root.style.setProperty('--ink', '30 20 10');
         } else {
-          // Dark-mode page: iOS pageBg + pageInk. Blobs use lightly
-          // *lightened* swatches so they glow on the dark surface.
           root.style.setProperty('--page', '11 9 6');
           root.style.setProperty('--ink', '216 207 191');
         }
 
-        const blobs = buildBlobs(palette, isLight);
+        const blobs = buildBlobs(stats.avgRgb, isLight);
         root.style.setProperty('--accent', toRgbTuple(accent));
         if (accent2) root.style.setProperty('--accent-2', toRgbTuple(accent2));
         root.style.setProperty('--blob-a', toRgbTuple(blobs[0]));
@@ -213,9 +224,6 @@ export function useAlbumPalette(artworkUrl: string | null | undefined) {
         root.style.setProperty('--blob-d', toRgbTuple(blobs[3]));
         root.style.setProperty('--has-mood', '1');
       } catch (e) {
-        // Cross-origin or decode failure — Apple Music artwork should be
-        // CORS-friendly, but if not we silently fall back to the neutral
-        // empty-state colours. Logging once for debugging.
         console.warn('[useAlbumPalette] extract failed:', e);
       }
     })();

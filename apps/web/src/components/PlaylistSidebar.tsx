@@ -206,14 +206,27 @@ export const PlaylistSidebar = ({
 
         {/* Content */}
         {effectiveCollapsed ? (
-          /* Mini View - Vertical Player Strip */
-          <div className="flex-1 flex flex-col items-center pt-8 gap-6 opacity-100 transition-opacity duration-500 delay-100">
-            {/* Mini Vinyl Spinner */}
-            <div className={`w-12 h-12 rounded-full bg-ink/90 hairline flex items-center justify-center ${!!currentTrack && isPlaying ? 'animate-spin-slow' : ''} shadow-md`}>
-              <div className="w-4 h-4 rounded-full bg-page hairline" />
+          /* Mini View — album cover (mirrors left sidebar's "shows what
+             matters at a glance" treatment). Falls back to a chip
+             placeholder when nothing's playing. */
+          <div className="flex-1 flex flex-col items-center pt-6 gap-4 opacity-100 transition-opacity duration-500 delay-100">
+            <div className="w-14 h-14 rounded-card overflow-hidden bg-chip shadow-cover shrink-0">
+              {currentTrack?.artworkUrl ? (
+                <img
+                  src={formatArtwork(currentTrack.artworkUrl, 112)}
+                  alt={currentTrack.name || ''}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <svg className="w-5 h-5 text-ink-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 19V6l12-3v13" />
+                  </svg>
+                </div>
+              )}
             </div>
 
-            {/* Status Indicator */}
+            {/* Status indicator — bars when playing, dot when idle. */}
             <div className="flex flex-col items-center gap-2">
               {isPlaying ? (
                 <div className="flex gap-1 h-3 items-end">

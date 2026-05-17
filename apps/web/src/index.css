@@ -119,20 +119,32 @@ body::selection { background: rgb(var(--accent)); color: rgb(var(--page)); }
  * Components — glass + pill primitives, nav buttons
  * ------------------------------------------------------------- */
 @layer components {
-  /* Glass surface: backdrop blur + veil overlay + hairline border */
+  /* Glass surface — "real" frosted glass: heavy backdrop blur with a
+   * saturation lift, no visible border (borders read as a flat outline,
+   * not like glass), a 1px inner top highlight (mimics the way real
+   * glass catches a sliver of edge light), and a soft outer drop so it
+   * appears to float above the page. */
   .glass {
-    background-color: rgb(var(--ink) / 0.06);
-    backdrop-filter: blur(22px) saturate(140%);
-    -webkit-backdrop-filter: blur(22px) saturate(140%);
-    border: 1px solid rgb(var(--ink) / 0.16);
+    background-color: rgb(var(--ink) / 0.04);
+    backdrop-filter: blur(40px) saturate(180%);
+    -webkit-backdrop-filter: blur(40px) saturate(180%);
+    box-shadow:
+      inset 0 1px 0 rgb(var(--ink) / 0.08),
+      0 1px 2px rgb(0 0 0 / 0.20),
+      0 12px 32px rgb(0 0 0 / 0.22);
+    border: none;
   }
   .glass-strong {
-    background-color: rgb(var(--ink) / 0.10);
-    backdrop-filter: blur(28px) saturate(160%);
-    -webkit-backdrop-filter: blur(28px) saturate(160%);
-    border: 1px solid rgb(var(--ink) / 0.20);
+    background-color: rgb(var(--ink) / 0.08);
+    backdrop-filter: blur(48px) saturate(200%);
+    -webkit-backdrop-filter: blur(48px) saturate(200%);
+    box-shadow:
+      inset 0 1px 0 rgb(var(--ink) / 0.12),
+      0 2px 4px rgb(0 0 0 / 0.25),
+      0 18px 48px rgb(0 0 0 / 0.28);
+    border: none;
   }
-  .hairline { border: 1px solid rgb(var(--ink) / 0.16); }
+  .hairline { border: 1px solid rgb(var(--ink) / 0.12); }
   .hairline-t { border-top: 1px solid rgb(var(--ink) / 0.16); }
   .hairline-b { border-bottom: 1px solid rgb(var(--ink) / 0.16); }
   .hairline-l { border-left: 1px solid rgb(var(--ink) / 0.16); }
