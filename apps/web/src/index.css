@@ -62,20 +62,32 @@ body {
   position: relative;
 }
 
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background-image:
-    radial-gradient(60% 50% at 18% 12%, rgb(var(--blob-a) / 0.85) 0%, transparent 70%),
-    radial-gradient(50% 45% at 88% 18%, rgb(var(--blob-b) / 0.65) 0%, transparent 72%),
-    radial-gradient(55% 50% at 78% 88%, rgb(var(--blob-d) / 0.70) 0%, transparent 75%),
-    radial-gradient(50% 45% at 22% 92%, rgb(var(--blob-c) / 0.55) 0%, transparent 75%);
-  opacity: var(--has-mood, 0);
-  transition: opacity 0.6s cubic-bezier(0.22, 1, 0.36, 1),
-              background-image 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+/* Mood blob layer.
+ *
+ * iOS uses heavy painterly blobs because its page is solid #0B0906 — the
+ * blobs add colour to an otherwise-black canvas. Light mode here starts
+ * from cream paper, so the same blobs would just wash the whole page
+ * white. We therefore only paint them in dark mode.
+ *
+ * Light mode still gets the accent colour (buttons / now-playing inherit
+ * the vibrant swatch via `--accent`), just without the bg fill.
+ */
+@media (prefers-color-scheme: dark) {
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background-image:
+      radial-gradient(55% 45% at 18% 12%, rgb(var(--blob-a) / 0.55) 0%, transparent 70%),
+      radial-gradient(45% 40% at 88% 18%, rgb(var(--blob-b) / 0.45) 0%, transparent 72%),
+      radial-gradient(50% 45% at 78% 88%, rgb(var(--blob-d) / 0.50) 0%, transparent 75%),
+      radial-gradient(45% 40% at 22% 92%, rgb(var(--blob-c) / 0.40) 0%, transparent 75%);
+    opacity: var(--has-mood, 0);
+    transition: opacity 0.6s cubic-bezier(0.22, 1, 0.36, 1),
+                background-image 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+  }
 }
 body::selection { background: rgb(var(--accent)); color: rgb(var(--page)); }
 
