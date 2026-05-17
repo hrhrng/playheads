@@ -236,17 +236,32 @@ input[type="range"].progress-bar::-moz-range-progress {
 }
 
 /* ---------------------------------------------------------------
- * Scrollbar — thin ink-derived
+ * Scrollbar — invisible by default, fades in only while the scroll
+ * container is hovered. Matches the iOS overlay-scroller feel where
+ * the indicator is hidden until the user is actively engaged.
  * ------------------------------------------------------------- */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb {
-  background: rgb(var(--ink) / 0.16);
+  background: transparent;
   border-radius: 4px;
+  /* webkit transitions on scrollbar pseudo work in Chrome/Safari */
+  transition: background-color 0.25s ease;
+}
+/* Reveal the thumb only when the scroll container (or any ancestor up
+ * to the element with the thumb) is being hovered. The bare selector
+ * `:hover::-webkit-scrollbar-thumb` is interpreted by webkit as
+ * "thumb of a currently-hovered element". */
+:hover::-webkit-scrollbar-thumb {
+  background: rgb(var(--ink) / 0.20);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgb(var(--ink) / 0.28);
+  background: rgb(var(--ink) / 0.36);
 }
+
+/* Firefox — thin, transparent until hover. */
+* { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+*:hover { scrollbar-color: rgb(var(--ink) / 0.20) transparent; }
 
 /* ---------------------------------------------------------------
  * Prose (Markdown) — colors derive from ink so dark/light flip for free

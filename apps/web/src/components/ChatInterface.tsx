@@ -396,8 +396,12 @@ export const ChatInterface = ({
 
       </div>
 
-      {/* Command Console - Fixed at Bottom, hidden when lyrics are open */}
-      <div className={`absolute bottom-0 left-0 right-0 px-6 pb-5 pt-10 z-30 bg-gradient-to-t from-page via-page/90 to-transparent transition-all duration-300 ${
+      {/* Command Console — fixed at bottom. No bg mask: the composer's
+          own glass pill provides the visual separation. A hard
+          `from-page → transparent` gradient here would create a colour
+          band where its top edge meets the mood blob bg (the two
+          page-derived hues never line up). */}
+      <div className={`absolute bottom-0 left-0 right-0 px-6 pb-5 pt-10 z-30 transition-all duration-300 ${
         showLyrics && !showHistory ? 'opacity-0 pointer-events-none translate-y-4' : 'opacity-100 pointer-events-auto translate-y-0'
       }`}>
         {/* Toggle Button + Mobile Playlist Button */}
