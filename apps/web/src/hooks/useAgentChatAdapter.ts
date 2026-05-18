@@ -56,7 +56,7 @@ interface UseAgentChatAdapterReturn {
   messages: Message[];
   /** Raw UIMessages from AI SDK — needed by json-render's useJsonRenderMessage */
   rawMessages: UIMessage[];
-  sendMessage: (text: string) => void;
+  sendMessage: (text: string, files?: Array<{ type: 'file'; mediaType: string; url: string; filename?: string }>) => void;
   isLoading: boolean;
   clearHistory: () => void;
 }
@@ -209,8 +209,12 @@ export function useAgentChatAdapter({
   );
 
   const sendMessage = useCallback(
-    (text: string) => {
-      agentSendMessage({ text });
+    (text: string, files?: Array<{ type: 'file'; mediaType: string; url: string; filename?: string }>) => {
+      if (files && files.length > 0) {
+        agentSendMessage({ text, files });
+      } else {
+        agentSendMessage({ text });
+      }
       onMessageSent?.();
     },
     [agentSendMessage, onMessageSent]

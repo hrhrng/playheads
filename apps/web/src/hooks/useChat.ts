@@ -38,7 +38,11 @@ interface UseChatReturn {
   setInput: (input: string) => void;
   setShowHistory: (show: boolean) => void;
   toggleHistory: () => void;
-  sendMessage: (text?: string, skipAddingUserMessage?: boolean) => Promise<void>;
+  sendMessage: (
+    text?: string,
+    skipAddingUserMessage?: boolean,
+    files?: Array<{ type: 'file'; mediaType: string; url: string; filename?: string }>,
+  ) => Promise<void>;
 }
 
 /**
@@ -88,10 +92,12 @@ export function useChat({
 
   const handleSendMessage = useCallback(async (
     text?: string,
-    _skipAddingUserMessage = false
+    _skipAddingUserMessage = false,
+    files?: Array<{ type: 'file'; mediaType: string; url: string; filename?: string }>,
   ): Promise<void> => {
     const messageText = text || input;
-    if (!messageText.trim() || isLoading) return;
+    const hasFiles = !!(files && files.length > 0);
+    if ((!messageText.trim() && !hasFiles) || isLoading) return;
 
     // For new chats without session, create session first and navigate
     if (!sessionId) {
@@ -126,7 +132,7 @@ export function useChat({
     } else {
       // Clear input and send via WebSocket
       useChatStore.setState({ input: '' });
-      adapter.sendMessage(messageText);
+      adapter.sendMessage(messageText, files);
     }
   }, [input, isLoading, sessionId, userId, onSessionCreated, adapter]);
 
