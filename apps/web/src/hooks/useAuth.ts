@@ -79,24 +79,6 @@ export function useAuth() {
     setLoading(true);
     setAuthMessage(null);
 
-    try {
-      // Check waitlist status first (idempotent — adds if not exists)
-      const res = await fetch('/api/waitlist', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
-      });
-      const data = await res.json();
-
-      if (res.ok && data.status !== 'approved') {
-        setAuthMessage({ type: 'success', text: data.message || "You're on the list! We'll notify you when it's your turn." });
-        setLoading(false);
-        return;
-      }
-    } catch {
-      // Waitlist check failed — proceed with login anyway
-    }
-
     // Preserve ?q= query param across auth redirect
     const q = new URLSearchParams(window.location.search).get('q');
     if (q) localStorage.setItem('playheads_pending_query', q);
