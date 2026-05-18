@@ -33,7 +33,7 @@ describe('useAuth', () => {
     mockGetSession.mockResolvedValue({
       data: {
         session: { id: 'sess_1', token: 'tok' },
-        user: { id: 'u1', email: 'a@b.com', name: 'Test' },
+        user: { id: 'u1', email: 'a@b.com', name: 'Test', waitlistApproved: true },
       },
     });
 
