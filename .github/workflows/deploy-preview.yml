@@ -123,7 +123,8 @@ jobs:
             --name "playheads-gateway-preview" \
             --var APP_HOSTNAME:preview.app.${DOMAIN} \
             --var ADMIN_HOSTNAME:preview.admin.${DOMAIN} \
-            --var PREVIEW_DOMAIN:pw.${DOMAIN}
+            --var PREVIEW_DOMAIN:pw.${DOMAIN} \
+            --var LANE:${SLUG}
 
       - name: Deploy admin worker
         working-directory: apps/admin
