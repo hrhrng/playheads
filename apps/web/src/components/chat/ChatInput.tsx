@@ -105,51 +105,52 @@ export const ChatInput = ({
 
   return (
     <div className="max-w-xl mx-auto">
-      {/* Attachment Preview */}
-      {attachments.length > 0 && (
-        <div className="flex gap-2 mb-2 px-2 flex-wrap">
-          {attachments.map((file, index) => (
-            <div key={index} className="relative group">
-              {file.type.startsWith('image/') ? (
-                <img
-                  src={URL.createObjectURL(file)}
-                  alt={file.name}
-                  className="w-16 h-16 object-cover rounded-card hairline"
-                />
-              ) : (
-                <div className="w-16 h-16 rounded-card hairline bg-chip flex flex-col items-center justify-center p-1">
-                  <svg className="w-5 h-5 text-ink-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19V6l12-3v13M9 10l12-3" />
-                  </svg>
-                  <span className="text-[8px] text-ink-3 truncate w-full text-center mt-1">{file.name}</span>
-                </div>
-              )}
-              {onRemoveAttachment && (
-                <button
-                  onClick={() => onRemoveAttachment(index)}
-                  className="absolute -top-1 -right-1 w-4 h-4 bg-ink text-page rounded-full text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  ×
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
+      <div className="glass rounded-3xl py-2.5 px-1.5 flex flex-col gap-2 transition-all focus-within:bg-ink/10">
+        {/* Attachment Preview — inside the pill, stacks above the input row
+            so the pill grows to accommodate them. */}
+        {attachments.length > 0 && (
+          <div className="flex gap-2 px-2 pt-1 flex-wrap">
+            {attachments.map((file, index) => (
+              <div key={index} className="relative group">
+                {file.type.startsWith('image/') ? (
+                  <img
+                    src={URL.createObjectURL(file)}
+                    alt={file.name}
+                    className="w-16 h-16 object-cover rounded-card hairline"
+                  />
+                ) : (
+                  <div className="w-16 h-16 rounded-card hairline bg-chip flex flex-col items-center justify-center p-1">
+                    <svg className="w-5 h-5 text-ink-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19V6l12-3v13M9 10l12-3" />
+                    </svg>
+                    <span className="text-[8px] text-ink-3 truncate w-full text-center mt-1">{file.name}</span>
+                  </div>
+                )}
+                {onRemoveAttachment && (
+                  <button
+                    onClick={() => onRemoveAttachment(index)}
+                    className="absolute -top-1 -right-1 w-4 h-4 bg-ink text-page rounded-full text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
 
-      <div className="glass rounded-3xl py-1.5 px-1.5 flex items-end gap-2 transition-all focus-within:bg-ink/10">
-        {/* Attachment Button — plus icon, image upload. Mirrors the voice
-            button's chip pill on the right so the two flanking buttons
-            carry equal visual weight. */}
+      <div className="flex items-end gap-2">
+        {/* Attachment Button — plus icon, image upload. Naked (no chip
+            fill) — only the right-side action button carries fill. */}
         {onAttach && (
           <>
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="w-9 h-9 flex items-center justify-center rounded-full bg-chip-2 text-ink-2 hover:bg-chip-hover hover:text-ink transition-all shrink-0 self-end"
+              className="w-9 h-9 flex items-center justify-center rounded-full text-ink-2 hover:text-ink hover:bg-chip transition-colors shrink-0 self-end"
               title="Upload image"
               aria-label="Upload image"
             >
-              <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+              <svg className="w-[20px] h-[20px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m-7-7h14" />
               </svg>
             </button>
@@ -245,6 +246,7 @@ export const ChatInput = ({
             </svg>
           </button>
         )}
+        </div>
       </div>
     </div>
   );
