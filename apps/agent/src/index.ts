@@ -8,6 +8,8 @@
  */
 import { routeAgentRequest } from "agents";
 import { handleAppleMusic } from "./apple-music";
+import { handleFeed } from "./feed";
+import { handleDream } from "./dream";
 import { handleLyrics } from "./lyrics";
 import type { Env } from "./types";
 
@@ -23,6 +25,20 @@ export default {
     // -----------------------------------------------------------------------
     if (url.pathname.startsWith("/apple-music/")) {
       return handleAppleMusic(request, env);
+    }
+
+    // -----------------------------------------------------------------------
+    // Feed endpoints — TikTok-style cold start (editorial / mood / dream)
+    // -----------------------------------------------------------------------
+    if (url.pathname.startsWith("/feed/")) {
+      return handleFeed(request, env);
+    }
+
+    // -----------------------------------------------------------------------
+    // Dream endpoint — LLM-generated music recommendations
+    // -----------------------------------------------------------------------
+    if (url.pathname === "/dream") {
+      return handleDream(request, env);
     }
 
     // -----------------------------------------------------------------------

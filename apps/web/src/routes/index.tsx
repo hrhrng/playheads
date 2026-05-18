@@ -6,6 +6,7 @@
 import { useNavigate, useParams } from 'react-router-dom';
 import { AppLayout } from '../components/AppLayout';
 import { ChatInterface } from '../components/ChatInterface';
+import { FeedView } from '../components/FeedView';
 import { PlaylistSidebar } from '../components/PlaylistSidebar';
 import { useSidebarState } from '../hooks/useSidebarState';
 import type { PlaybackTime } from '../types';
@@ -56,43 +57,16 @@ export function HomeRoute({
   onLoadMoreConversations,
   hasMoreConversations,
   isLoadingMoreConversations,
-  isDJSpeaking,
-  currentTrack,
-  isPlaying,
-  isTransitioning,
   isAppleMusicAuthorized,
-  togglePlay,
-  playbackTime,
-  seekTo,
-  musicActions,
-  fetchConversations,
   onLogout,
   onLinkApple,
   onDisconnectApple,
-  skipNext,
-  skipPrev,
-  queue,
-  playTrackById,
 }: RouteComponentProps) {
   const navigate = useNavigate();
 
-  const handleSessionCreated = (
-    newSessionId: string,
-    initialMessage: string
-  ): void => {
-    navigate(`/chat/${newSessionId}`, {
-      replace: true,
-      state: {
-        isNewlyCreated: true,
-        initialMessage
-      }
-    });
-    fetchConversations();
-  };
-
   return (
     <AppLayout
-      onNewChat={() => navigate('/')}
+      onNewChat={() => navigate('/chat/pending')}
       onSelectConversation={(id) => navigate(`/chat/${id}`)}
       onDeleteConversation={onDeleteConversation}
       onPinConversation={onPinConversation}
@@ -110,29 +84,7 @@ export function HomeRoute({
       onConnectAppleMusic={onLinkApple}
       onDisconnectAppleMusic={onDisconnectApple}
     >
-      <ChatInterface
-        isDJSpeaking={isDJSpeaking}
-        currentTrack={currentTrack}
-        isPlaying={isPlaying}
-        isTransitioning={isTransitioning}
-        isAppleMusicAuthorized={isAppleMusicAuthorized}
-        togglePlay={togglePlay}
-        playbackTime={playbackTime}
-        onSeek={seekTo}
-        sessionId={null}
-        userId={session?.user.id || null}
-        musicActions={musicActions}
-        queueOps={queue}
-        onMessageSent={fetchConversations}
-        onSessionCreated={handleSessionCreated}
-        onLinkApple={onLinkApple}
-        onSkipNext={skipNext}
-        onSkipPrev={skipPrev}
-        queue={queue.queue}
-        hasHistory={queue.history.length > 0}
-        onFinishQueue={() => queue.finishQueue()}
-        playTrackById={playTrackById}
-      />
+      <FeedView />
     </AppLayout>
   );
 }
