@@ -273,12 +273,14 @@ export const AppLayout = ({
         <div className="flex flex-1 min-h-0 overflow-hidden">
 
           {/* 1. Left Sidebar (Navigation) — desktop only.
-              Flush to the left edge (no outer padding), with a
-              glass-card container holding the contents. */}
+              Mirror PlaylistSidebar's structure: padding on the outer
+              <nav>, then a glass-card container that holds everything,
+              so both sidebars carry the same visual weight against
+              the transparent main area. */}
           <nav
             ref={navRef}
             style={{ width: `${width}px` }}
-            className={`relative hidden md:flex flex-col pt-3 pr-3 shrink-0 z-20 ${isResizing ? '' : 'transition-all duration-300 ease-in-out'}`}
+            className={`relative hidden md:flex flex-col pt-3 pl-3 pr-3 shrink-0 z-20 ${isResizing ? '' : 'transition-all duration-300 ease-in-out'}`}
           >
             {/* Resize Handle - positioned on the right edge */}
             <div
