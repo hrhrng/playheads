@@ -273,14 +273,13 @@ export const AppLayout = ({
         <div className="flex flex-1 min-h-0 overflow-hidden">
 
           {/* 1. Left Sidebar (Navigation) — desktop only.
-              Mirror PlaylistSidebar's structure: padding on the outer
-              <nav>, then a glass-card container that holds everything,
-              so both sidebars carry the same visual weight against
-              the transparent main area. */}
+              Matches main: navContent sits directly inside <nav> with
+              only top padding, no glass-card wrapper. Inner items keep
+              their iOS-style class names. */}
           <nav
             ref={navRef}
             style={{ width: `${width}px` }}
-            className={`relative hidden md:flex flex-col pt-3 pl-3 pr-3 shrink-0 z-20 ${isResizing ? '' : 'transition-all duration-300 ease-in-out'}`}
+            className={`relative hidden md:flex flex-col pt-4 shrink-0 z-20 ${isResizing ? '' : 'transition-all duration-300 ease-in-out'}`}
           >
             {/* Resize Handle - positioned on the right edge */}
             <div
@@ -292,9 +291,7 @@ export const AppLayout = ({
               `}
               title="Drag to resize"
             />
-            <div className="flex-1 min-h-0 glass flex flex-col overflow-hidden">
-              {navContent(false)}
-            </div>
+            {navContent(false)}
           </nav>
 
           {/* 2. Main Content Area — transparent so the mood blobs paint through */}
