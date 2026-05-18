@@ -137,17 +137,19 @@ export const ChatInput = ({
         </div>
       )}
 
-      <div className="glass rounded-3xl py-1.5 pl-3 pr-1.5 flex items-end gap-2 transition-all focus-within:bg-ink/10">
-        {/* Attachment Button — plus icon, image upload */}
+      <div className="glass rounded-3xl py-1.5 px-1.5 flex items-end gap-2 transition-all focus-within:bg-ink/10">
+        {/* Attachment Button — plus icon, image upload. Mirrors the voice
+            button's chip pill on the right so the two flanking buttons
+            carry equal visual weight. */}
         {onAttach && (
           <>
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="w-9 h-9 flex items-center justify-center rounded-full text-ink-2 hover:text-ink hover:bg-chip transition-colors shrink-0 self-end"
+              className="w-9 h-9 flex items-center justify-center rounded-full bg-chip-2 text-ink-2 hover:bg-chip-hover hover:text-ink transition-all shrink-0 self-end"
               title="Upload image"
               aria-label="Upload image"
             >
-              <svg className="w-[20px] h-[20px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+              <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m-7-7h14" />
               </svg>
             </button>
