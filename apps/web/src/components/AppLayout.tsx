@@ -301,8 +301,12 @@ export const AppLayout = ({
             </div>
           </main>
 
-          {/* 3. Right Sidebar (Playlist) — desktop only */}
-          <aside className="hidden md:block shrink-0 z-10 h-full overflow-hidden">
+          {/* 3. Right Sidebar (Playlist) — desktop only.
+              No overflow-hidden: glass drop shadows need to dissipate
+              outside the aside instead of being clipped at its edge,
+              otherwise the clipped shadow shows as a darker ring around
+              the rounded sheet. */}
+          <aside className="hidden md:block shrink-0 z-10 h-full">
             {rightPanel}
           </aside>
 
