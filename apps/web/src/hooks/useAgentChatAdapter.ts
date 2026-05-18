@@ -83,6 +83,19 @@ function mapUIMessagesToMessages(uiMessages: UIMessage[]): Message[] {
             parts.push({ type: "thinking", content: part.text });
           }
           break;
+        case "file": {
+          // Image / file attachments. AI SDK's FileUIPart shape: { mediaType, url, filename? }.
+          const filePart = part as unknown as { mediaType?: string; url?: string; filename?: string };
+          if (filePart.url && filePart.mediaType?.startsWith("image/")) {
+            parts.push({
+              type: "image",
+              url: filePart.url,
+              mediaType: filePart.mediaType,
+              filename: filePart.filename,
+            });
+          }
+          break;
+        }
         default:
           if (part.type === "dynamic-tool" || part.type.startsWith("tool-")) {
             const toolPart = part as unknown as {

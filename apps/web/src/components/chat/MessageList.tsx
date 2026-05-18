@@ -171,18 +171,32 @@ export const MessageList = ({ messages, rawMessages = [], isLoading, queueOps, s
             <div className={`${msg.role === 'user' ? 'max-w-[76%] ml-auto' : 'w-full'}`}>
               {isModernMessage(msg) ? (
                 msg.role === 'user' ? (
-                  // User message — chip capsule, ink text
-                  <div className="space-y-3">
-                    {msg.parts.map((part, pIdx) =>
-                      part.type === 'text' ? (
-                        <div
-                          key={`text-${pIdx}`}
-                          className="inline-block ml-auto bg-chip-2 hairline rounded-3xl rounded-br-lg px-4 py-2.5 text-[15px] leading-relaxed text-ink"
-                        >
-                          <MarkdownMessage content={part.content} />
-                        </div>
-                      ) : null
-                    )}
+                  // User message — chip capsule, ink text. Image parts render
+                  // as inline thumbnails above any text part.
+                  <div className="space-y-2 flex flex-col items-end">
+                    {msg.parts.map((part, pIdx) => {
+                      if (part.type === 'image') {
+                        return (
+                          <img
+                            key={`img-${pIdx}`}
+                            src={part.url}
+                            alt={part.filename || 'attachment'}
+                            className="max-w-[260px] max-h-[260px] rounded-2xl object-cover hairline"
+                          />
+                        );
+                      }
+                      if (part.type === 'text') {
+                        return (
+                          <div
+                            key={`text-${pIdx}`}
+                            className="inline-block bg-chip-2 hairline rounded-3xl rounded-br-lg px-4 py-2.5 text-[15px] leading-relaxed text-ink"
+                          >
+                            <MarkdownMessage content={part.content} />
+                          </div>
+                        );
+                      }
+                      return null;
+                    })}
                   </div>
                 ) : (
                   // Assistant message — may contain json-render spec
