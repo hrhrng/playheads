@@ -279,7 +279,7 @@ export const AppLayout = ({
           <nav
             ref={navRef}
             style={{ width: `${width}px` }}
-            className={`relative hidden md:flex flex-col pt-4 shrink-0 z-20 ${isResizing ? '' : 'transition-all duration-300 ease-in-out'}`}
+            className={`relative hidden md:flex flex-col pt-4 shrink-0 z-20 hairline-r ${isResizing ? '' : 'transition-all duration-300 ease-in-out'}`}
           >
             {/* Resize Handle - positioned on the right edge */}
             <div
