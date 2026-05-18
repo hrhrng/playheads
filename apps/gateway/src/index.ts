@@ -25,6 +25,7 @@ interface Env {
   APP_HOSTNAME: string;
   ADMIN_HOSTNAME: string;
   PREVIEW_DOMAIN: string;
+  LANE?: string;
   BETTER_AUTH_SECRET: string;
   BETTER_AUTH_URL: string;
   BETTER_AUTH_TRUSTED_ORIGINS: string;
@@ -57,10 +58,14 @@ export default {
     const url = new URL(request.url);
     const start = Date.now();
 
-    // Lane routing: only active when PREVIEW_DOMAIN is set
+    // Lane routing: only active when PREVIEW_DOMAIN is set.
+    // X-Lane header (explicit override) takes precedence over LANE var (default
+    // for this preview gateway). Without the var default, preview gateways
+    // silently route to production service bindings, making preview a no-op for
+    // anything other than the agent worker.
     const lane =
-      env.PREVIEW_DOMAIN && request.headers.get("X-Lane")
-        ? request.headers.get("X-Lane")!
+      env.PREVIEW_DOMAIN
+        ? (request.headers.get("X-Lane") || env.LANE || null)
         : null;
 
     // admin hostname → admin worker directly (must be before /api/* routing)
