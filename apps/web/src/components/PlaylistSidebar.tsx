@@ -174,7 +174,7 @@ export const PlaylistSidebar = ({
         </div>
       )}
       {/* Playlist Container */}
-      <div className="flex-1 min-h-0 glass rounded-t-sheet flex flex-col overflow-hidden relative transition-all">
+      <div className="flex-1 min-h-0 glass rounded-sheet flex flex-col overflow-hidden relative transition-all">
 
         {/* Header */}
         {isMobileSheet ? (
@@ -206,37 +206,40 @@ export const PlaylistSidebar = ({
 
         {/* Content */}
         {effectiveCollapsed ? (
-          /* Mini View — album cover (mirrors left sidebar's "shows what
-             matters at a glance" treatment). Falls back to a chip
-             placeholder when nothing's playing. */
-          <div className="flex-1 flex flex-col items-center pt-6 gap-4 opacity-100 transition-opacity duration-500 delay-100">
-            <div className="w-14 h-14 rounded-card overflow-hidden bg-chip shadow-cover shrink-0">
-              {currentTrack?.artworkUrl ? (
-                <img
-                  src={formatArtwork(currentTrack.artworkUrl, 112)}
-                  alt={currentTrack.name || ''}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center">
-                  <svg className="w-5 h-5 text-ink-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 19V6l12-3v13" />
-                  </svg>
+          /* Mini View — cover stays at the same x position and size as in
+             expanded mode (px-4 + p-2 = 24px offset inside the glass card).
+             The chip-2 row chrome is dropped because the cover fills the
+             available width at 96px sidebar — only the artwork remains. */
+          <div className="flex-1 min-h-0 opacity-100 transition-opacity duration-500 delay-100">
+            <div className="px-4 pb-4">
+              <div className="p-2">
+                <div className="w-10 h-10 rounded-card bg-chip overflow-hidden relative shrink-0">
+                  {currentTrack?.artworkUrl ? (
+                    <>
+                      <img
+                        src={formatArtwork(currentTrack.artworkUrl, 80)}
+                        alt={currentTrack.name || ''}
+                        className="w-full h-full object-cover"
+                      />
+                      {isPlaying && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                          <div className="flex gap-0.5 h-3 items-end">
+                            <div className="w-0.5 bg-white rounded-full animate-music-bar-1 h-full"></div>
+                            <div className="w-0.5 bg-white rounded-full animate-music-bar-2 h-2/3"></div>
+                            <div className="w-0.5 bg-white rounded-full animate-music-bar-3 h-1/2"></div>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <svg className="w-4 h-4 text-ink-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 19V6l12-3v13" />
+                      </svg>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-
-            {/* Status indicator — bars when playing, dot when idle. */}
-            <div className="flex flex-col items-center gap-2">
-              {isPlaying ? (
-                <div className="flex gap-1 h-3 items-end">
-                  <div className="w-1 bg-accent rounded-full animate-music-bar-1 h-full"></div>
-                  <div className="w-1 bg-accent rounded-full animate-music-bar-2 h-2/3"></div>
-                  <div className="w-1 bg-accent rounded-full animate-music-bar-3 h-1/2"></div>
-                </div>
-              ) : (
-                <div className="w-1 h-1 bg-ink-4 rounded-full"></div>
-              )}
+              </div>
             </div>
           </div>
         ) : (
