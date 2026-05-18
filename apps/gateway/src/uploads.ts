@@ -21,7 +21,11 @@ function todayDir(): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
 }
 
-export async function handleUploadImage(request: Request, bucket: R2Bucket): Promise<Response> {
+export async function handleUploadImage(
+  request: Request,
+  bucket: R2Bucket,
+  publicUrlBase?: string,
+): Promise<Response> {
   if (request.method !== "POST") {
     return Response.json({ error: "POST required" }, { status: 405 });
   }
@@ -74,9 +78,19 @@ export async function handleUploadImage(request: Request, bucket: R2Bucket): Pro
     },
   });
 
+  // URL strategy:
+  //   - If publicUrlBase is set (preview): return the R2 public managed
+  //     domain so external LLM providers can fetch directly (preview's
+  //     gateway is behind Cloudflare Access).
+  //   - Otherwise (prod): return the gateway-proxied path so uploads are
+  //     served through our own domain.
+  const url = publicUrlBase
+    ? `${publicUrlBase.replace(/\/$/, "")}/${key}`
+    : `/api/uploads/${key}`;
+
   return Response.json({
     key,
-    url: `/api/uploads/${key}`,
+    url,
     contentType: file.type,
     size: file.size,
   });

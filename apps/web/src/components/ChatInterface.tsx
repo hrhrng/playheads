@@ -301,8 +301,9 @@ export const ChatInterface = ({
 
   // Wrap sendMessage — allow chatting without Apple Music auth;
   // playback errors are caught at the MusicKit layer with reconnect prompts.
-  // Drains the local `attachments` queue into FileUIParts. URLs are absolute
-  // R2-backed URLs the LLM provider fetches directly (standard pattern).
+  // Drains the local `attachments` queue into FileUIParts. Each attachment's
+  // remoteUrl is the upload server's URL of record — public r2.dev in
+  // preview, gateway path in prod — both reachable by external LLM providers.
   const handleSendMessage = useCallback(async (text?: string, skipAddingUserMessage?: boolean) => {
     const doneAttachments = attachments.filter((a) => a.status === 'done' && a.remoteUrl);
     const files = doneAttachments.length > 0

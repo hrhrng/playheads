@@ -39,4 +39,5 @@ head_sampling_rate = 1
 [vars]
 APP_HOSTNAME = ""
 ADMIN_HOSTNAME = ""
+UPLOADS_PUBLIC_URL_BASE = "https://pub-943b20bdbf6f4e9fbc62c596787afcb2.r2.dev"
 

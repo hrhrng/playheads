@@ -8,6 +8,7 @@
  * and dispatches queue operations as a side effect.
  */
 import { useMemo, useCallback, useRef } from "react";
+import { toast } from "sonner";
 import { useAgent } from "agents/react";
 import { useAgentChat } from "@cloudflare/ai-chat/react";
 import type { UIMessage } from "ai";
@@ -158,6 +159,14 @@ export function useAgentChatAdapter({
   } = useAgentChat({
     agent,
     body: { session_id: sessionId, user_id: userId, storefront: musicActions?.storefront || 'us' },
+    onError(err: Error) {
+      // Surface backend / LLM errors that flow through the UI message stream
+      // so users see what went wrong instead of a frozen loading state.
+      console.error("[Agent] chat error:", err);
+      toast.error("Chat failed", {
+        description: err?.message?.slice(0, 240) || String(err),
+      });
+    },
     onData(part: { type: string; data: unknown }) {
       if (part.type !== "data-music-action") return;
 

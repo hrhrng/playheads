@@ -28,6 +28,10 @@ database_id = "31cba35f-8e23-46eb-880f-19d667c0946b"
 binding = "UPLOADS"
 bucket_name = "playheads-uploads"
 
+# Preview: serve uploads via R2 public managed domain so external LLM
+# providers can fetch images (preview gateway is behind Cloudflare Access).
+# Production leaves this empty so uploads stay behind our own gateway.
+
 [observability]
 enabled = true
 
@@ -38,5 +42,6 @@ head_sampling_rate = 1
 
 [vars]
 APP_HOSTNAME = ""
+UPLOADS_PUBLIC_URL_BASE = "https://pub-943b20bdbf6f4e9fbc62c596787afcb2.r2.dev"
 ADMIN_HOSTNAME = ""
 PREVIEW_DOMAIN = ""

@@ -301,6 +301,24 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
     const agentEnv = this.env;
 
     const stream = createUIMessageStream({
+      onError: (err) => {
+        // Errors thrown inside streamText (provider 400s etc.) don't bubble
+        // to the outer try/catch — capture them here so the frontend gets a
+        // visible message instead of silent failure. Log full details with
+        // statusCode / responseBody so we can debug in observability.
+        const details: Record<string, unknown> = {};
+        if (err && typeof err === "object") {
+          const e = err as Record<string, unknown>;
+          if (typeof e.message === "string") details.message = e.message;
+          if ("statusCode" in e) details.statusCode = e.statusCode;
+          if ("responseBody" in e) details.responseBody = e.responseBody;
+          if ("url" in e) details.url = e.url;
+          if ("cause" in e) details.cause = String(e.cause);
+        }
+        console.error("[MusicChatAgent] streamText error:", JSON.stringify(details));
+        const msg = (err as { message?: string })?.message || String(err);
+        return `LLM error: ${msg}`;
+      },
       execute: ({ writer }) => {
         const result = streamText({
           model: model as Parameters<typeof streamText>[0]["model"],

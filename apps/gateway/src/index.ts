@@ -24,6 +24,10 @@ interface Env {
   AGENT: Fetcher;
   DB: D1Database;
   UPLOADS: R2Bucket;
+  /** Empty in production (uploads stay behind our gateway); set to a public
+   *  r2.dev managed domain in preview so external LLM providers can fetch
+   *  images without going through Cloudflare Access. */
+  UPLOADS_PUBLIC_URL_BASE: string;
   APP_HOSTNAME: string;
   ADMIN_HOSTNAME: string;
   PREVIEW_DOMAIN: string;
@@ -139,7 +143,7 @@ export default {
 
     // /api/uploads/image → POST image to R2
     if (url.pathname === "/api/uploads/image" && request.method === "POST") {
-      return handleUploadImage(request, env.UPLOADS);
+      return handleUploadImage(request, env.UPLOADS, env.UPLOADS_PUBLIC_URL_BASE);
     }
     // /api/uploads/<key> → GET image from R2 (key includes "uploads/" prefix)
     if (url.pathname.startsWith("/api/uploads/") && request.method === "GET") {
