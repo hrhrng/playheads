@@ -173,8 +173,10 @@ export const PlaylistSidebar = ({
           <div className="absolute left-1/2 top-1/2 -translate-y-1/2 -translate-x-1/2 w-0.5 h-8 bg-rule rounded-full opacity-0 group-hover:opacity-100 group-hover:bg-accent transition-all" />
         </div>
       )}
-      {/* Playlist Container */}
-      <div className="flex-1 min-h-0 glass rounded-sheet flex flex-col overflow-hidden relative transition-all">
+      {/* Playlist Container. Glass's default 32px drop shadow paints a
+          visible dark ring on the page bg; override to keep only the 1px
+          inner top highlight so the card reads as a clean rounded plate. */}
+      <div className="flex-1 min-h-0 glass rounded-sheet flex flex-col overflow-hidden relative transition-all [box-shadow:inset_0_1px_0_rgba(216,207,191,0.08)]">
 
         {/* Header */}
         {isMobileSheet ? (
