@@ -24,6 +24,10 @@ binding = "DB"
 database_name = "playheads-db"
 database_id = "31cba35f-8e23-46eb-880f-19d667c0946b"
 
+[[r2_buckets]]
+binding = "UPLOADS"
+bucket_name = "playheads-uploads"
+
 [observability]
 enabled = true
 

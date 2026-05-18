@@ -138,22 +138,23 @@ export const ChatInput = ({
       )}
 
       <div className="glass rounded-3xl py-1.5 pl-3 pr-1.5 flex items-end gap-2 transition-all focus-within:bg-ink/10">
-        {/* Attachment Button */}
+        {/* Attachment Button — plus icon, image upload */}
         {onAttach && (
           <>
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="p-1.5 rounded-full text-ink-3 hover:text-ink hover:bg-chip transition-colors shrink-0 self-end mb-1.5"
-              title="Attach image or audio"
+              className="w-9 h-9 flex items-center justify-center rounded-full text-ink-2 hover:text-ink hover:bg-chip transition-colors shrink-0 self-end"
+              title="Upload image"
+              aria-label="Upload image"
             >
-              <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.8">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+              <svg className="w-[20px] h-[20px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m-7-7h14" />
               </svg>
             </button>
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*,audio/*"
+              accept="image/*"
               multiple
               onChange={handleFileSelect}
               className="hidden"

@@ -15,6 +15,7 @@ import {
   handleGetQueue,
   handleSyncQueue,
 } from "./d1-handlers";
+import { handleUploadImage, handleGetUpload } from "./uploads";
 
 interface Env {
   WEB: Fetcher;
@@ -22,6 +23,7 @@ interface Env {
   ADMIN: Fetcher;
   AGENT: Fetcher;
   DB: D1Database;
+  UPLOADS: R2Bucket;
   APP_HOSTNAME: string;
   ADMIN_HOSTNAME: string;
   PREVIEW_DOMAIN: string;
@@ -133,6 +135,16 @@ export default {
     }
     if (url.pathname === "/api/queue/sync" && request.method === "POST") {
       return handleSyncQueue(request, env.DB);
+    }
+
+    // /api/uploads/image → POST image to R2
+    if (url.pathname === "/api/uploads/image" && request.method === "POST") {
+      return handleUploadImage(request, env.UPLOADS);
+    }
+    // /api/uploads/<key> → GET image from R2 (key includes "uploads/" prefix)
+    if (url.pathname.startsWith("/api/uploads/") && request.method === "GET") {
+      const key = url.pathname.replace(/^\/api\/uploads\//, "");
+      return handleGetUpload(request, env.UPLOADS, key);
     }
 
     // /api/* → agent worker

@@ -104,6 +104,51 @@ export const ChatInterface = ({
   const [showLyrics, setShowLyrics] = useState(false);
   const lyrics = useLyrics(currentTrack, playbackTime?.current || 0);
 
+  // Image attachments — uploaded to R2 as user selects files.
+  type Attachment = {
+    file: File;
+    status: 'uploading' | 'done' | 'error';
+    remoteUrl?: string;
+    error?: string;
+  };
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+
+  const uploadFile = useCallback(async (file: File): Promise<string> => {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetch('/api/uploads/image', { method: 'POST', body: form });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`upload failed ${res.status}: ${body.slice(0, 200)}`);
+    }
+    const json = (await res.json()) as { url: string };
+    return json.url;
+  }, []);
+
+  const handleAttach = useCallback((files: File[]) => {
+    const newOnes: Attachment[] = files.map((f) => ({ file: f, status: 'uploading' as const }));
+    setAttachments((prev) => [...prev, ...newOnes]);
+    newOnes.forEach((att) => {
+      uploadFile(att.file).then(
+        (url) => {
+          setAttachments((prev) =>
+            prev.map((a) => (a.file === att.file ? { ...a, status: 'done', remoteUrl: url } : a)),
+          );
+        },
+        (err: Error) => {
+          console.error('[upload]', err);
+          setAttachments((prev) =>
+            prev.map((a) => (a.file === att.file ? { ...a, status: 'error', error: err.message } : a)),
+          );
+        },
+      );
+    });
+  }, [uploadFile]);
+
+  const handleRemoveAttachment = useCallback((index: number) => {
+    setAttachments((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
   // Use chat hook for state and methods
   const {
     messages,
@@ -469,6 +514,9 @@ export const ChatInterface = ({
           isPlaying={isPlaying}
           onInputChange={setInput}
           onSend={() => handleSendMessage()}
+          onAttach={handleAttach}
+          attachments={attachments.map((a) => a.file)}
+          onRemoveAttachment={handleRemoveAttachment}
         />
 
       </div>
