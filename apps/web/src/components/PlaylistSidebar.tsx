@@ -173,8 +173,10 @@ export const PlaylistSidebar = ({
           <div className="absolute left-1/2 top-1/2 -translate-y-1/2 -translate-x-1/2 w-0.5 h-8 bg-rule rounded-full opacity-0 group-hover:opacity-100 group-hover:bg-accent transition-all" />
         </div>
       )}
-      {/* Playlist Container */}
-      <div className="flex-1 min-h-0 glass rounded-t-sheet flex flex-col overflow-hidden relative transition-all">
+      {/* Playlist Container. Override glass's default 32px drop shadow
+          (paints a visible dark ring on the page bg) and keep only the
+          1px inner top-edge highlight. */}
+      <div className="flex-1 min-h-0 glass rounded-t-sheet flex flex-col overflow-hidden relative transition-all [box-shadow:inset_0_1px_0_rgba(216,207,191,0.08)]">
 
         {/* Header */}
         {isMobileSheet ? (
@@ -225,19 +227,21 @@ export const PlaylistSidebar = ({
               {nowPlaying && (
                 <button
                   onClick={() => handleTrackClick(0)}
-                  className="w-12 h-12 rounded-card overflow-hidden bg-chip shadow-cover relative shrink-0 ring-2 ring-accent/60"
+                  className="p-1.5 rounded-2xl bg-chip-2 hairline shrink-0"
                   title={`${nowPlaying.title} — ${nowPlaying.artist}`}
                 >
-                  <img src={nowPlaying.cover} alt={nowPlaying.title} className="w-full h-full object-cover" />
-                  {isPlaying && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                      <div className="flex gap-0.5 h-3 items-end">
-                        <div className="w-0.5 bg-white rounded-full animate-music-bar-1 h-full"></div>
-                        <div className="w-0.5 bg-white rounded-full animate-music-bar-2 h-2/3"></div>
-                        <div className="w-0.5 bg-white rounded-full animate-music-bar-3 h-1/2"></div>
+                  <div className="w-12 h-12 rounded-card overflow-hidden bg-chip relative">
+                    <img src={nowPlaying.cover} alt={nowPlaying.title} className="w-full h-full object-cover" />
+                    {isPlaying && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                        <div className="flex gap-0.5 h-3 items-end">
+                          <div className="w-0.5 bg-white rounded-full animate-music-bar-1 h-full"></div>
+                          <div className="w-0.5 bg-white rounded-full animate-music-bar-2 h-2/3"></div>
+                          <div className="w-0.5 bg-white rounded-full animate-music-bar-3 h-1/2"></div>
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </button>
               )}
 
