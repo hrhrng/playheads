@@ -6,7 +6,7 @@
 import { useNavigate, useParams } from 'react-router-dom';
 import { AppLayout } from '../components/AppLayout';
 import { ChatInterface } from '../components/ChatInterface';
-import { TopicsGrid } from '../components/TopicsGrid';
+import { DiscoveryPage } from '../components/DiscoveryPage';
 import { PlaylistSidebar } from '../components/PlaylistSidebar';
 import { useSidebarState } from '../hooks/useSidebarState';
 import { API_BASE } from '../config/api';
@@ -109,7 +109,7 @@ export function HomeRoute({
       onConnectAppleMusic={onLinkApple}
       onDisconnectAppleMusic={onDisconnectApple}
     >
-      <TopicsGrid
+      <DiscoveryPage
         conversations={conversations}
         userId={session?.user.id || null}
         onSessionCreated={() => fetchConversations()}
