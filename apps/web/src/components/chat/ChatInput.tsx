@@ -105,7 +105,7 @@ export const ChatInput = ({
 
   return (
     <div className="max-w-xl mx-auto">
-      <div className="glass rounded-3xl py-2.5 px-1.5 flex flex-col gap-2 transition-all focus-within:bg-ink/10">
+      <div className="glass rounded-full py-2.5 px-2 flex flex-col gap-2 transition-all focus-within:bg-ink/10">
         {/* Attachment Preview — inside the pill, stacks above the input row
             so the pill grows to accommodate them. */}
         {attachments.length > 0 && (
@@ -146,11 +146,11 @@ export const ChatInput = ({
           <>
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="w-9 h-9 flex items-center justify-center rounded-full text-ink-2 hover:text-ink hover:bg-chip transition-colors shrink-0 self-end"
+              className="w-11 h-11 flex items-center justify-center rounded-full text-ink-2 hover:text-ink hover:bg-chip transition-colors shrink-0 self-end"
               title="Upload image"
               aria-label="Upload image"
             >
-              <svg className="w-[20px] h-[20px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+              <svg className="w-[22px] h-[22px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m-7-7h14" />
               </svg>
             </button>
@@ -204,7 +204,7 @@ export const ChatInput = ({
           <button
             onClick={onSend}
             disabled={isLoading}
-            className={`w-9 h-9 flex items-center justify-center rounded-full transition-all shrink-0 self-end ${
+            className={`w-11 h-11 flex items-center justify-center rounded-full transition-all shrink-0 self-end ${
               isLoading
                 ? 'bg-ink/30 text-page animate-pulse'
                 : 'bg-accent text-page hover:bg-accent-2'
@@ -212,11 +212,11 @@ export const ChatInput = ({
             aria-label="Send"
           >
             {isLoading ? (
-              <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
             ) : (
-              <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.2">
+              <svg className="w-[20px] h-[20px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.2">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 19V5m0 0l-6 6m6-6l6 6" />
               </svg>
             )}
@@ -233,7 +233,7 @@ export const ChatInput = ({
               }
             }}
             disabled={isLoading}
-            className={`w-9 h-9 flex items-center justify-center rounded-full transition-all shrink-0 self-end ${
+            className={`w-11 h-11 flex items-center justify-center rounded-full transition-all shrink-0 self-end ${
               isListening
                 ? 'bg-accent text-page animate-pulse'
                 : 'bg-chip-2 text-ink-2 hover:bg-chip-hover hover:text-ink'
@@ -241,7 +241,7 @@ export const ChatInput = ({
             title="Tap to dictate, hold for voice mode"
             aria-label="Voice"
           >
-            <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.8">
+            <svg className="w-[20px] h-[20px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.8">
               <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4M12 15a3 3 0 003-3V5a3 3 0 00-6 0v7a3 3 0 003 3z" />
             </svg>
           </button>
