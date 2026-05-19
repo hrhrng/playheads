@@ -15,6 +15,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
+import { Drawer } from 'vaul';
 import { useFeed } from '../hooks/useFeed';
 import { useAlbumPalette } from '../hooks/useAlbumPalette';
 import { useVoiceInput } from '../hooks/useVoiceInput';
@@ -297,50 +298,73 @@ export function FeedView({ userId, onSessionCreated }: FeedViewProps = {}) {
         30s 预览 · 连接 Apple Music 听全曲
       </div>
 
-      {/* Slide-up chat drawer */}
-      {drawerOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm animate-fade-in"
-          onClick={() => setDrawerOpen(false)}
-        />
-      )}
-      <div
-        className={`fixed left-0 right-0 bottom-0 z-50 transition-transform duration-300 ease-out ${
-          drawerOpen ? 'translate-y-0' : 'translate-y-full'
-        }`}
+      {/* iOS-style chat drawer via vaul — drag handle, snap detents,
+          rubber-band overdrag, scrim, spring physics. Detents at 55% /
+          92% screen height mirror the iOS ChatOverlay. */}
+      <Drawer.Root
+        open={drawerOpen}
+        onOpenChange={setDrawerOpen}
+        snapPoints={[0.55, 0.92]}
+        modal
       >
-        <div className="mx-auto max-w-xl glass rounded-t-3xl px-5 pt-4 pb-6">
-          <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-ink/20" />
-          <div className="text-ink-3 text-xs mb-2">告诉我你想听什么</div>
-          <div className="flex items-end gap-2">
-            <textarea
-              ref={textareaRef}
-              rows={2}
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  submitDream(chatInput);
-                }
-                if (e.key === 'Escape') setDrawerOpen(false);
-              }}
-              placeholder="想专注、想发呆、想被治愈…"
-              className="flex-1 bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-ink placeholder-ink-3 text-[15px] resize-none py-2 no-scrollbar"
-            />
-            <button
-              onClick={() => submitDream(chatInput)}
-              disabled={!chatInput.trim() || feed.isLoading}
-              className="w-10 h-10 flex items-center justify-center rounded-full bg-accent text-page disabled:bg-chip disabled:text-ink-4 transition-all flex-shrink-0"
-              aria-label="Send"
-            >
-              <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 19V5m0 0l-6 6m6-6l6 6" />
-              </svg>
-            </button>
-          </div>
-        </div>
-      </div>
+        <Drawer.Overlay className="fixed inset-0 z-40 bg-black/45 backdrop-blur-[2px]" />
+        <Drawer.Content
+            className="fixed inset-x-0 bottom-0 z-50 outline-none rounded-t-[28px] overflow-hidden flex flex-col bg-page/85 backdrop-blur-2xl border-t border-ink/10 shadow-[0_-12px_40px_rgba(0,0,0,0.35)]"
+          >
+            <Drawer.Title className="sr-only">告诉我你想听什么</Drawer.Title>
+            <Drawer.Description className="sr-only">输入或语音描述你想听的歌</Drawer.Description>
+
+            {/* Grab handle */}
+            <div className="flex justify-center pt-2.5 pb-3 shrink-0">
+              <div className="h-1.5 w-9 rounded-full bg-ink/30" />
+            </div>
+
+            <div className="px-5 text-ink-3 text-xs uppercase tracking-[0.18em] shrink-0">
+              告诉我你想听什么
+            </div>
+
+            {/* Body — scrollable when expanded */}
+            <div className="flex-1 min-h-0 overflow-y-auto px-5 pt-3 pb-3" />
+
+            {/* Composer at bottom */}
+            <div className="px-3 pb-[max(env(safe-area-inset-bottom),12px)] pt-2 shrink-0">
+              <div className="glass rounded-full py-2 px-2 flex items-end gap-2">
+                <textarea
+                  ref={textareaRef}
+                  rows={1}
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      submitDream(chatInput);
+                    }
+                    if (e.key === 'Escape') setDrawerOpen(false);
+                  }}
+                  placeholder="想专注、想发呆、想被治愈…"
+                  className="flex-1 bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-ink placeholder-ink-3 text-[15px] resize-none py-2.5 px-3 max-h-32 no-scrollbar"
+                  autoFocus
+                />
+                <button
+                  onClick={() => submitDream(chatInput)}
+                  disabled={!chatInput.trim() || feed.isLoading || isCreatingSession}
+                  className="w-11 h-11 flex items-center justify-center rounded-full bg-accent text-page disabled:bg-chip disabled:text-ink-4 transition-all flex-shrink-0 self-end"
+                  aria-label="Send"
+                >
+                  {isCreatingSession ? (
+                    <svg className="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                  ) : (
+                    <svg className="w-[20px] h-[20px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 19V5m0 0l-6 6m6-6l6 6" />
+                    </svg>
+                  )}
+                </button>
+              </div>
+            </div>
+        </Drawer.Content>
+      </Drawer.Root>
     </div>
   );
 }
