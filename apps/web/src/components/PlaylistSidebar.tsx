@@ -254,9 +254,11 @@ export const PlaylistSidebar = ({
                 visually settle into new positions instead of cross-fading. */}
             <div className={`flex flex-col transition-all duration-500 ease-spring ${effectiveCollapsed ? 'items-center gap-2 py-4 px-0' : 'items-stretch gap-1 px-4 pb-4'}`}>
 
-              {/* Now Playing header */}
-              {nowPlaying && (
-                <h3 className={`text-[10px] font-medium text-ink-3 uppercase tracking-widest px-2 overflow-hidden transition-all duration-300 ${effectiveCollapsed ? 'opacity-0 max-h-0 mb-0' : 'opacity-100 max-h-5 mb-2 delay-500'}`}>Now Playing</h3>
+              {/* Now Playing header — snap visible when expanded, hidden when
+                  collapsed (no fade, the user explicitly didn't want it
+                  cross-fading with the pill). */}
+              {nowPlaying && !effectiveCollapsed && (
+                <h3 className="text-[10px] font-medium text-ink-3 uppercase tracking-widest px-2 mb-2">Now Playing</h3>
               )}
 
               {/* Now Playing pill — cover size + padding morph; text container
@@ -279,16 +281,16 @@ export const PlaylistSidebar = ({
                       </div>
                     )}
                   </div>
-                  <div className={`min-w-0 overflow-hidden transition-all duration-300 ease-spring ${effectiveCollapsed ? 'w-0 opacity-0 -translate-x-2' : 'flex-1 opacity-100 translate-x-0 delay-500'}`}>
+                  <div className={`min-w-0 overflow-hidden transition-all duration-200 ease-spring ${effectiveCollapsed ? 'w-0 opacity-0 -translate-x-2' : 'flex-1 opacity-100 translate-x-0 delay-300'}`}>
                     <div className="text-[13px] font-semibold font-display text-ink truncate leading-snug text-left">{nowPlaying.title}</div>
                     <div className="text-[11px] text-ink-3 truncate text-left">{nowPlaying.artist}</div>
                   </div>
                 </button>
               )}
 
-              {/* Up Next header */}
-              {upNext.length > 0 && (
-                <h3 className={`text-[10px] font-medium text-ink-3 uppercase tracking-widest px-2 overflow-hidden transition-all duration-300 ${effectiveCollapsed ? 'opacity-0 max-h-0 mb-0 mt-0' : 'opacity-100 max-h-5 mt-3 mb-2 delay-500'}`}>Up Next</h3>
+              {/* Up Next header — snap visible / hidden, no fade. */}
+              {upNext.length > 0 && !effectiveCollapsed && (
+                <h3 className="text-[10px] font-medium text-ink-3 uppercase tracking-widest px-2 mt-3 mb-2">Up Next</h3>
               )}
 
               {/* Up Next items — each cover morphs in size; rows lose their
@@ -305,7 +307,7 @@ export const PlaylistSidebar = ({
                       <img src={track.cover} alt={track.title} className="w-full h-full object-cover" />
                       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
                     </div>
-                    <div className={`min-w-0 overflow-hidden transition-all duration-300 ease-spring ${effectiveCollapsed ? 'w-0 opacity-0 -translate-x-2' : 'flex-1 opacity-100 translate-x-0 delay-500'}`}>
+                    <div className={`min-w-0 overflow-hidden transition-all duration-200 ease-spring ${effectiveCollapsed ? 'w-0 opacity-0 -translate-x-2' : 'flex-1 opacity-100 translate-x-0 delay-300'}`}>
                       <div className="text-[13px] font-medium font-display text-ink truncate leading-snug text-left">{track.title}</div>
                       <div className="text-[11px] text-ink-3 truncate text-left">{track.artist}</div>
                     </div>
