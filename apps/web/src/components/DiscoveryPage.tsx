@@ -1,10 +1,9 @@
 /**
  * DiscoveryPage — cold-start landing.
  *
- * Discovery page that lets the user start a new topic in multiple ways:
- * typing in the composer, picking a recent topic, or tapping a mood
- * chip. Every affordance ends at the same place: a new or existing
- * /chat/{id} with the appropriate playlist primed.
+ * Empty-state for the home route: chat-style layout (ChatInput sticky
+ * at the bottom, suggestions in the body). Not a Spotify-style browse
+ * page — the mental model is "I'm about to chat to start a topic".
  */
 import { useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -35,28 +34,7 @@ const MOOD_CHIPS: MoodChip[] = [
   { key: 'sleep',       label: '助眠',   prompt: '帮我入睡的歌' },
 ];
 
-// A handful of warm cover-art-like gradients. Hashed off topic id so
-// each topic gets a stable color when no real artwork is available.
-const FALLBACK_GRADIENTS = [
-  ['#5b4636', '#8a6a4f'],
-  ['#3a5a40', '#588157'],
-  ['#3d5a80', '#98c1d9'],
-  ['#9d4edd', '#5a189a'],
-  ['#bb3e03', '#ee9b00'],
-  ['#264653', '#2a9d8f'],
-  ['#7209b7', '#3a0ca3'],
-  ['#bc4749', '#a7c957'],
-  ['#003566', '#ffc300'],
-  ['#5f0f40', '#9a031e'],
-];
-
-function hashIndex(id: string, mod: number): number {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
-  return Math.abs(h) % mod;
-}
-
-function formatArtwork(url: string | null | undefined, size = 400): string | null {
+function formatArtwork(url: string | null | undefined, size = 80): string | null {
   if (!url) return null;
   return url.replace('{w}', String(size)).replace('{h}', String(size));
 }
@@ -65,10 +43,6 @@ function displayTitle(c: Conversation): string {
   if (c.title) return c.title;
   if (c.last_message_preview) return c.last_message_preview;
   return '新话题';
-}
-
-function firstChar(s: string): string {
-  return s.trim().charAt(0) || '·';
 }
 
 export function DiscoveryPage({ conversations, userId, onSessionCreated }: DiscoveryPageProps) {
@@ -111,91 +85,83 @@ export function DiscoveryPage({ conversations, userId, onSessionCreated }: Disco
     startNewTopic(trimmed);
   }, [input, startNewTopic]);
 
-  const recent = useMemo(() => conversations.slice(0, 24), [conversations]);
+  const recent = useMemo(() => conversations.slice(0, 8), [conversations]);
 
   return (
-    <div className="h-full w-full overflow-y-auto">
-      <div className="max-w-3xl mx-auto px-6 pt-12 pb-16">
-        {/* Composer */}
-        <div className="mb-4">
-          <h1 className="text-ink text-[22px] font-display font-medium tracking-tight">听点啥？</h1>
-        </div>
-        <div className="mb-5">
-          <ChatInput
-            input={input}
-            isLoading={isCreating}
-            isDJSpeaking={false}
-            isPlaying={false}
-            onInputChange={setInput}
-            onSend={handleSend}
-          />
-        </div>
+    <div className="flex flex-col h-full">
+      {/* Body — suggestions, scrollable if it ever overflows */}
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="max-w-2xl mx-auto px-6 pt-16 pb-6">
+          <h1 className="text-ink text-[28px] font-display font-medium tracking-tight text-center mb-2">
+            听点啥？
+          </h1>
+          <p className="text-ink-3 text-[14px] text-center mb-10">
+            说一句你想听的，或者从下面选个开始。
+          </p>
 
-        {/* Mood chips */}
-        <div className="flex flex-wrap gap-1.5 mb-10">
-          {MOOD_CHIPS.map((chip) => (
-            <button
-              key={chip.key}
-              onClick={() => startNewTopic(chip.prompt)}
-              disabled={isCreating}
-              className="px-3 py-1.5 rounded-full bg-chip hairline text-[12px] text-ink-2 hover:text-ink hover:bg-chip-2 transition-colors disabled:opacity-50"
-            >
-              {chip.label}
-            </button>
-          ))}
-        </div>
+          {/* Mood chips */}
+          <div className="flex flex-wrap justify-center gap-1.5 mb-12">
+            {MOOD_CHIPS.map((chip) => (
+              <button
+                key={chip.key}
+                onClick={() => startNewTopic(chip.prompt)}
+                disabled={isCreating}
+                className="px-3.5 py-1.5 rounded-full bg-chip hairline text-[13px] text-ink-2 hover:text-ink hover:bg-chip-2 transition-colors disabled:opacity-50"
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
 
-        {/* Recent — Apple Music / Spotify style square tile grid */}
-        {recent.length > 0 && (
-          <section>
-            <h2 className="text-ink-3 text-[11px] font-medium uppercase tracking-[0.18em] mb-3">
-              Recent
-            </h2>
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2.5">
-              {recent.map((c) => {
-                const cover = formatArtwork(c.playlist_cover, 400);
-                const title = displayTitle(c);
-                const gradient = FALLBACK_GRADIENTS[hashIndex(c.id, FALLBACK_GRADIENTS.length)];
-                return (
-                  <button
-                    key={c.id}
-                    onClick={() => navigate(`/chat/${c.id}`)}
-                    className="group text-left flex flex-col gap-1.5 transition-transform hover:-translate-y-0.5"
-                  >
-                    <div className="aspect-square w-full rounded-card overflow-hidden relative shadow-cover">
-                      {cover ? (
-                        <img
-                          src={cover}
-                          alt={title}
-                          className="absolute inset-0 w-full h-full object-cover"
-                          loading="lazy"
-                          draggable={false}
-                        />
-                      ) : (
-                        <div
-                          className="absolute inset-0 flex items-center justify-center"
-                          style={{ background: `linear-gradient(135deg, ${gradient[0]}, ${gradient[1]})` }}
-                        >
-                          <span className="text-white/85 text-[28px] font-display font-medium">
-                            {firstChar(title)}
-                          </span>
-                        </div>
-                      )}
-                      {(c.playlist_count ?? 0) > 0 && (
-                        <div className="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-full bg-black/45 backdrop-blur-md text-[10px] text-white/85 font-medium">
-                          {c.playlist_count}
-                        </div>
-                      )}
-                    </div>
-                    <div className="text-ink text-[12px] font-medium line-clamp-2 leading-snug px-0.5">
-                      {title}
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-        )}
+          {/* Recent — compact text-led list, not album tiles */}
+          {recent.length > 0 && (
+            <section>
+              <h2 className="text-ink-3 text-[11px] font-medium uppercase tracking-[0.18em] mb-2 px-1">
+                Recent
+              </h2>
+              <div className="flex flex-col">
+                {recent.map((c) => {
+                  const cover = formatArtwork(c.playlist_cover, 80);
+                  const title = displayTitle(c);
+                  return (
+                    <button
+                      key={c.id}
+                      onClick={() => navigate(`/chat/${c.id}`)}
+                      className="group flex items-center gap-3 px-1.5 py-2 rounded-xl text-left hover:bg-chip transition-colors"
+                    >
+                      <div className="w-9 h-9 rounded-card overflow-hidden bg-chip-2 shrink-0">
+                        {cover ? (
+                          <img src={cover} alt={title} className="w-full h-full object-cover" loading="lazy" draggable={false} />
+                        ) : null}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-ink text-[14px] truncate leading-tight">{title}</div>
+                        {(c.playlist_count ?? 0) > 0 && (
+                          <div className="text-ink-4 text-[11px] mt-0.5">{c.playlist_count} 首</div>
+                        )}
+                      </div>
+                      <svg className="w-4 h-4 text-ink-4 group-hover:text-ink-3 transition-colors shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+        </div>
+      </div>
+
+      {/* ChatInput at the bottom — same place users expect it in /chat/{id} */}
+      <div className="shrink-0 px-4 pb-6 pt-2">
+        <ChatInput
+          input={input}
+          isLoading={isCreating}
+          isDJSpeaking={false}
+          isPlaying={false}
+          onInputChange={setInput}
+          onSend={handleSend}
+        />
       </div>
     </div>
   );
