@@ -261,11 +261,8 @@ export const PlaylistSidebar = ({
             </div>
           </div>
 
-          {/* Full Expanded View — appearance delayed by 500ms so it only
-              fades in AFTER the sidebar width transition (500ms spring)
-              finishes; disappearance has no delay so the dense view drops
-              away cleanly the moment the user collapses. */}
-          <div className={`absolute inset-0 flex flex-col min-w-0 transition-opacity duration-300 ${effectiveCollapsed ? 'opacity-0 pointer-events-none' : 'opacity-100 delay-500'}`}>
+          {/* Full Expanded View */}
+          <div className={`absolute inset-0 flex flex-col min-w-0 transition-opacity duration-300 ${effectiveCollapsed ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
             {showQueue && (
               <div className="flex-1 overflow-y-auto px-4 pb-4">
 
@@ -293,7 +290,7 @@ export const PlaylistSidebar = ({
                             <div className="w-10 h-10 rounded-card bg-chip overflow-hidden relative shrink-0">
                               <img src={track.cover} alt={track.title} className="w-full h-full object-cover" />
                             </div>
-                            <div className="flex-1 min-w-0">
+                            <div className={`flex-1 min-w-0 transition-opacity duration-300 ${effectiveCollapsed ? 'opacity-0' : 'opacity-100 delay-500'}`}>
                               <div className="text-[13px] font-medium font-display text-ink truncate leading-snug">{track.title}</div>
                               <div className="text-[11px] text-ink-3 truncate">{track.artist}</div>
                             </div>
@@ -324,7 +321,7 @@ export const PlaylistSidebar = ({
                           </div>
                         )}
                       </div>
-                      <div className="flex-1 min-w-0">
+                      <div className={`flex-1 min-w-0 transition-opacity duration-300 ${effectiveCollapsed ? 'opacity-0' : 'opacity-100 delay-500'}`}>
                         <div className="text-[13px] font-semibold font-display text-ink truncate leading-snug">{nowPlaying.title}</div>
                         <div className="text-[11px] text-ink-3 truncate">{nowPlaying.artist}</div>
                       </div>
@@ -349,7 +346,7 @@ export const PlaylistSidebar = ({
                               <img src={track.cover} alt={track.title} className="w-full h-full object-cover" />
                               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
                             </div>
-                            <div className="flex-1 min-w-0">
+                            <div className={`flex-1 min-w-0 transition-opacity duration-300 ${effectiveCollapsed ? 'opacity-0' : 'opacity-100 delay-500'}`}>
                               <div className="text-[13px] font-medium font-display text-ink truncate leading-snug">{track.title}</div>
                               <div className="text-[11px] text-ink-3 truncate">{track.artist}</div>
                             </div>
