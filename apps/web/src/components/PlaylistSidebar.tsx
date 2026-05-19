@@ -261,8 +261,11 @@ export const PlaylistSidebar = ({
             </div>
           </div>
 
-          {/* Full Expanded View */}
-          <div className={`absolute inset-0 flex flex-col min-w-0 transition-opacity duration-300 ${effectiveCollapsed ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+          {/* Full Expanded View — appearance delayed by 500ms so it only
+              fades in AFTER the sidebar width transition (500ms spring)
+              finishes; disappearance has no delay so the dense view drops
+              away cleanly the moment the user collapses. */}
+          <div className={`absolute inset-0 flex flex-col min-w-0 transition-opacity duration-300 ${effectiveCollapsed ? 'opacity-0 pointer-events-none' : 'opacity-100 delay-500'}`}>
             {showQueue && (
               <div className="flex-1 overflow-y-auto px-4 pb-4">
 
