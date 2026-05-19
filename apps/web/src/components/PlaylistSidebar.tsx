@@ -267,7 +267,7 @@ export const PlaylistSidebar = ({
                   className={`flex items-center bg-chip-2 hairline cursor-pointer group rounded-2xl shrink-0 transition-all duration-500 ease-spring ${effectiveCollapsed ? 'p-1.5 gap-0' : 'p-2 gap-3 w-full'}`}
                   title={`${nowPlaying.title} — ${nowPlaying.artist}`}
                 >
-                  <div className={`rounded-card bg-chip overflow-hidden relative shrink-0 transition-all duration-500 ease-spring ${effectiveCollapsed ? 'w-12 h-12' : 'w-10 h-10'}`}>
+                  <div className="w-10 h-10 rounded-card bg-chip overflow-hidden relative shrink-0">
                     <img src={nowPlaying.cover} alt={nowPlaying.title} className="w-full h-full object-cover" />
                     {isPlaying && (
                       <div className="absolute inset-0 flex items-center justify-center bg-black/30">
@@ -279,7 +279,7 @@ export const PlaylistSidebar = ({
                       </div>
                     )}
                   </div>
-                  <div className={`min-w-0 overflow-hidden transition-all duration-300 ${effectiveCollapsed ? 'w-0 opacity-0' : 'flex-1 opacity-100 delay-500'}`}>
+                  <div className={`min-w-0 overflow-hidden transition-all duration-300 ease-spring ${effectiveCollapsed ? 'w-0 opacity-0 -translate-x-2' : 'flex-1 opacity-100 translate-x-0 delay-500'}`}>
                     <div className="text-[13px] font-semibold font-display text-ink truncate leading-snug text-left">{nowPlaying.title}</div>
                     <div className="text-[11px] text-ink-3 truncate text-left">{nowPlaying.artist}</div>
                   </div>
@@ -301,11 +301,11 @@ export const PlaylistSidebar = ({
                     onClick={() => handleTrackClick(realIndex)}
                     className={`flex items-center cursor-pointer group transition-all duration-500 ease-spring ${effectiveCollapsed ? 'p-0 gap-0 rounded-card' : 'p-2 gap-3 rounded-2xl hover:bg-chip w-full'}`}
                   >
-                    <div className={`rounded-card bg-chip overflow-hidden relative shrink-0 transition-all duration-500 ease-spring ${effectiveCollapsed ? 'w-12 h-12' : 'w-10 h-10'}`}>
+                    <div className="w-10 h-10 rounded-card bg-chip overflow-hidden relative shrink-0">
                       <img src={track.cover} alt={track.title} className="w-full h-full object-cover" />
                       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
                     </div>
-                    <div className={`min-w-0 overflow-hidden transition-all duration-300 ${effectiveCollapsed ? 'w-0 opacity-0' : 'flex-1 opacity-100 delay-500'}`}>
+                    <div className={`min-w-0 overflow-hidden transition-all duration-300 ease-spring ${effectiveCollapsed ? 'w-0 opacity-0 -translate-x-2' : 'flex-1 opacity-100 translate-x-0 delay-500'}`}>
                       <div className="text-[13px] font-medium font-display text-ink truncate leading-snug text-left">{track.title}</div>
                       <div className="text-[11px] text-ink-3 truncate text-left">{track.artist}</div>
                     </div>
