@@ -178,12 +178,14 @@ export const AppLayout = ({
   // Shared nav content used in both desktop sidebar and mobile drawer
   const navContent = (isMobile = false) => (
     <>
-      {/* Burger Menu / toggle (desktop only) */}
+      {/* Burger Menu / toggle (desktop only). 4px left margin when
+          collapsed lands the icon on the sidebar's centerline (80px wide,
+          icon would otherwise sit at x=36, center is x=40). */}
       {!isMobile && (
         <div className="nav-item">
           <button
             onClick={() => setExpanded(!expanded)}
-            className="nav-btn"
+            className={`nav-btn transition-all duration-300 ${isMobile || expanded ? '' : 'ml-1'}`}
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
           </button>
@@ -196,7 +198,7 @@ export const AppLayout = ({
           onClick={handleNewChat}
           className="w-full p-3 rounded-2xl text-ink-2 hover:bg-chip hover:text-ink transition-colors flex items-center overflow-hidden whitespace-nowrap"
         >
-          <div className="w-6 flex justify-center shrink-0">
+          <div className={`w-6 flex justify-center shrink-0 transition-all duration-300 ${isMobile || expanded ? '' : 'ml-1'}`}>
             <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
           </div>
           <span className={`ml-3 truncate text-[15px] font-medium text-left transition-all duration-300 ${isMobile || expanded ? 'opacity-100 flex-1' : 'opacity-0 w-0 ml-0 overflow-hidden'}`}>New Chat</span>
@@ -227,7 +229,7 @@ export const AppLayout = ({
       {/* Bottom section: User info with settings popover */}
       <div className="mt-auto nav-item">
         <div className="p-3 flex items-center overflow-hidden whitespace-nowrap">
-          <div className="w-6 flex justify-center shrink-0">
+          <div className={`w-6 flex justify-center shrink-0 transition-all duration-300 ${isMobile || expanded ? '' : 'ml-1'}`}>
             <UserSettingsPopover
               userEmail={userEmail}
               userName={userName}
