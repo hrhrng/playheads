@@ -152,8 +152,10 @@ export function DiscoveryPage({ conversations, userId, onSessionCreated }: Disco
         </div>
       </div>
 
-      {/* ChatInput at the bottom — same place users expect it in /chat/{id} */}
-      <div className="shrink-0 px-4 pb-6 pt-2">
+      {/* ChatInput at the bottom — same wrapper as ChatInterface so the
+          composer sits at the identical position visually across cold
+          start and active chat. */}
+      <div className="shrink-0 px-6 pb-5 pt-10 z-30">
         <ChatInput
           input={input}
           isLoading={isCreating}
