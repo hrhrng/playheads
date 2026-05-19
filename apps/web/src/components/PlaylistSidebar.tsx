@@ -206,36 +206,61 @@ export const PlaylistSidebar = ({
 
         {/* Content */}
         {effectiveCollapsed ? (
-          /* Mini View — album cover (mirrors left sidebar's "shows what
-             matters at a glance" treatment). Falls back to a chip
-             placeholder when nothing's playing. */
-          <div className="flex-1 flex flex-col items-center pt-6 gap-4 opacity-100 transition-opacity duration-500 delay-100">
-            <div className="w-14 h-14 rounded-card overflow-hidden bg-chip shadow-cover shrink-0">
-              {currentTrack?.artworkUrl ? (
-                <img
-                  src={formatArtwork(currentTrack.artworkUrl, 112)}
-                  alt={currentTrack.name || ''}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center">
+          /* Mini View — vertical column of all covers (history → now playing
+             → up next). Same data as the expanded view; only the titles
+             drop away so users keep the full queue at a glance. */
+          <div className="flex-1 min-h-0 overflow-y-auto opacity-100 transition-opacity duration-500 delay-100">
+            <div className="flex flex-col items-center gap-2 py-4">
+              {formattedHistory.map((track, i) => (
+                <button
+                  key={`h-${track.id}-${i}`}
+                  onClick={() => onPlayFromHistory?.(i)}
+                  className="w-12 h-12 rounded-card overflow-hidden bg-chip shrink-0 opacity-55 hover:opacity-100 transition-opacity"
+                  title={`${track.title} — ${track.artist}`}
+                >
+                  <img src={track.cover} alt={track.title} className="w-full h-full object-cover" />
+                </button>
+              ))}
+
+              {nowPlaying && (
+                <button
+                  onClick={() => handleTrackClick(0)}
+                  className="w-12 h-12 rounded-card overflow-hidden bg-chip shadow-cover relative shrink-0 ring-2 ring-accent/60"
+                  title={`${nowPlaying.title} — ${nowPlaying.artist}`}
+                >
+                  <img src={nowPlaying.cover} alt={nowPlaying.title} className="w-full h-full object-cover" />
+                  {isPlaying && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                      <div className="flex gap-0.5 h-3 items-end">
+                        <div className="w-0.5 bg-white rounded-full animate-music-bar-1 h-full"></div>
+                        <div className="w-0.5 bg-white rounded-full animate-music-bar-2 h-2/3"></div>
+                        <div className="w-0.5 bg-white rounded-full animate-music-bar-3 h-1/2"></div>
+                      </div>
+                    </div>
+                  )}
+                </button>
+              )}
+
+              {upNext.map((track, i) => {
+                const realIndex = i + 1;
+                return (
+                  <button
+                    key={`n-${track.id}-${realIndex}`}
+                    onClick={() => handleTrackClick(realIndex)}
+                    className="w-12 h-12 rounded-card overflow-hidden bg-chip shrink-0 hover:opacity-80 transition-opacity"
+                    title={`${track.title} — ${track.artist}`}
+                  >
+                    <img src={track.cover} alt={track.title} className="w-full h-full object-cover" />
+                  </button>
+                );
+              })}
+
+              {!nowPlaying && formattedHistory.length === 0 && upNext.length === 0 && (
+                <div className="w-12 h-12 rounded-card bg-chip flex items-center justify-center">
                   <svg className="w-5 h-5 text-ink-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 19V6l12-3v13" />
                   </svg>
                 </div>
-              )}
-            </div>
-
-            {/* Status indicator — bars when playing, dot when idle. */}
-            <div className="flex flex-col items-center gap-2">
-              {isPlaying ? (
-                <div className="flex gap-1 h-3 items-end">
-                  <div className="w-1 bg-accent rounded-full animate-music-bar-1 h-full"></div>
-                  <div className="w-1 bg-accent rounded-full animate-music-bar-2 h-2/3"></div>
-                  <div className="w-1 bg-accent rounded-full animate-music-bar-3 h-1/2"></div>
-                </div>
-              ) : (
-                <div className="w-1 h-1 bg-ink-4 rounded-full"></div>
               )}
             </div>
           </div>
