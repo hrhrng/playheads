@@ -206,12 +206,13 @@ export const PlaylistSidebar = ({
           </div>
         )}
 
-        {/* Content */}
-        {effectiveCollapsed ? (
-          /* Mini View — now playing + up next as a vertical cover column.
-             History is intentionally omitted when collapsed; the user
-             only wants to see what's playing and what's coming. */
-          <div className="flex-1 min-h-0 overflow-y-auto">
+        {/* Content — both views always rendered, opacity-crossfade between
+            them so transitioning between collapsed ↔ expanded feels like
+            a smooth dissolve, not a hard cut. */}
+        <div className="flex-1 min-h-0 relative">
+          {/* Mini View — now playing + up next as a vertical cover column.
+              History is intentionally omitted when collapsed. */}
+          <div className={`absolute inset-0 overflow-y-auto transition-opacity duration-300 ${effectiveCollapsed ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
             <div className="flex flex-col items-center gap-2 py-4">
               {nowPlaying && (
                 <button
@@ -259,9 +260,9 @@ export const PlaylistSidebar = ({
               )}
             </div>
           </div>
-        ) : (
-          /* Full Expanded View */
-          <div className="flex-1 min-h-0 flex flex-col min-w-0 opacity-100 transition-opacity duration-300">
+
+          {/* Full Expanded View */}
+          <div className={`absolute inset-0 flex flex-col min-w-0 transition-opacity duration-300 ${effectiveCollapsed ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
             {showQueue && (
               <div className="flex-1 overflow-y-auto px-4 pb-4">
 
@@ -359,7 +360,7 @@ export const PlaylistSidebar = ({
               </div>
             )}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
