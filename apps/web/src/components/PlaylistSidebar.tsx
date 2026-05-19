@@ -206,21 +206,68 @@ export const PlaylistSidebar = ({
           </div>
         )}
 
-        {/* Content — both views always rendered, opacity-crossfade between
-            them so transitioning between collapsed ↔ expanded feels like
-            a smooth dissolve, not a hard cut. */}
-        <div className="flex-1 min-h-0 relative">
-          {/* Mini View — now playing + up next as a vertical cover column.
-              History is intentionally omitted when collapsed. */}
-          <div className={`absolute inset-0 overflow-y-auto transition-opacity duration-300 ${effectiveCollapsed ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
-            <div className="flex flex-col items-center gap-2 py-4">
+        {/* Content — single unified tree that morphs between collapsed and
+            expanded states. Cover sizes, padding, text visibility all
+            animate via CSS transitions so users see real motion, not a
+            cross-fade. */}
+        {showQueue && (
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            {/* History — entirely hidden in collapsed; max-h animation gives
+                a soft height collapse. */}
+            <div className={`transition-all duration-500 ease-spring overflow-hidden ${effectiveCollapsed ? 'max-h-0 opacity-0' : 'max-h-[60vh] opacity-100'}`}>
+              {formattedHistory.length > 0 && (
+                <div className="px-4 pt-4 mb-4">
+                  <button
+                    onClick={() => setHistoryExpanded(prev => !prev)}
+                    className="flex items-center gap-1 px-2 mb-2 group focus:outline-none"
+                  >
+                    <svg className={`w-3 h-3 text-ink-3 transition-transform ${historyExpanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                    </svg>
+                    <h3 className="text-[10px] font-medium text-ink-3 uppercase tracking-widest">History</h3>
+                    <span className="text-[10px] text-ink-3">{formattedHistory.length}</span>
+                  </button>
+                  {historyExpanded && (
+                    <div className="space-y-1">
+                      {formattedHistory.map((track, i) => (
+                        <div
+                          key={`${track.id}-history-${i}`}
+                          onClick={() => onPlayFromHistory?.(i)}
+                          className="flex items-center gap-3 p-2 rounded-xl hover:bg-chip cursor-pointer group transition-colors opacity-55"
+                        >
+                          <div className="w-10 h-10 rounded-card bg-chip overflow-hidden relative shrink-0">
+                            <img src={track.cover} alt={track.title} className="w-full h-full object-cover" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-[13px] font-medium font-display text-ink truncate leading-snug">{track.title}</div>
+                            <div className="text-[11px] text-ink-3 truncate">{track.artist}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Track column. Padding/gap/alignment all animate so rows
+                visually settle into new positions instead of cross-fading. */}
+            <div className={`flex flex-col transition-all duration-500 ease-spring ${effectiveCollapsed ? 'items-center gap-2 py-4 px-0' : 'items-stretch gap-1 px-4 pb-4'}`}>
+
+              {/* Now Playing header */}
+              {nowPlaying && (
+                <h3 className={`text-[10px] font-medium text-ink-3 uppercase tracking-widest px-2 overflow-hidden transition-all duration-300 ${effectiveCollapsed ? 'opacity-0 max-h-0 mb-0' : 'opacity-100 max-h-5 mb-2 delay-500'}`}>Now Playing</h3>
+              )}
+
+              {/* Now Playing pill — cover size + padding morph; text container
+                  collapses width to 0 when collapsed so the cover sits alone. */}
               {nowPlaying && (
                 <button
                   onClick={() => handleTrackClick(0)}
-                  className="p-1.5 rounded-2xl bg-chip-2 hairline shrink-0 animate-genui-slide-in"
+                  className={`flex items-center bg-chip-2 hairline cursor-pointer group rounded-2xl shrink-0 transition-all duration-500 ease-spring ${effectiveCollapsed ? 'p-1.5 gap-0' : 'p-2 gap-3 w-full'}`}
                   title={`${nowPlaying.title} — ${nowPlaying.artist}`}
                 >
-                  <div className="w-12 h-12 rounded-card overflow-hidden bg-chip relative">
+                  <div className={`rounded-card bg-chip overflow-hidden relative shrink-0 transition-all duration-500 ease-spring ${effectiveCollapsed ? 'w-12 h-12' : 'w-10 h-10'}`}>
                     <img src={nowPlaying.cover} alt={nowPlaying.title} className="w-full h-full object-cover" />
                     {isPlaying && (
                       <div className="absolute inset-0 flex items-center justify-center bg-black/30">
@@ -232,25 +279,41 @@ export const PlaylistSidebar = ({
                       </div>
                     )}
                   </div>
+                  <div className={`min-w-0 overflow-hidden transition-all duration-300 ${effectiveCollapsed ? 'w-0 opacity-0' : 'flex-1 opacity-100 delay-500'}`}>
+                    <div className="text-[13px] font-semibold font-display text-ink truncate leading-snug text-left">{nowPlaying.title}</div>
+                    <div className="text-[11px] text-ink-3 truncate text-left">{nowPlaying.artist}</div>
+                  </div>
                 </button>
               )}
 
+              {/* Up Next header */}
+              {upNext.length > 0 && (
+                <h3 className={`text-[10px] font-medium text-ink-3 uppercase tracking-widest px-2 overflow-hidden transition-all duration-300 ${effectiveCollapsed ? 'opacity-0 max-h-0 mb-0 mt-0' : 'opacity-100 max-h-5 mt-3 mb-2 delay-500'}`}>Up Next</h3>
+              )}
+
+              {/* Up Next items — each cover morphs in size; rows lose their
+                  hover background and text in collapsed. */}
               {upNext.map((track, i) => {
                 const realIndex = i + 1;
-                const delayBase = ((nowPlaying ? 1 : 0) + i) * 30;
                 return (
-                  <button
-                    key={`n-${track.id}-${realIndex}`}
+                  <div
+                    key={`${track.id}-${realIndex}`}
                     onClick={() => handleTrackClick(realIndex)}
-                    className="w-12 h-12 rounded-card overflow-hidden bg-chip shrink-0 hover:opacity-80 transition-opacity animate-genui-slide-in"
-                    style={{ animationDelay: `${delayBase}ms` }}
-                    title={`${track.title} — ${track.artist}`}
+                    className={`flex items-center cursor-pointer group transition-all duration-500 ease-spring ${effectiveCollapsed ? 'p-0 gap-0 rounded-card' : 'p-2 gap-3 rounded-2xl hover:bg-chip w-full'}`}
                   >
-                    <img src={track.cover} alt={track.title} className="w-full h-full object-cover" />
-                  </button>
+                    <div className={`rounded-card bg-chip overflow-hidden relative shrink-0 transition-all duration-500 ease-spring ${effectiveCollapsed ? 'w-12 h-12' : 'w-10 h-10'}`}>
+                      <img src={track.cover} alt={track.title} className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
+                    </div>
+                    <div className={`min-w-0 overflow-hidden transition-all duration-300 ${effectiveCollapsed ? 'w-0 opacity-0' : 'flex-1 opacity-100 delay-500'}`}>
+                      <div className="text-[13px] font-medium font-display text-ink truncate leading-snug text-left">{track.title}</div>
+                      <div className="text-[11px] text-ink-3 truncate text-left">{track.artist}</div>
+                    </div>
+                  </div>
                 );
               })}
 
+              {/* Empty state */}
               {!nowPlaying && upNext.length === 0 && (
                 <div className="w-12 h-12 rounded-card bg-chip flex items-center justify-center">
                   <svg className="w-5 h-5 text-ink-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -260,107 +323,7 @@ export const PlaylistSidebar = ({
               )}
             </div>
           </div>
-
-          {/* Full Expanded View */}
-          <div className={`absolute inset-0 flex flex-col min-w-0 transition-opacity duration-300 ${effectiveCollapsed ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
-            {showQueue && (
-              <div className="flex-1 overflow-y-auto px-4 pb-4">
-
-                {/* History (collapsed by default) */}
-                {formattedHistory.length > 0 && (
-                  <div className="mb-4">
-                    <button
-                      onClick={() => setHistoryExpanded(prev => !prev)}
-                      className="flex items-center gap-1 px-2 mb-2 group focus:outline-none"
-                    >
-                      <svg className={`w-3 h-3 text-ink-3 transition-transform ${historyExpanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
-                      </svg>
-                      <h3 className="text-[10px] font-medium text-ink-3 uppercase tracking-widest">History</h3>
-                      <span className="text-[10px] text-ink-3">{formattedHistory.length}</span>
-                    </button>
-                    {historyExpanded && (
-                      <div className="space-y-1">
-                        {formattedHistory.map((track, i) => (
-                          <div
-                            key={`${track.id}-history-${i}`}
-                            onClick={() => onPlayFromHistory?.(i)}
-                            className="flex items-center gap-3 p-2 rounded-xl hover:bg-chip cursor-pointer group transition-colors opacity-55"
-                          >
-                            <div className="w-10 h-10 rounded-card bg-chip overflow-hidden relative shrink-0">
-                              <img src={track.cover} alt={track.title} className="w-full h-full object-cover" />
-                            </div>
-                            <div className={`flex-1 min-w-0 transition-opacity duration-300 ${effectiveCollapsed ? 'opacity-0' : 'opacity-100 delay-500'}`}>
-                              <div className="text-[13px] font-medium font-display text-ink truncate leading-snug">{track.title}</div>
-                              <div className="text-[11px] text-ink-3 truncate">{track.artist}</div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Now Playing */}
-                {nowPlaying && (
-                  <div className="mb-4">
-                    <h3 className="text-[10px] font-medium text-ink-3 uppercase tracking-widest mb-2 px-2">Now Playing</h3>
-                    <div
-                      onClick={() => handleTrackClick(0)}
-                      className="flex items-center gap-3 p-2 rounded-2xl bg-chip-2 hairline cursor-pointer group transition-colors"
-                    >
-                      <div className="w-10 h-10 rounded-card bg-chip overflow-hidden relative shrink-0">
-                        <img src={nowPlaying.cover} alt={nowPlaying.title} className="w-full h-full object-cover" />
-                        {isPlaying && (
-                          <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                            <div className="flex gap-0.5 h-3 items-end">
-                              <div className="w-0.5 bg-white rounded-full animate-music-bar-1 h-full"></div>
-                              <div className="w-0.5 bg-white rounded-full animate-music-bar-2 h-2/3"></div>
-                              <div className="w-0.5 bg-white rounded-full animate-music-bar-3 h-1/2"></div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                      <div className={`flex-1 min-w-0 transition-opacity duration-300 ${effectiveCollapsed ? 'opacity-0' : 'opacity-100 delay-500'}`}>
-                        <div className="text-[13px] font-semibold font-display text-ink truncate leading-snug">{nowPlaying.title}</div>
-                        <div className="text-[11px] text-ink-3 truncate">{nowPlaying.artist}</div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Up Next */}
-                {upNext.length > 0 && (
-                  <>
-                    <h3 className="text-[10px] font-medium text-ink-3 uppercase tracking-widest mb-2 px-2">Up Next</h3>
-                    <div className="space-y-1">
-                      {upNext.map((track, i) => {
-                        const realIndex = i + 1;
-                        return (
-                          <div
-                            key={`${track.id}-${realIndex}`}
-                            onClick={() => handleTrackClick(realIndex)}
-                            className="flex items-center gap-3 p-2 rounded-2xl hover:bg-chip cursor-pointer group transition-colors"
-                          >
-                            <div className="w-10 h-10 rounded-card bg-chip overflow-hidden relative shrink-0">
-                              <img src={track.cover} alt={track.title} className="w-full h-full object-cover" />
-                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
-                            </div>
-                            <div className={`flex-1 min-w-0 transition-opacity duration-300 ${effectiveCollapsed ? 'opacity-0' : 'opacity-100 delay-500'}`}>
-                              <div className="text-[13px] font-medium font-display text-ink truncate leading-snug">{track.title}</div>
-                              <div className="text-[11px] text-ink-3 truncate">{track.artist}</div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </>
-                )}
-
-              </div>
-            )}
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );
