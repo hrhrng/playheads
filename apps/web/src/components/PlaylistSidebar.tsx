@@ -147,7 +147,7 @@ export const PlaylistSidebar = ({
   return (
     <div
       ref={sidebarRef}
-      className={`h-full flex flex-col pt-3 pr-3 pl-3 relative ${isResizing ? '' : 'transition-all duration-300 ease-in-out'}`}
+      className={`h-full flex flex-col pt-3 pr-3 pl-3 relative ${isResizing ? '' : 'transition-all duration-500 ease-spring'}`}
       style={isMobileSheet ? { width: '100%' } : { width: `${sidebarWidth}px` }}
     >
       {/* Resize Handle - Left edge (hidden in mobile sheet) */}
@@ -210,14 +210,16 @@ export const PlaylistSidebar = ({
         {effectiveCollapsed ? (
           /* Mini View — vertical column of all covers (history → now playing
              → up next). Same data as the expanded view; only the titles
-             drop away so users keep the full queue at a glance. */
-          <div className="flex-1 min-h-0 overflow-y-auto opacity-100 transition-opacity duration-500 delay-100">
+             drop away so users keep the full queue at a glance. Items fade
+             + slide up on enter, staggered by index. */
+          <div className="flex-1 min-h-0 overflow-y-auto">
             <div className="flex flex-col items-center gap-2 py-4">
               {formattedHistory.map((track, i) => (
                 <button
                   key={`h-${track.id}-${i}`}
                   onClick={() => onPlayFromHistory?.(i)}
-                  className="w-12 h-12 rounded-card overflow-hidden bg-chip shrink-0 opacity-55 hover:opacity-100 transition-opacity"
+                  className="w-12 h-12 rounded-card overflow-hidden bg-chip shrink-0 opacity-55 hover:opacity-100 transition-opacity animate-genui-slide-in"
+                  style={{ animationDelay: `${i * 30}ms` }}
                   title={`${track.title} — ${track.artist}`}
                 >
                   <img src={track.cover} alt={track.title} className="w-full h-full object-cover" />
@@ -227,7 +229,8 @@ export const PlaylistSidebar = ({
               {nowPlaying && (
                 <button
                   onClick={() => handleTrackClick(0)}
-                  className="p-1.5 rounded-2xl bg-chip-2 hairline shrink-0"
+                  className="p-1.5 rounded-2xl bg-chip-2 hairline shrink-0 animate-genui-slide-in"
+                  style={{ animationDelay: `${formattedHistory.length * 30}ms` }}
                   title={`${nowPlaying.title} — ${nowPlaying.artist}`}
                 >
                   <div className="w-12 h-12 rounded-card overflow-hidden bg-chip relative">
@@ -247,11 +250,13 @@ export const PlaylistSidebar = ({
 
               {upNext.map((track, i) => {
                 const realIndex = i + 1;
+                const delayBase = (formattedHistory.length + (nowPlaying ? 1 : 0) + i) * 30;
                 return (
                   <button
                     key={`n-${track.id}-${realIndex}`}
                     onClick={() => handleTrackClick(realIndex)}
-                    className="w-12 h-12 rounded-card overflow-hidden bg-chip shrink-0 hover:opacity-80 transition-opacity"
+                    className="w-12 h-12 rounded-card overflow-hidden bg-chip shrink-0 hover:opacity-80 transition-opacity animate-genui-slide-in"
+                    style={{ animationDelay: `${delayBase}ms` }}
                     title={`${track.title} — ${track.artist}`}
                   >
                     <img src={track.cover} alt={track.title} className="w-full h-full object-cover" />
