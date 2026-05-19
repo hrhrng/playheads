@@ -180,7 +180,7 @@ export const AppLayout = ({
     <>
       {/* Burger Menu / toggle (desktop only) */}
       {!isMobile && (
-        <div className="nav-item flex justify-center">
+        <div className="nav-item">
           <button
             onClick={() => setExpanded(!expanded)}
             className="nav-btn"
@@ -194,7 +194,7 @@ export const AppLayout = ({
       <div className="nav-item">
         <button
           onClick={handleNewChat}
-          className={`w-full p-3 rounded-2xl text-ink-2 hover:bg-chip hover:text-ink transition-colors flex items-center overflow-hidden whitespace-nowrap ${isMobile || expanded ? '' : 'justify-center'}`}
+          className="w-full p-3 rounded-2xl text-ink-2 hover:bg-chip hover:text-ink transition-colors flex items-center overflow-hidden whitespace-nowrap"
         >
           <div className="w-6 flex justify-center shrink-0">
             <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
@@ -226,7 +226,7 @@ export const AppLayout = ({
 
       {/* Bottom section: User info with settings popover */}
       <div className="mt-auto nav-item">
-        <div className={`p-3 flex items-center overflow-hidden whitespace-nowrap ${isMobile || expanded ? '' : 'justify-center'}`}>
+        <div className="p-3 flex items-center overflow-hidden whitespace-nowrap">
           <div className="w-6 flex justify-center shrink-0">
             <UserSettingsPopover
               userEmail={userEmail}
