@@ -58,15 +58,18 @@ export function HomeRoute({
   hasMoreConversations,
   isLoadingMoreConversations,
   isAppleMusicAuthorized,
+  fetchConversations,
   onLogout,
   onLinkApple,
   onDisconnectApple,
 }: RouteComponentProps) {
   const navigate = useNavigate();
 
+  // Sidebar "New Chat" lands on FeedView with the compose drawer open;
+  // sending in the drawer creates a real session and jumps to /chat/{id}.
   return (
     <AppLayout
-      onNewChat={() => navigate('/chat/pending')}
+      onNewChat={() => navigate('/?compose=1')}
       onSelectConversation={(id) => navigate(`/chat/${id}`)}
       onDeleteConversation={onDeleteConversation}
       onPinConversation={onPinConversation}
@@ -84,7 +87,10 @@ export function HomeRoute({
       onConnectAppleMusic={onLinkApple}
       onDisconnectAppleMusic={onDisconnectApple}
     >
-      <FeedView />
+      <FeedView
+        userId={session?.user.id || null}
+        onSessionCreated={() => fetchConversations()}
+      />
     </AppLayout>
   );
 }
@@ -144,7 +150,7 @@ export function ChatRoute({
 
   return (
     <AppLayout
-      onNewChat={() => navigate('/')}
+      onNewChat={() => navigate('/?compose=1')}
       onSelectConversation={(convId) => navigate(`/chat/${convId}`)}
       onDeleteConversation={onDeleteConversation}
       onPinConversation={onPinConversation}

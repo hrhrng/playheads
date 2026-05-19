@@ -4,11 +4,26 @@
  * Renders a single track at a time (cover + title + artist), driven by useFeed.
  * Mood chips swap the feed source. Plays 30s preview via <audio> in useFeed,
  * so no Apple Music user authorization is required.
+ *
+ * Drawer:
+ *   - If userId is present, sending a message creates a real chat session
+ *     and navigates to /chat/{id} (with the message as initialMessage).
+ *   - Without userId, falls back to a session-less dream feed (anon).
+ *   - URL param ?compose=1 auto-opens the drawer (used by the sidebar's
+ *     "New Chat" entry to bring users here with chat ready to go).
  */
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { toast } from 'sonner';
 import { useFeed } from '../hooks/useFeed';
 import { useAlbumPalette } from '../hooks/useAlbumPalette';
 import { useVoiceInput } from '../hooks/useVoiceInput';
+import { API_BASE } from '../config/api';
+
+interface FeedViewProps {
+  userId?: string | null;
+  onSessionCreated?: (newSessionId: string, initialMessage: string) => void;
+}
 
 const MOOD_CHIPS: Array<{ key: string; label: string }> = [
   { key: 'focus', label: '专注' },
@@ -18,15 +33,29 @@ const MOOD_CHIPS: Array<{ key: string; label: string }> = [
   { key: 'surprise', label: '惊喜我' },
 ];
 
-export function FeedView() {
+export function FeedView({ userId, onSessionCreated }: FeedViewProps = {}) {
   const feed = useFeed({ source: 'editorial' });
   const voice = useVoiceInput();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [chatInput, setChatInput] = useState('');
+  const [isCreatingSession, setIsCreatingSession] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // React mood/accent palette to the current cover.
   useAlbumPalette(feed.current?.artworkUrl);
+
+  // Auto-open drawer when arriving via "New Chat" (?compose=1). Clean the
+  // param afterwards so refresh doesn't re-open.
+  useEffect(() => {
+    if (searchParams.get('compose') === '1') {
+      setDrawerOpen(true);
+      const next = new URLSearchParams(searchParams);
+      next.delete('compose');
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   const handleMoodChip = (moodKey: string) => {
     feed.setSource('mood', { moodKey });
@@ -36,9 +65,42 @@ export function FeedView() {
     if (feed.source !== 'editorial') feed.setSource('editorial', {});
   };
 
-  const submitDream = (prompt: string) => {
+  const submitDream = async (prompt: string) => {
     const trimmed = prompt.trim();
-    if (!trimmed) return;
+    if (!trimmed || isCreatingSession) return;
+
+    // Authenticated path: create a real chat session so the conversation
+    // (and LLM context) persists, then navigate to /chat/{id}.
+    if (userId) {
+      setIsCreatingSession(true);
+      try {
+        const res = await fetch(`${API_BASE}/session/create`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: userId }),
+        });
+        if (!res.ok) throw new Error(`session/create ${res.status}`);
+        const { session_id: newSessionId } = (await res.json()) as { session_id: string };
+
+        setChatInput('');
+        setDrawerOpen(false);
+        if (onSessionCreated) {
+          onSessionCreated(newSessionId, trimmed);
+        }
+        navigate(`/chat/${newSessionId}`, {
+          replace: true,
+          state: { isNewlyCreated: true, initialMessage: trimmed },
+        });
+        return;
+      } catch (e) {
+        console.error('[FeedView] create session failed:', e);
+        toast.error('Failed to start chat', { description: String(e).slice(0, 200) });
+      } finally {
+        setIsCreatingSession(false);
+      }
+    }
+
+    // Anon / fallback: just swap the feed to a dream-curated playlist.
     feed.setSource('dream', { prompt: trimmed });
     setChatInput('');
     setDrawerOpen(false);
