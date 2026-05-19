@@ -139,7 +139,7 @@ export const ChatInput = ({
           </div>
         )}
 
-      <div className="flex items-end gap-2">
+      <div className="flex items-center gap-2">
         {/* Attachment Button — plus icon, image upload. Naked (no chip
             fill) — only the right-side action button carries fill. */}
         {onAttach && (
