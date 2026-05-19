@@ -105,6 +105,7 @@ jobs:
           DOMAIN="${{ vars.PRODUCTION_DOMAIN }}"
           cp wrangler.preview.toml wrangler.branch.toml
           sed -i "s/playheads-agent-preview/playheads-agent-${SLUG}/" wrangler.branch.toml
+          sed -i "s/playheads-web-preview/playheads-web-${SLUG}/" wrangler.branch.toml
           cat >> wrangler.branch.toml <<TOML
 
           [[routes]]

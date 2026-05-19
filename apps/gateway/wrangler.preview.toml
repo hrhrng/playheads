@@ -5,7 +5,10 @@ compatibility_flags = ["nodejs_compat"]
 
 [[services]]
 binding = "WEB"
-service = "playheads-web"
+# `-preview` is a placeholder; the deploy-preview workflow sed-rewrites
+# this to `playheads-web-${SLUG}` so the gateway binds to the branch's
+# own web worker instead of the production one.
+service = "playheads-web-preview"
 
 [[services]]
 binding = "LANDING"
