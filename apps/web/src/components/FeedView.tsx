@@ -300,26 +300,32 @@ export function FeedView({ userId, onSessionCreated }: FeedViewProps = {}) {
 
       {/* iOS-style chat drawer via vaul — drag handle, snap detents,
           rubber-band overdrag, scrim, spring physics. Detents at 55% /
-          92% screen height mirror the iOS ChatOverlay. */}
+          92% screen height mirror the iOS ChatOverlay. Portal renders
+          into document.body so the sheet escapes any parent stacking
+          context / overflow clipping. */}
       <Drawer.Root
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
         snapPoints={[0.55, 0.92]}
         modal
       >
-        <Drawer.Overlay className="fixed inset-0 z-40 bg-black/45 backdrop-blur-[2px]" />
-        <Drawer.Content
-            className="fixed inset-x-0 bottom-0 z-50 outline-none rounded-t-[28px] overflow-hidden flex flex-col bg-page/85 backdrop-blur-2xl border-t border-ink/10 shadow-[0_-12px_40px_rgba(0,0,0,0.35)]"
+        {/* @ts-expect-error vaul's Portal types don't infer children under React 19 strict */}
+        <Drawer.Portal>
+          <Drawer.Overlay className="fixed inset-0 z-40 bg-black/55" />
+          <Drawer.Content
+            className="fixed inset-x-0 bottom-0 z-50 outline-none rounded-t-[28px] overflow-hidden flex flex-col bg-[rgb(20_18_15_/_0.78)] backdrop-blur-[40px] backdrop-saturate-150 border-t border-white/10 shadow-[0_-20px_60px_rgba(0,0,0,0.5)]"
           >
             <Drawer.Title className="sr-only">告诉我你想听什么</Drawer.Title>
             <Drawer.Description className="sr-only">输入或语音描述你想听的歌</Drawer.Description>
 
-            {/* Grab handle */}
-            <div className="flex justify-center pt-2.5 pb-3 shrink-0">
-              <div className="h-1.5 w-9 rounded-full bg-ink/30" />
+            {/* Grab handle — drag region. Bigger + brighter than the page's
+                ink-tone handle so it reads against the dark sheet. */}
+            <div className="flex justify-center pt-3 pb-3 shrink-0 cursor-grab active:cursor-grabbing">
+              <div className="h-1.5 w-10 rounded-full bg-white/30" />
             </div>
 
-            <div className="px-5 text-ink-3 text-xs uppercase tracking-[0.18em] shrink-0">
+            {/* Section header */}
+            <div className="px-6 text-white/50 text-[11px] uppercase tracking-[0.2em] shrink-0">
               告诉我你想听什么
             </div>
 
@@ -328,7 +334,7 @@ export function FeedView({ userId, onSessionCreated }: FeedViewProps = {}) {
 
             {/* Composer at bottom */}
             <div className="px-3 pb-[max(env(safe-area-inset-bottom),12px)] pt-2 shrink-0">
-              <div className="glass rounded-full py-2 px-2 flex items-end gap-2">
+              <div className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-full py-2 px-2 flex items-end gap-2">
                 <textarea
                   ref={textareaRef}
                   rows={1}
@@ -342,13 +348,13 @@ export function FeedView({ userId, onSessionCreated }: FeedViewProps = {}) {
                     if (e.key === 'Escape') setDrawerOpen(false);
                   }}
                   placeholder="想专注、想发呆、想被治愈…"
-                  className="flex-1 bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-ink placeholder-ink-3 text-[15px] resize-none py-2.5 px-3 max-h-32 no-scrollbar"
+                  className="flex-1 bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-white placeholder-white/40 text-[15px] resize-none py-2.5 px-3 max-h-32 no-scrollbar"
                   autoFocus
                 />
                 <button
                   onClick={() => submitDream(chatInput)}
                   disabled={!chatInput.trim() || feed.isLoading || isCreatingSession}
-                  className="w-11 h-11 flex items-center justify-center rounded-full bg-accent text-page disabled:bg-chip disabled:text-ink-4 transition-all flex-shrink-0 self-end"
+                  className="w-11 h-11 flex items-center justify-center rounded-full bg-white text-page disabled:bg-white/20 disabled:text-white/40 transition-all flex-shrink-0 self-end"
                   aria-label="Send"
                 >
                   {isCreatingSession ? (
@@ -363,7 +369,8 @@ export function FeedView({ userId, onSessionCreated }: FeedViewProps = {}) {
                 </button>
               </div>
             </div>
-        </Drawer.Content>
+          </Drawer.Content>
+        </Drawer.Portal>
       </Drawer.Root>
     </div>
   );
