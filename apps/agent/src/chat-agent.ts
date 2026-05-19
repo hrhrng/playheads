@@ -274,7 +274,7 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
     const effectiveSearchProvider = (searchDbOverride?.providerType || this.env.SEARCH_PROVIDER || (card?.nativeSearch ? "anthropic" : "")).toLowerCase();
     console.log(`[WebSearch] Resolution: dbOverride=${JSON.stringify(searchDbOverride ? { providerType: searchDbOverride.providerType, hasApiKey: !!searchDbOverride.apiKey } : null)} envProvider=${this.env.SEARCH_PROVIDER || "unset"} nativeSearch=${card?.nativeSearch} effective="${effectiveSearchProvider}" hasAnthropicInstance=${!!anthropicInstance}`);
 
-    const toolCtx = { env: this.env, state: globalState, storefront };
+    const toolCtx = { env: this.env, state: globalState, storefront, sessionId };
     const musicTools = createMusicTools(toolCtx);
     let tools: Parameters<typeof streamText>[0]["tools"] = { ...musicTools };
 

@@ -48,6 +48,7 @@ export async function handleListConversations(
           lastMessageAt: t.lastMessageAt,
           isPinned: t.isPinned,
           updatedAt: t.updatedAt,
+          playlist: t.playlist,
         })
         .from(t)
         .where(
@@ -72,6 +73,7 @@ export async function handleListConversations(
           lastMessageAt: t.lastMessageAt,
           isPinned: t.isPinned,
           updatedAt: t.updatedAt,
+          playlist: t.playlist,
         })
         .from(t)
         .where(and(eq(t.userId, userId), eq(t.isArchived, false)))
@@ -89,15 +91,26 @@ export async function handleListConversations(
     }
 
     return Response.json({
-      conversations: pageRows.map((c) => ({
-        id: c.id,
-        title: c.title,
-        message_count: c.messageCount ?? 0,
-        last_message_preview: c.lastMessagePreview,
-        last_message_at: c.lastMessageAt != null ? String(c.lastMessageAt) : null,
-        is_pinned: Boolean(c.isPinned),
-        updated_at: String(c.updatedAt ?? ""),
-      })),
+      conversations: pageRows.map((c) => {
+        // Parse playlist JSON; expose track count + first track's artwork
+        // for cover thumb in the sidebar / topics grid. Send the full
+        // array too so the client can restore the topic on load.
+        let playlist: Array<Record<string, unknown>> = [];
+        try { playlist = JSON.parse(c.playlist || '[]'); } catch { /* ignore */ }
+        const first = playlist[0] as { artworkUrl?: string } | undefined;
+        return {
+          id: c.id,
+          title: c.title,
+          message_count: c.messageCount ?? 0,
+          last_message_preview: c.lastMessagePreview,
+          last_message_at: c.lastMessageAt != null ? String(c.lastMessageAt) : null,
+          is_pinned: Boolean(c.isPinned),
+          updated_at: String(c.updatedAt ?? ""),
+          playlist,
+          playlist_count: playlist.length,
+          playlist_cover: first?.artworkUrl ?? null,
+        };
+      }),
       has_more: hasMore,
       next_cursor: nextCursor,
     });
@@ -294,6 +307,61 @@ export async function handleGetConversationTitle(
   }
 
   return Response.json({ title: row.title });
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/conversations/:id?user_id=...
+// Returns the full conversation row (id, title, playlist) so the client can
+// restore the topic on chat load.
+// ---------------------------------------------------------------------------
+export async function handleGetConversation(
+  conversationId: string,
+  request: Request,
+  DB: D1,
+): Promise<Response> {
+  const url = new URL(request.url);
+  const userId = url.searchParams.get("user_id");
+  if (!userId) {
+    return Response.json({ error: "user_id required" }, { status: 400 });
+  }
+
+  const db = drizzle(DB);
+  const t = schema.conversation;
+
+  const [row] = await db
+    .select({
+      id: t.id,
+      title: t.title,
+      messageCount: t.messageCount,
+      lastMessagePreview: t.lastMessagePreview,
+      lastMessageAt: t.lastMessageAt,
+      isPinned: t.isPinned,
+      updatedAt: t.updatedAt,
+      playlist: t.playlist,
+    })
+    .from(t)
+    .where(and(eq(t.id, conversationId), eq(t.userId, userId)));
+
+  if (!row) {
+    return Response.json({ error: "Not found" }, { status: 404 });
+  }
+
+  let playlist: Array<Record<string, unknown>> = [];
+  try { playlist = JSON.parse(row.playlist || '[]'); } catch { /* ignore */ }
+  const first = playlist[0] as { artworkUrl?: string } | undefined;
+
+  return Response.json({
+    id: row.id,
+    title: row.title,
+    message_count: row.messageCount ?? 0,
+    last_message_preview: row.lastMessagePreview,
+    last_message_at: row.lastMessageAt != null ? String(row.lastMessageAt) : null,
+    is_pinned: Boolean(row.isPinned),
+    updated_at: String(row.updatedAt ?? ""),
+    playlist,
+    playlist_count: playlist.length,
+    playlist_cover: first?.artworkUrl ?? null,
+  });
 }
 
 // ---------------------------------------------------------------------------

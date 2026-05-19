@@ -24,6 +24,10 @@ export interface Conversation {
   updated_at?: string;
   created_at?: string;
   is_archived?: boolean;
+  /** First track's artwork URL — populated by gateway from playlist[0]. */
+  playlist_cover?: string | null;
+  /** Number of tracks in this conversation's saved playlist. */
+  playlist_count?: number;
   [key: string]: unknown;
 }
 

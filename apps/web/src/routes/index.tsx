@@ -6,9 +6,10 @@
 import { useNavigate, useParams } from 'react-router-dom';
 import { AppLayout } from '../components/AppLayout';
 import { ChatInterface } from '../components/ChatInterface';
-import { FeedView } from '../components/FeedView';
+import { TopicsGrid } from '../components/TopicsGrid';
 import { PlaylistSidebar } from '../components/PlaylistSidebar';
 import { useSidebarState } from '../hooks/useSidebarState';
+import { API_BASE } from '../config/api';
 import type { PlaybackTime } from '../types';
 import type { UnifiedTrack } from '../providers/types';
 import type { AuthSession } from '../hooks/useAuth';
@@ -65,11 +66,32 @@ export function HomeRoute({
 }: RouteComponentProps) {
   const navigate = useNavigate();
 
-  // Sidebar "New Chat" lands on FeedView with the compose drawer open;
-  // sending in the drawer creates a real session and jumps to /chat/{id}.
+  // Sidebar "New Chat": delegates to TopicsGrid's create handler — same
+  // flow as clicking the "+ new topic" card.
+  const handleNewChat = async () => {
+    const userId = session?.user.id;
+    if (!userId) {
+      navigate('/');
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/session/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId }),
+      });
+      if (!res.ok) throw new Error(`session/create ${res.status}`);
+      const { session_id } = (await res.json()) as { session_id: string };
+      fetchConversations();
+      navigate(`/chat/${session_id}`, { replace: true });
+    } catch (e) {
+      console.error('[HomeRoute] new chat failed:', e);
+    }
+  };
+
   return (
     <AppLayout
-      onNewChat={() => navigate('/?compose=1')}
+      onNewChat={handleNewChat}
       onSelectConversation={(id) => navigate(`/chat/${id}`)}
       onDeleteConversation={onDeleteConversation}
       onPinConversation={onPinConversation}
@@ -87,7 +109,8 @@ export function HomeRoute({
       onConnectAppleMusic={onLinkApple}
       onDisconnectAppleMusic={onDisconnectApple}
     >
-      <FeedView
+      <TopicsGrid
+        conversations={conversations}
         userId={session?.user.id || null}
         onSessionCreated={() => fetchConversations()}
       />
@@ -150,7 +173,7 @@ export function ChatRoute({
 
   return (
     <AppLayout
-      onNewChat={() => navigate('/?compose=1')}
+      onNewChat={() => navigate('/')}
       onSelectConversation={(convId) => navigate(`/chat/${convId}`)}
       onDeleteConversation={onDeleteConversation}
       onPinConversation={onPinConversation}

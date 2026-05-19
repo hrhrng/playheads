@@ -15,6 +15,13 @@
       "when": 1774054400000,
       "tag": "0001_global_queue",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1779208143650,
+      "tag": "0002_silent_celestials",
+      "breakpoints": true
     }
   ]
 }

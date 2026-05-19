@@ -104,6 +104,10 @@ export const conversation = sqliteTable('conversation', {
   lastMessageAt: integer('lastMessageAt', { mode: 'number' }),
   isPinned: integer('isPinned', { mode: 'boolean' }).notNull().default(false),
   isArchived: integer('isArchived', { mode: 'boolean' }).notNull().default(false),
+  // JSON array of UnifiedTrack snapshots — every track the LLM added to
+  // this conversation's queue. Becomes the topic's playlist; restored
+  // when the user re-opens this conversation.
+  playlist: text('playlist').notNull().default('[]'),
   createdAt: integer('createdAt', { mode: 'number' }).notNull(),
   updatedAt: integer('updatedAt', { mode: 'number' }).notNull(),
 });

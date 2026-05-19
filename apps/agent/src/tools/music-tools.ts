@@ -21,6 +21,52 @@ export interface ToolContext {
   env: Env;
   state: PlaybackState;
   storefront: string;
+  /** Conversation id for the active chat. When add_to_queue runs, the
+   *  track is also appended to this conversation's `playlist` column so
+   *  the topic accumulates its private music history. */
+  sessionId?: string;
+}
+
+interface PlaylistEntry {
+  id: string;
+  name: string;
+  artist: string;
+  album: string;
+  artworkUrl: string;
+  durationSeconds: number;
+  provider: 'apple-music';
+}
+
+/**
+ * Append a track snapshot to the conversation's `playlist` column. Reads
+ * current playlist, dedupes by id, writes back. Sequential per session so
+ * the race window is acceptable. No-op when sessionId is unset.
+ */
+async function appendToConversationPlaylist(
+  env: Env,
+  sessionId: string | undefined,
+  entry: PlaylistEntry,
+): Promise<void> {
+  if (!sessionId) return;
+  try {
+    const row = await env.DB.prepare(
+      'SELECT "playlist" FROM "conversation" WHERE "id" = ?',
+    )
+      .bind(sessionId)
+      .first<{ playlist: string }>();
+    if (!row) return;
+    let list: PlaylistEntry[] = [];
+    try { list = JSON.parse(row.playlist || '[]'); } catch { list = []; }
+    if (list.some((t) => t.id === entry.id)) return; // dedupe
+    list.push(entry);
+    await env.DB.prepare(
+      'UPDATE "conversation" SET "playlist" = ?, "updatedAt" = ? WHERE "id" = ?',
+    )
+      .bind(JSON.stringify(list), Date.now(), sessionId)
+      .run();
+  } catch (e) {
+    console.warn('[appendToConversationPlaylist] failed:', e);
+  }
 }
 
 /** Action payload embedded in tool results for client-side MusicKit dispatch. */
@@ -65,6 +111,21 @@ export function createMusicTools(ctx: ToolContext) {
           const artwork = (attrs.artwork || {}) as Record<string, unknown>;
           const name = (attrs.name as string) || "Unknown";
           const artist = (attrs.artistName as string) || "Unknown Artist";
+          const album = (attrs.albumName as string) || "";
+          const artworkUrl = (artwork.url as string) || "";
+          const durationSeconds = ((attrs.durationInMillis as number) || 0) / 1000;
+
+          // Persist to the topic's playlist (conversation.playlist) so the
+          // track becomes part of this conversation's saved music history.
+          await appendToConversationPlaylist(ctx.env, ctx.sessionId, {
+            id: song.id as string,
+            name,
+            artist,
+            album,
+            artworkUrl,
+            durationSeconds,
+            provider: 'apple-music',
+          });
 
           // Return result with embedded action for client-side MusicKit dispatch
           return JSON.stringify({
@@ -75,9 +136,9 @@ export function createMusicTools(ctx: ToolContext) {
                 track_id: song.id as string,
                 name,
                 artist,
-                album: (attrs.albumName as string) || "",
-                artwork_url: (artwork.url as string) || "",
-                duration: ((attrs.durationInMillis as number) || 0) / 1000,
+                album,
+                artwork_url: artworkUrl,
+                duration: durationSeconds,
               },
             },
           });

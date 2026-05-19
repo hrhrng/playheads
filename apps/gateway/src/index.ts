@@ -9,6 +9,7 @@ import {
   handleDeleteConversation,
   handleUpdateConversation,
   handleGetConversationTitle,
+  handleGetConversation,
   handleCreateSession,
   handleGetState,
   handleSyncState,
@@ -108,6 +109,10 @@ export default {
     if (url.pathname.match(/^\/api\/conversations\/[^/]+\/title$/) && request.method === "GET") {
       const id = url.pathname.split("/api/conversations/")[1].replace("/title", "");
       return handleGetConversationTitle(id, request, env.DB);
+    }
+    if (url.pathname.match(/^\/api\/conversations\/[^/]+$/) && request.method === "GET") {
+      const id = url.pathname.split("/api/conversations/")[1];
+      return handleGetConversation(id, request, env.DB);
     }
     if (url.pathname.startsWith("/api/conversations/") && request.method === "DELETE") {
       const id = url.pathname.split("/api/conversations/")[1];
