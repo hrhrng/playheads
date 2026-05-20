@@ -192,17 +192,28 @@ export function useAgentChatAdapter({
 
       const ops = queueOpsRef.current;
 
-      // Update global queue immediately
-      if (payload.type === "add_to_queue" && payload.data?.track_id && ops) {
-        ops.addTrack({
-          id: payload.data.track_id as string,
-          name: (payload.data.name as string) || "Unknown",
-          artist: (payload.data.artist as string) || "Unknown Artist",
-          album: (payload.data.album as string) || "",
-          artworkUrl: (payload.data.artwork_url as string) || "",
-          durationSeconds: (payload.data.duration as number) || 0,
-          provider: 'apple-music',
-        });
+      // Update global queue immediately. `add_to_queue` is now always
+      // batch — payload.data.tracks is an array in the intended play
+      // order. (We still tolerate the legacy single-track shape from
+      // older persisted messages.)
+      if (payload.type === "add_to_queue" && ops) {
+        const rawTracks = Array.isArray(payload.data?.tracks)
+          ? (payload.data.tracks as Array<Record<string, unknown>>)
+          : payload.data?.track_id
+            ? [payload.data as Record<string, unknown>]
+            : [];
+        const tracks = rawTracks.map((t) => ({
+          id: (t.track_id as string) || (t.id as string),
+          name: (t.name as string) || "Unknown",
+          artist: (t.artist as string) || "Unknown Artist",
+          album: (t.album as string) || "",
+          artworkUrl: (t.artwork_url as string) || (t.artworkUrl as string) || "",
+          durationSeconds: (t.duration as number) || (t.durationSeconds as number) || 0,
+          provider: 'apple-music' as const,
+        })).filter((t) => !!t.id);
+        if (tracks.length > 0) {
+          ops.addTracks(tracks);
+        }
       } else if (payload.type === "remove_track" && payload.data?.index != null && ops) {
         ops.removeTrack(payload.data.index as number);
       }
