@@ -1,0 +1,99 @@
+{
+  "common": {
+    "appName": "Playheads",
+    "loading": "Loading…",
+    "retry": "Retry",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "delete": "Delete",
+    "rename": "Rename",
+    "pin": "Pin",
+    "unpin": "Unpin",
+    "settings": "Settings",
+    "logout": "Sign out"
+  },
+  "nav": {
+    "newChat": "New Chat",
+    "playheads": "Playheads",
+    "openMenu": "Open menu"
+  },
+  "discovery": {
+    "title": "What's the vibe?",
+    "subtitle": "Tell me what you want to hear, or pick something below.",
+    "recent": "Recent",
+    "trySomething": "Try something",
+    "failedToStart": "Failed to start",
+    "imagePlaceholderMessage": "What's in this image?",
+    "trackCount_one": "{{count}} track",
+    "trackCount_other": "{{count}} tracks"
+  },
+  "moods": {
+    "focus":       { "label": "Focus",       "prompt": "Give me music for focused work." },
+    "sad":         { "label": "Melancholy",  "prompt": "I'm in a sad mood, play something sad." },
+    "high_energy": { "label": "High energy", "prompt": "Play something high energy." },
+    "chill":       { "label": "Chill",       "prompt": "Something chill to zone out to." },
+    "surprise":    { "label": "Surprise me", "prompt": "Recommend something off the beaten path I might not have heard." },
+    "workout":     { "label": "Workout",     "prompt": "Workout music." },
+    "sleep":       { "label": "Sleep",       "prompt": "Music to help me fall asleep." }
+  },
+  "chatInput": {
+    "startVibe": "Start a vibe...",
+    "askDJ": "Ask the DJ...",
+    "pushToInterrupt": "Push to Interrupt...",
+    "uploadImage": "Upload image",
+    "send": "Send",
+    "voice": "Voice",
+    "voiceTip": "Tap to dictate · Hold for voice mode"
+  },
+  "playlist": {
+    "title": "PLAYLIST",
+    "nowPlaying": "Now Playing",
+    "upNext": "Up Next",
+    "history": "History",
+    "expand": "Expand playlist",
+    "collapse": "Collapse playlist",
+    "resize": "Drag to resize"
+  },
+  "chat": {
+    "connectAppleMusic": "Connect Apple Music for full playback",
+    "viewTranscript": "View transcript",
+    "backToPlayer": "Back to player",
+    "chatFailed": "Chat failed",
+    "uploadFailed": "Upload failed"
+  },
+  "settings": {
+    "title": "Settings",
+    "appearance": "Appearance",
+    "language": "Language",
+    "languageZh": "中文",
+    "languageEn": "English",
+    "appleMusic": "Apple Music",
+    "connect": "Connect",
+    "disconnect": "Disconnect",
+    "connected": "Connected",
+    "account": "Account"
+  },
+  "auth": {
+    "signIn": "Sign in",
+    "signUp": "Sign up",
+    "email": "Email",
+    "password": "Password",
+    "continueWith": "Continue with {{provider}}",
+    "or": "or",
+    "welcome": "Welcome back",
+    "createAccount": "Create an account",
+    "tagline": "Return to Music",
+    "emailPlaceholder": "Your email",
+    "signInWithEmail": "Sign In with Email",
+    "sendingMagicLink": "Sending Magic Link...",
+    "continueWithApple": "Continue with Apple",
+    "continueWithGoogle": "Continue with Google"
+  },
+  "waitlist": {
+    "title": "You're on the list",
+    "subtitlePrefix": "We're letting people in gradually. You'll get an email at",
+    "subtitleSuffix": "when it's your turn.",
+    "checkAgain": "Check again",
+    "approved": "You're in! Welcome."
+  }
+}

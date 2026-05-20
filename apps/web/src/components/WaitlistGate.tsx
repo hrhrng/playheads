@@ -1,9 +1,12 @@
+import { useTranslation } from 'react-i18next';
+
 interface WaitlistGateProps {
   email?: string;
   onLogout: () => void;
 }
 
 export function WaitlistGate({ email, onLogout }: WaitlistGateProps) {
+  const { t } = useTranslation();
   return (
     <div className="min-h-screen w-full flex flex-col items-center justify-center p-6">
       <div className="flex flex-col items-center space-y-8 max-w-sm w-full animate-fade-in">
@@ -12,12 +15,12 @@ export function WaitlistGate({ email, onLogout }: WaitlistGateProps) {
         </div>
 
         <div className="text-center space-y-3">
-          <h1 className="text-xl font-display font-medium tracking-tight text-ink">You're on the list</h1>
+          <h1 className="text-xl font-display font-medium tracking-tight text-ink">{t('waitlist.title')}</h1>
           <div className="h-px w-12 bg-rule mx-auto" />
           <p className="text-sm font-display text-ink-2 leading-relaxed">
-            We're letting people in gradually. You'll get an email at{' '}
+            {t('waitlist.subtitlePrefix')}{' '}
             <span className="font-medium text-ink">{email}</span>{' '}
-            when it's your turn.
+            {t('waitlist.subtitleSuffix')}
           </p>
         </div>
 
@@ -32,7 +35,7 @@ export function WaitlistGate({ email, onLogout }: WaitlistGateProps) {
           onClick={onLogout}
           className="text-sm text-ink-3 hover:text-ink transition-colors"
         >
-          Sign out
+          {t('common.logout')}
         </button>
       </div>
     </div>

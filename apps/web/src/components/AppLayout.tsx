@@ -11,6 +11,7 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ConversationList } from './ConversationList';
 import { DeleteConfirmDialog } from './DeleteConfirmDialog';
 import { UserSettingsPopover } from './UserSettingsPopover';
@@ -85,6 +86,7 @@ export const AppLayout = ({
   onDisconnectAppleMusic,
   onOpenPlaylist,
 }: AppLayoutProps): React.JSX.Element => {
+  const { t } = useTranslation();
   // Use persisted state for nav sidebar to survive page navigation
   const { expanded, setExpanded, width, setWidth, COLLAPSED_WIDTH } = useNavSidebarState();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState<boolean>(false);
@@ -201,7 +203,7 @@ export const AppLayout = ({
           <div className="w-6 flex justify-center shrink-0 ml-1">
             <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
           </div>
-          <span className={`ml-3 truncate text-[15px] font-medium text-left transition-all duration-300 ${isMobile || expanded ? 'opacity-100 flex-1' : 'opacity-0 w-0 ml-0 overflow-hidden'}`}>New Chat</span>
+          <span className={`ml-3 truncate text-[15px] font-medium text-left transition-all duration-300 ${isMobile || expanded ? 'opacity-100 flex-1' : 'opacity-0 w-0 ml-0 overflow-hidden'}`}>{t('nav.newChat')}</span>
         </button>
       </div>
 
@@ -257,15 +259,15 @@ export const AppLayout = ({
           <button
             onClick={() => setMobileNavOpen(true)}
             className="p-2.5 rounded-2xl text-ink-2 hover:bg-chip hover:text-ink transition-colors"
-            aria-label="Open menu"
+            aria-label={t('nav.openMenu')}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
           </button>
-          <span className="flex-1 text-center text-[15px] font-medium text-ink tracking-tight">Playheads</span>
+          <span className="flex-1 text-center text-[15px] font-medium text-ink tracking-tight">{t('nav.playheads')}</span>
           <button
             onClick={onNewChat}
             className="p-2.5 rounded-2xl text-ink-2 hover:bg-chip hover:text-ink transition-colors"
-            aria-label="New chat"
+            aria-label={t('nav.newChat')}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
           </button>

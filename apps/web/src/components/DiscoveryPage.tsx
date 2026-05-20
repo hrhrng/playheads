@@ -7,6 +7,7 @@
  */
 import { useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { ChatInput } from './chat/ChatInput';
 import { API_BASE } from '../config/api';
@@ -25,35 +26,24 @@ interface DiscoveryPageProps {
   onSessionCreated?: () => void;
 }
 
-interface MoodChip {
-  key: string;
-  label: string;
-  prompt: string;
-}
-
-const MOOD_CHIPS: MoodChip[] = [
-  { key: 'focus',       label: '专注',   prompt: '给我一些适合专注工作的歌' },
-  { key: 'sad',         label: '伤心',   prompt: '想听点伤感的歌' },
-  { key: 'high_energy', label: '高能',   prompt: '放点高能炸场的' },
-  { key: 'chill',       label: '放空',   prompt: '想听点放松发呆的' },
-  { key: 'surprise',    label: '惊喜我', prompt: '随便推荐点我可能没听过的好歌' },
-  { key: 'workout',     label: '健身',   prompt: '健身时听的歌' },
-  { key: 'sleep',       label: '助眠',   prompt: '帮我入睡的歌' },
-];
+// Mood chip keys — labels and prompts come from i18n (moods.<key>.label,
+// moods.<key>.prompt) so each locale can phrase the prompt natively.
+const MOOD_KEYS = ['focus', 'sad', 'high_energy', 'chill', 'surprise', 'workout', 'sleep'] as const;
 
 function formatArtwork(url: string | null | undefined, size = 80): string | null {
   if (!url) return null;
   return url.replace('{w}', String(size)).replace('{h}', String(size));
 }
 
-function displayTitle(c: Conversation): string {
+function displayTitle(c: Conversation, fallback: string): string {
   if (c.title) return c.title;
   if (c.last_message_preview) return c.last_message_preview;
-  return '新话题';
+  return fallback;
 }
 
 export function DiscoveryPage({ conversations, userId, onSessionCreated }: DiscoveryPageProps) {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [input, setInput] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -127,20 +117,20 @@ export function DiscoveryPage({ conversations, userId, onSessionCreated }: Disco
         });
       } catch (e) {
         console.error('[DiscoveryPage] new topic failed:', e);
-        toast.error('Failed to start', { description: String(e).slice(0, 200) });
+        toast.error(t('discovery.failedToStart'), { description: String(e).slice(0, 200) });
       } finally {
         setIsCreating(false);
       }
     },
-    [userId, isCreating, attachments, navigate, onSessionCreated],
+    [userId, isCreating, attachments, navigate, onSessionCreated, t],
   );
 
   const handleSend = useCallback(() => {
     const trimmed = input.trim();
     const hasAttachments = attachments.some((a) => a.status === 'done');
     if (!trimmed && !hasAttachments) return;
-    startNewTopic(trimmed || '看下这张图');
-  }, [input, attachments, startNewTopic]);
+    startNewTopic(trimmed || t('discovery.imagePlaceholderMessage'));
+  }, [input, attachments, startNewTopic, t]);
 
   const recent = useMemo(() => conversations.slice(0, 8), [conversations]);
 
@@ -150,22 +140,22 @@ export function DiscoveryPage({ conversations, userId, onSessionCreated }: Disco
       <div className="flex-1 min-h-0 overflow-y-auto">
         <div className="max-w-2xl mx-auto px-6 pt-16 pb-6">
           <h1 className="text-ink text-[28px] font-display font-medium tracking-tight text-center mb-2">
-            听点啥？
+            {t('discovery.title')}
           </h1>
           <p className="text-ink-3 text-[14px] text-center mb-10">
-            说一句你想听的，或者从下面选个开始。
+            {t('discovery.subtitle')}
           </p>
 
           {/* Mood chips */}
           <div className="flex flex-wrap justify-center gap-1.5 mb-12">
-            {MOOD_CHIPS.map((chip) => (
+            {MOOD_KEYS.map((key) => (
               <button
-                key={chip.key}
-                onClick={() => startNewTopic(chip.prompt)}
+                key={key}
+                onClick={() => startNewTopic(t(`moods.${key}.prompt`))}
                 disabled={isCreating}
                 className="px-3.5 py-1.5 rounded-full bg-chip hairline text-[13px] text-ink-2 hover:text-ink hover:bg-chip-2 transition-colors disabled:opacity-50"
               >
-                {chip.label}
+                {t(`moods.${key}.label`)}
               </button>
             ))}
           </div>
@@ -174,12 +164,12 @@ export function DiscoveryPage({ conversations, userId, onSessionCreated }: Disco
           {recent.length > 0 && (
             <section>
               <h2 className="text-ink-3 text-[11px] font-medium uppercase tracking-[0.18em] mb-2 px-1">
-                Recent
+                {t('discovery.recent')}
               </h2>
               <div className="flex flex-col">
                 {recent.map((c) => {
                   const cover = formatArtwork(c.playlist_cover, 80);
-                  const title = displayTitle(c);
+                  const title = displayTitle(c, t('discovery.title'));
                   return (
                     <button
                       key={c.id}
@@ -194,7 +184,7 @@ export function DiscoveryPage({ conversations, userId, onSessionCreated }: Disco
                       <div className="flex-1 min-w-0">
                         <div className="text-ink text-[14px] truncate leading-tight">{title}</div>
                         {(c.playlist_count ?? 0) > 0 && (
-                          <div className="text-ink-4 text-[11px] mt-0.5">{c.playlist_count} 首</div>
+                          <div className="text-ink-4 text-[11px] mt-0.5">{t('discovery.trackCount', { count: c.playlist_count ?? 0 })}</div>
                         )}
                       </div>
                       <svg className="w-4 h-4 text-ink-4 group-hover:text-ink-3 transition-colors shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">

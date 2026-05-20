@@ -5,6 +5,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { RecordPlayer } from './RecordPlayer';
 import { NewChatView } from './NewChatView';
 import { SkeletonLoader } from './SkeletonLoader';
@@ -149,6 +150,8 @@ export const ChatInterface = ({
   const handleRemoveAttachment = useCallback((index: number) => {
     setAttachments((prev) => prev.filter((_, i) => i !== index));
   }, []);
+
+  const { t } = useTranslation();
 
   // Use chat hook for state and methods
   const {
@@ -415,7 +418,7 @@ export const ChatInterface = ({
                       <circle cx="6" cy="18" r="3" />
                       <circle cx="18" cy="16" r="3" />
                     </svg>
-                    Connect Apple Music for full playback
+                    {t('chat.connectAppleMusic')}
                   </button>
                 </div>
               )}

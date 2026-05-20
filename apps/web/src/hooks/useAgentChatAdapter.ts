@@ -8,6 +8,7 @@
  * and dispatches queue operations as a side effect.
  */
 import { useMemo, useCallback, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { useAgent } from "agents/react";
 import { useAgentChat } from "@cloudflare/ai-chat/react";
@@ -152,6 +153,7 @@ export function useAgentChatAdapter({
   queueOps,
   onMessageSent,
 }: UseAgentChatAdapterParams): UseAgentChatAdapterReturn {
+  const { t } = useTranslation();
   const agent = useAgent({
     agent: "MusicChatAgent",
     name: sessionId,
@@ -176,7 +178,7 @@ export function useAgentChatAdapter({
       // Surface backend / LLM errors that flow through the UI message stream
       // so users see what went wrong instead of a frozen loading state.
       console.error("[Agent] chat error:", err);
-      toast.error("Chat failed", {
+      toast.error(t("chat.chatFailed"), {
         description: err?.message?.slice(0, 240) || String(err),
       });
     },

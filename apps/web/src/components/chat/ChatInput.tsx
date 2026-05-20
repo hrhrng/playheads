@@ -5,6 +5,7 @@
  */
 
 import { useRef, useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAutoResizeTextarea } from '../../hooks/useChatHelpers';
 import type { ProviderType } from '../../providers/types';
 
@@ -55,6 +56,7 @@ export const ChatInput = ({
   attachments = [],
   onRemoveAttachment,
 }: ChatInputProps): React.JSX.Element => {
+  const { t } = useTranslation();
   const textareaRef = useAutoResizeTextarea(input);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -68,9 +70,9 @@ export const ChatInput = ({
   };
 
   const getPlaceholder = (): string => {
-    if (isDJSpeaking) return 'Push to Interrupt...';
-    if (isPlaying) return 'Ask the DJ...';
-    return 'Start a vibe...';
+    if (isDJSpeaking) return t('chatInput.pushToInterrupt');
+    if (isPlaying) return t('chatInput.askDJ');
+    return t('chatInput.startVibe');
   };
 
   const hasInput = input.trim().length > 0;
@@ -147,8 +149,8 @@ export const ChatInput = ({
             <button
               onClick={() => fileInputRef.current?.click()}
               className="w-11 h-11 flex items-center justify-center rounded-full text-ink-2 hover:text-ink hover:bg-chip transition-colors shrink-0 self-end"
-              title="Upload image"
-              aria-label="Upload image"
+              title={t('chatInput.uploadImage')}
+              aria-label={t('chatInput.uploadImage')}
             >
               <svg className="w-[22px] h-[22px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m-7-7h14" />
@@ -209,7 +211,7 @@ export const ChatInput = ({
                 ? 'bg-ink/30 text-page animate-pulse'
                 : 'bg-accent text-page hover:bg-accent-2'
             }`}
-            aria-label="Send"
+            aria-label={t('chatInput.send')}
           >
             {isLoading ? (
               <svg className="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -238,8 +240,8 @@ export const ChatInput = ({
                 ? 'bg-accent text-page animate-pulse'
                 : 'bg-chip-2 text-ink-2 hover:bg-chip-hover hover:text-ink'
             }`}
-            title="Tap to dictate, hold for voice mode"
-            aria-label="Voice"
+            title={t('chatInput.voiceTip')}
+            aria-label={t('chatInput.voice')}
           >
             <svg className="w-[20px] h-[20px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.8">
               <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4M12 15a3 3 0 003-3V5a3 3 0 00-6 0v7a3 3 0 003 3z" />

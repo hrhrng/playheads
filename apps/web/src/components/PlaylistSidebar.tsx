@@ -6,6 +6,7 @@
  */
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { UnifiedTrack } from '../providers/types';
 import { usePlaylistSheet } from '../contexts/PlaylistSheetContext';
 
@@ -57,6 +58,7 @@ export const PlaylistSidebar = ({
   width,
   onWidthChange,
 }: PlaylistSidebarProps): React.JSX.Element => {
+  const { t } = useTranslation();
   const [historyExpanded, setHistoryExpanded] = useState(false);
   const { isMobileSheet } = usePlaylistSheet();
   const [isResizing, setIsResizing] = useState(false);
@@ -182,7 +184,7 @@ export const PlaylistSidebar = ({
         {isMobileSheet ? (
           /* Mobile sheet: title only, no collapse toggle */
           <div className="flex justify-between items-center p-6 pb-2">
-            <h2 className="text-[13px] font-medium text-ink uppercase tracking-[0.18em]">Playlist</h2>
+            <h2 className="text-[13px] font-medium text-ink uppercase tracking-[0.18em]">{t('playlist.title')}</h2>
           </div>
         ) : (
           /* Desktop: collapse toggle button */
@@ -191,7 +193,7 @@ export const PlaylistSidebar = ({
             <button
               onClick={toggleCollapse}
               className="p-2 rounded-xl hover:bg-chip text-ink-3 hover:text-ink transition-all duration-300 group focus:outline-none focus:ring-0"
-              title={effectiveCollapsed ? "Expand Playlist" : "Collapse Playlist"}
+              title={effectiveCollapsed ? t('playlist.expand') : t('playlist.collapse')}
             >
               {effectiveCollapsed ? (
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -224,7 +226,7 @@ export const PlaylistSidebar = ({
                     <svg className={`w-3 h-3 text-ink-3 transition-transform ${historyExpanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
                     </svg>
-                    <h3 className="text-[10px] font-medium text-ink-3 uppercase tracking-widest">History</h3>
+                    <h3 className="text-[10px] font-medium text-ink-3 uppercase tracking-widest">{t('playlist.history')}</h3>
                     <span className="text-[10px] text-ink-3">{formattedHistory.length}</span>
                   </button>
                   {historyExpanded && (
@@ -258,7 +260,7 @@ export const PlaylistSidebar = ({
                   collapsed (no fade, the user explicitly didn't want it
                   cross-fading with the pill). */}
               {nowPlaying && !effectiveCollapsed && (
-                <h3 className="text-[10px] font-medium text-ink-3 uppercase tracking-widest px-2 mb-2">Now Playing</h3>
+                <h3 className="text-[10px] font-medium text-ink-3 uppercase tracking-widest px-2 mb-2">{t('playlist.nowPlaying')}</h3>
               )}
 
               {/* Now Playing pill — cover size + padding morph; text container
@@ -290,7 +292,7 @@ export const PlaylistSidebar = ({
 
               {/* Up Next header — snap visible / hidden, no fade. */}
               {upNext.length > 0 && !effectiveCollapsed && (
-                <h3 className="text-[10px] font-medium text-ink-3 uppercase tracking-widest px-2 mt-3 mb-2">Up Next</h3>
+                <h3 className="text-[10px] font-medium text-ink-3 uppercase tracking-widest px-2 mt-3 mb-2">{t('playlist.upNext')}</h3>
               )}
 
               {/* Up Next items — each cover morphs in size; rows lose their

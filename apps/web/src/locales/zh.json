@@ -1,0 +1,99 @@
+{
+  "common": {
+    "appName": "Playheads",
+    "loading": "加载中...",
+    "retry": "重试",
+    "cancel": "取消",
+    "confirm": "确认",
+    "delete": "删除",
+    "rename": "重命名",
+    "pin": "置顶",
+    "unpin": "取消置顶",
+    "settings": "设置",
+    "logout": "退出登录"
+  },
+  "nav": {
+    "newChat": "New Chat",
+    "playheads": "Playheads",
+    "openMenu": "打开菜单"
+  },
+  "discovery": {
+    "title": "听点啥？",
+    "subtitle": "说一句你想听的，或者从下面选个开始。",
+    "recent": "Recent",
+    "trySomething": "试试这些",
+    "failedToStart": "无法开启对话",
+    "imagePlaceholderMessage": "看下这张图",
+    "trackCount_one": "{{count}} 首",
+    "trackCount_other": "{{count}} 首"
+  },
+  "moods": {
+    "focus": { "label": "专注", "prompt": "给我一些适合专注工作的歌" },
+    "sad": { "label": "伤心", "prompt": "想听点伤感的歌" },
+    "high_energy": { "label": "高能", "prompt": "放点高能炸场的" },
+    "chill": { "label": "放空", "prompt": "想听点放松发呆的" },
+    "surprise": { "label": "惊喜我", "prompt": "随便推荐点我可能没听过的好歌" },
+    "workout": { "label": "健身", "prompt": "健身时听的歌" },
+    "sleep": { "label": "助眠", "prompt": "帮我入睡的歌" }
+  },
+  "chatInput": {
+    "startVibe": "Start a vibe...",
+    "askDJ": "Ask the DJ...",
+    "pushToInterrupt": "Push to Interrupt...",
+    "uploadImage": "上传图片",
+    "send": "发送",
+    "voice": "语音",
+    "voiceTip": "短按口述 · 长按语音对话"
+  },
+  "playlist": {
+    "title": "PLAYLIST",
+    "nowPlaying": "Now Playing",
+    "upNext": "Up Next",
+    "history": "History",
+    "expand": "展开列表",
+    "collapse": "收起列表",
+    "resize": "拖动调整宽度"
+  },
+  "chat": {
+    "connectAppleMusic": "连接 Apple Music 听全曲",
+    "viewTranscript": "查看历史消息",
+    "backToPlayer": "回到播放器",
+    "chatFailed": "对话出错",
+    "uploadFailed": "上传失败"
+  },
+  "settings": {
+    "title": "设置",
+    "appearance": "外观",
+    "language": "语言",
+    "languageZh": "中文",
+    "languageEn": "English",
+    "appleMusic": "Apple Music",
+    "connect": "连接",
+    "disconnect": "断开",
+    "connected": "已连接",
+    "account": "账户"
+  },
+  "auth": {
+    "signIn": "登录",
+    "signUp": "注册",
+    "email": "邮箱",
+    "password": "密码",
+    "continueWith": "使用 {{provider}} 登录",
+    "or": "或",
+    "welcome": "欢迎回来",
+    "createAccount": "创建账户",
+    "tagline": "回到音乐",
+    "emailPlaceholder": "你的邮箱",
+    "signInWithEmail": "用邮箱登录",
+    "sendingMagicLink": "发送登录链接...",
+    "continueWithApple": "用 Apple 继续",
+    "continueWithGoogle": "用 Google 继续"
+  },
+  "waitlist": {
+    "title": "你在候补名单上",
+    "subtitlePrefix": "我们正在分批开放。到你的时候会通过邮箱",
+    "subtitleSuffix": "通知你。",
+    "checkAgain": "再看看",
+    "approved": "通过了！欢迎进入。"
+  }
+}
