@@ -147,7 +147,7 @@ export const PlaylistSidebar = ({
   return (
     <div
       ref={sidebarRef}
-      className={`h-full flex flex-col pt-3 pr-3 relative ${isResizing ? '' : 'transition-all duration-500 ease-spring'}`}
+      className={`h-full flex flex-col pt-3 pr-3 pl-3 relative ${isResizing ? '' : 'transition-all duration-500 ease-spring'}`}
       style={isMobileSheet ? { width: '100%' } : { width: `${sidebarWidth}px` }}
     >
       {/* Resize Handle - Left edge (hidden in mobile sheet) */}
