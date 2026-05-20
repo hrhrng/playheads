@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 import type { Conversation } from '../types/global.d.ts';
 
 interface ConversationItemProps {
@@ -21,6 +22,7 @@ export const ConversationItem = ({
   onRename,
   onDelete,
 }: ConversationItemProps): React.JSX.Element => {
+  const { t } = useTranslation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState('');
@@ -114,7 +116,7 @@ export const ConversationItem = ({
               startRename();
             }}
           >
-            {conv.title || 'New Conversation'}
+            {conv.title || t('common.newConversation')}
           </span>
         )}
       </button>
@@ -172,7 +174,7 @@ export const ConversationItem = ({
             <svg className="w-4 h-4" fill={conv.is_pinned ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
             </svg>
-            {conv.is_pinned ? 'Unpin chat' : 'Pin chat'}
+            {conv.is_pinned ? t('common.unpinChat') : t('common.pinChat')}
           </button>
           <button
             onClick={(e) => {
@@ -185,7 +187,7 @@ export const ConversationItem = ({
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
             </svg>
-            Rename
+            {t('common.rename')}
           </button>
           <button
             onClick={(e) => {
@@ -199,7 +201,7 @@ export const ConversationItem = ({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
                 d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
             </svg>
-            Delete
+            {t('common.delete')}
           </button>
         </div>,
         document.body,

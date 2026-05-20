@@ -4,6 +4,7 @@
  */
 
 import { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface DeleteConfirmDialogProps {
   /** Whether the dialog is currently open */
@@ -30,6 +31,7 @@ export const DeleteConfirmDialog = ({
   onCancel,
   conversationTitle
 }: DeleteConfirmDialogProps): React.JSX.Element | null => {
+  const { t } = useTranslation();
   // Handle keyboard shortcuts
   useEffect(() => {
     if (!isOpen) return;
@@ -92,17 +94,17 @@ export const DeleteConfirmDialog = ({
 
         {/* Title */}
         <h3 className="text-xl font-display font-medium text-center text-ink mb-2">
-          Delete Conversation?
+          {t('deleteDialog.title')}
         </h3>
 
         {/* Description */}
         <p className="text-center text-ink-2 text-sm mb-6">
           {conversationTitle ? (
             <>
-              Are you sure you want to delete <span className="font-medium text-ink">"{conversationTitle}"</span>? This action cannot be undone.
+              {t('deleteDialog.descriptionNamedPrefix')} <span className="font-medium text-ink">"{conversationTitle}"</span>{t('deleteDialog.descriptionNamedSuffix')}
             </>
           ) : (
-            'Are you sure you want to delete this conversation? This action cannot be undone.'
+            t('deleteDialog.descriptionUnnamed')
           )}
         </p>
 
@@ -113,7 +115,7 @@ export const DeleteConfirmDialog = ({
             onClick={onCancel}
             className="flex-1 px-4 py-2.5 rounded-full font-medium text-ink bg-chip hover:bg-chip-2 transition-all active:scale-95"
           >
-            Cancel
+            {t('common.cancel')}
           </button>
 
           {/* Delete Button */}
@@ -121,7 +123,7 @@ export const DeleteConfirmDialog = ({
             onClick={onConfirm}
             className="flex-1 px-4 py-2.5 rounded-full font-medium text-white bg-red-500 hover:bg-red-600 transition-all active:scale-95"
           >
-            Delete
+            {t('common.delete')}
           </button>
         </div>
 
@@ -129,11 +131,11 @@ export const DeleteConfirmDialog = ({
         <div className="mt-4 pt-4 hairline-t flex items-center justify-center gap-4 text-xs text-ink-3">
           <div className="flex items-center gap-1.5">
             <kbd className="px-2 py-0.5 bg-chip rounded text-[10px] font-mono">ESC</kbd>
-            <span>Cancel</span>
+            <span>{t('deleteDialog.hintCancel')}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <kbd className="px-2 py-0.5 bg-chip rounded text-[10px] font-mono">ENTER</kbd>
-            <span>Delete</span>
+            <span>{t('deleteDialog.hintDelete')}</span>
           </div>
         </div>
       </div>

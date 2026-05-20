@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -10,10 +11,10 @@ interface SettingsModalProps {
 
 type Tab = 'general' | 'integrations';
 
-const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
+const tabs: { id: Tab; labelKey: string; icon: React.ReactNode }[] = [
   {
     id: 'general',
-    label: 'General',
+    labelKey: 'settings.general',
     icon: (
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="12" r="3" />
@@ -23,7 +24,7 @@ const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
   },
   {
     id: 'integrations',
-    label: 'Integrations',
+    labelKey: 'settings.integrations',
     icon: (
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 2L2 7l10 5 10-5-10-5z" />
@@ -35,27 +36,32 @@ const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
 ];
 
 function GeneralTab() {
+  const { t, i18n } = useTranslation();
+  const currentLang = i18n.resolvedLanguage === 'zh' ? 'zh' : 'en';
   return (
     <div>
-      <h2 className="text-lg font-display font-medium text-ink mb-6">General</h2>
+      <h2 className="text-lg font-display font-medium text-ink mb-6">{t('settings.general')}</h2>
       <div className="space-y-0 divide-y divide-rule">
         {/* Appearance */}
         <div className="flex items-center justify-between py-4">
-          <span className="text-sm text-ink">Appearance</span>
+          <span className="text-sm text-ink">{t('settings.appearance')}</span>
           <select className="text-sm text-ink-2 bg-transparent hairline rounded-full px-3 py-1.5 cursor-pointer hover:text-ink transition-colors outline-none">
-            <option>System</option>
-            <option>Light</option>
-            <option>Dark</option>
+            <option>{t('settings.appearanceSystem')}</option>
+            <option>{t('settings.appearanceLight')}</option>
+            <option>{t('settings.appearanceDark')}</option>
           </select>
         </div>
 
         {/* Language */}
         <div className="flex items-center justify-between py-4">
-          <span className="text-sm text-ink">Language</span>
-          <select className="text-sm text-ink-2 bg-transparent hairline rounded-full px-3 py-1.5 cursor-pointer hover:text-ink transition-colors outline-none">
-            <option>Auto-detect</option>
-            <option>English</option>
-            <option>中文</option>
+          <span className="text-sm text-ink">{t('settings.language')}</span>
+          <select
+            className="text-sm text-ink-2 bg-transparent hairline rounded-full px-3 py-1.5 cursor-pointer hover:text-ink transition-colors outline-none"
+            value={currentLang}
+            onChange={(e) => i18n.changeLanguage(e.target.value)}
+          >
+            <option value="en">{t('settings.languageEn')}</option>
+            <option value="zh">{t('settings.languageZh')}</option>
           </select>
         </div>
       </div>
@@ -72,9 +78,10 @@ function IntegrationsTab({
   onConnect?: () => void;
   onDisconnect?: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div>
-      <h2 className="text-lg font-display font-medium text-ink mb-6">Integrations</h2>
+      <h2 className="text-lg font-display font-medium text-ink mb-6">{t('settings.integrations')}</h2>
       <div className="space-y-0 divide-y divide-rule">
         {/* Apple Music */}
         <div className="flex items-center justify-between py-4">
@@ -87,9 +94,9 @@ function IntegrationsTab({
               </svg>
             </div>
             <div>
-              <p className="text-sm font-medium text-ink">Apple Music</p>
+              <p className="text-sm font-medium text-ink">{t('settings.appleMusic')}</p>
               <p className="text-xs text-ink-3">
-                {isAppleMusicAuthorized ? 'Connected' : 'Enable full playback and recommendations'}
+                {isAppleMusicAuthorized ? t('settings.connected') : t('settings.appleMusicHint')}
               </p>
             </div>
           </div>
@@ -98,14 +105,14 @@ function IntegrationsTab({
               onClick={onDisconnect}
               className="text-sm px-4 py-1.5 rounded-full hairline text-ink-2 hover:text-red-500 hover:border-red-500/40 transition-colors"
             >
-              Disconnect
+              {t('settings.disconnect')}
             </button>
           ) : (
             <button
               onClick={onConnect}
               className="text-sm px-4 py-1.5 rounded-full border border-accent text-accent hover:bg-accent hover:text-page transition-colors"
             >
-              Connect
+              {t('settings.connect')}
             </button>
           )}
         </div>
@@ -121,6 +128,7 @@ export function SettingsModal({
   onConnectAppleMusic,
   onDisconnectAppleMusic,
 }: SettingsModalProps) {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<Tab>('general');
 
   // Escape key
@@ -175,7 +183,7 @@ export function SettingsModal({
               }`}
             >
               {tab.icon}
-              {tab.label}
+              {t(tab.labelKey)}
             </button>
           ))}
         </nav>

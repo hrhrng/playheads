@@ -9,8 +9,19 @@
     "rename": "重命名",
     "pin": "置顶",
     "unpin": "取消置顶",
+    "pinChat": "置顶对话",
+    "unpinChat": "取消置顶",
+    "newConversation": "新对话",
     "settings": "设置",
     "logout": "退出登录"
+  },
+  "deleteDialog": {
+    "title": "删除对话？",
+    "descriptionNamedPrefix": "确定要删除",
+    "descriptionNamedSuffix": "吗？此操作无法撤销。",
+    "descriptionUnnamed": "确定要删除这段对话吗？此操作无法撤销。",
+    "hintCancel": "取消",
+    "hintDelete": "删除"
   },
   "nav": {
     "newChat": "New Chat",
@@ -63,11 +74,18 @@
   },
   "settings": {
     "title": "设置",
+    "general": "通用",
+    "integrations": "集成",
     "appearance": "外观",
+    "appearanceSystem": "跟随系统",
+    "appearanceLight": "浅色",
+    "appearanceDark": "深色",
     "language": "语言",
+    "languageAuto": "自动检测",
     "languageZh": "中文",
     "languageEn": "English",
     "appleMusic": "Apple Music",
+    "appleMusicHint": "开启全曲播放和推荐",
     "connect": "连接",
     "disconnect": "断开",
     "connected": "已连接",
