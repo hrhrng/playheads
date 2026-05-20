@@ -23,6 +23,11 @@ interface PlaylistSidebarProps {
   onPlayTrack?: (index: number) => void;
   /** Callback when a history track is clicked */
   onPlayFromHistory?: (historyIndex: number) => void;
+  /** Active chat session — when set, the Topic tab fetches that
+   *  conversation's persisted playlist (conversation.playlist). */
+  sessionId?: string | null;
+  /** Auth user id, needed by the /api/conversations/{id} endpoint. */
+  userId?: string | null;
   /** Whether the sidebar is collapsed */
   collapsed: boolean;
   /** Toggle collapse state */
@@ -52,6 +57,8 @@ export const PlaylistSidebar = ({
   history: historyTracks = [],
   onPlayTrack,
   onPlayFromHistory,
+  sessionId,
+  userId,
   collapsed,
   toggleCollapse,
   showQueue = true,
@@ -65,6 +72,32 @@ export const PlaylistSidebar = ({
   const sidebarRef = useRef<HTMLDivElement>(null);
   const startX = useRef(0);
   const startWidth = useRef(width);
+
+  // Tab state — Queue (global usePlayQueue) vs Topic (conversation.playlist).
+  // Topic tab is only meaningful inside an active chat session.
+  const [activeTab, setActiveTab] = useState<'queue' | 'topic'>('queue');
+  const [topicTracks, setTopicTracks] = useState<UnifiedTrack[]>([]);
+
+  useEffect(() => {
+    if (!sessionId || !userId) {
+      setTopicTracks([]);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/conversations/${sessionId}?user_id=${userId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { playlist?: UnifiedTrack[] } | null) => {
+        if (cancelled || !data?.playlist) return;
+        setTopicTracks(data.playlist.filter((t): t is UnifiedTrack => !!t?.id));
+      })
+      .catch((e) => console.warn('[PlaylistSidebar] topic fetch failed:', e));
+    return () => { cancelled = true; };
+  }, [sessionId, userId]);
+
+  // If we leave a session entirely, snap back to Queue tab.
+  useEffect(() => {
+    if (!sessionId && activeTab === 'topic') setActiveTab('queue');
+  }, [sessionId, activeTab]);
 
   // Handle resize start
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -187,9 +220,37 @@ export const PlaylistSidebar = ({
             <h2 className="text-[13px] font-medium text-ink uppercase tracking-[0.18em]">{t('playlist.title')}</h2>
           </div>
         ) : (
-          /* Desktop: collapse toggle button */
+          /* Desktop: tab switcher (when expanded and inside a session) or
+              plain title; collapse button on the right. */
           <div className={`flex ${effectiveCollapsed ? 'justify-center py-6' : 'justify-between p-6 pb-2'} items-center`}>
-            {!effectiveCollapsed && <h2 className="text-[13px] font-medium text-ink uppercase tracking-[0.18em]">Playlist</h2>}
+            {!effectiveCollapsed && (
+              sessionId ? (
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setActiveTab('queue')}
+                    className={`px-2.5 py-1 rounded-full text-[11px] font-medium uppercase tracking-[0.16em] transition-colors ${
+                      activeTab === 'queue'
+                        ? 'bg-chip-2 text-ink'
+                        : 'text-ink-3 hover:text-ink'
+                    }`}
+                  >
+                    {t('playlist.tabQueue')}
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('topic')}
+                    className={`px-2.5 py-1 rounded-full text-[11px] font-medium uppercase tracking-[0.16em] transition-colors ${
+                      activeTab === 'topic'
+                        ? 'bg-chip-2 text-ink'
+                        : 'text-ink-3 hover:text-ink'
+                    }`}
+                  >
+                    {t('playlist.tabTopic')}
+                  </button>
+                </div>
+              ) : (
+                <h2 className="text-[13px] font-medium text-ink uppercase tracking-[0.18em]">{t('playlist.title')}</h2>
+              )
+            )}
             <button
               onClick={toggleCollapse}
               className="p-2 rounded-xl hover:bg-chip text-ink-3 hover:text-ink transition-all duration-300 group focus:outline-none focus:ring-0"
@@ -208,11 +269,46 @@ export const PlaylistSidebar = ({
           </div>
         )}
 
+        {/* Topic tab content — current chat's persisted playlist
+            (conversation.playlist). Only renders when expanded and the
+            Topic tab is active; queue tab keeps the existing tree below. */}
+        {!effectiveCollapsed && sessionId && activeTab === 'topic' && (
+          <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-4">
+            {topicTracks.length === 0 ? (
+              <div className="text-[12px] text-ink-3 leading-relaxed px-2 py-6">
+                {t('playlist.topicEmpty')}
+              </div>
+            ) : (
+              <div className="space-y-1">
+                {topicTracks.map((track, i) => (
+                  <div
+                    key={`topic-${track.id}-${i}`}
+                    className="flex items-center gap-3 p-2 rounded-2xl hover:bg-chip cursor-pointer group transition-colors"
+                  >
+                    <div className="w-10 h-10 rounded-card bg-chip overflow-hidden relative shrink-0">
+                      <img
+                        src={track.artworkUrl?.replace('{w}', '100').replace('{h}', '100')}
+                        alt={track.name}
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[13px] font-medium font-display text-ink truncate leading-snug text-left">{track.name || 'Unknown'}</div>
+                      <div className="text-[11px] text-ink-3 truncate text-left">{track.artist || 'Unknown Artist'}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Content — single unified tree that morphs between collapsed and
             expanded states. Cover sizes, padding, text visibility all
             animate via CSS transitions so users see real motion, not a
-            cross-fade. */}
-        {showQueue && (
+            cross-fade. Hidden when Topic tab is active. */}
+        {showQueue && (effectiveCollapsed || activeTab === 'queue' || !sessionId) && (
           <div className="flex-1 min-h-0 overflow-y-auto">
             {/* History — entirely hidden in collapsed; max-h animation gives
                 a soft height collapse. */}

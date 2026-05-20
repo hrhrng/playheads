@@ -63,7 +63,10 @@
     "history": "History",
     "expand": "展开列表",
     "collapse": "收起列表",
-    "resize": "拖动调整宽度"
+    "resize": "拖动调整宽度",
+    "tabQueue": "队列",
+    "tabTopic": "本话题",
+    "topicEmpty": "这段对话还没攒出歌单——跟它聊聊喜欢的风格。"
   },
   "chat": {
     "connectAppleMusic": "连接 Apple Music 听全曲",

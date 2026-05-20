@@ -63,7 +63,10 @@
     "history": "History",
     "expand": "Expand playlist",
     "collapse": "Collapse playlist",
-    "resize": "Drag to resize"
+    "resize": "Drag to resize",
+    "tabQueue": "Queue",
+    "tabTopic": "Topic",
+    "topicEmpty": "This conversation hasn't built up a playlist yet — chat about a vibe you like."
   },
   "chat": {
     "connectAppleMusic": "Connect Apple Music for full playback",

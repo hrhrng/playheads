@@ -198,6 +198,8 @@ export function ChatRoute({
           history={queue.history}
           onPlayTrack={(index) => queue.playAtIndex(index)}
           onPlayFromHistory={(index) => queue.playFromHistory(index)}
+          sessionId={sessionId}
+          userId={session?.user.id || null}
           collapsed={collapsed}
           toggleCollapse={toggleCollapse}
           width={width}
