@@ -327,18 +327,24 @@ export const ChatInterface = ({
   // Drains the local `attachments` queue into FileUIParts. Each attachment's
   // remoteUrl is the upload server's URL of record — public r2.dev in
   // preview, gateway path in prod — both reachable by external LLM providers.
-  const handleSendMessage = useCallback(async (text?: string, skipAddingUserMessage?: boolean) => {
+  // External `extraFiles` (e.g. from useInitialMessage's route-state) are
+  // merged so cold-start attachments survive the navigation to /chat/{id}.
+  const handleSendMessage = useCallback(async (
+    text?: string,
+    skipAddingUserMessage?: boolean,
+    extraFiles?: Array<{ type: 'file'; mediaType: string; url: string; filename?: string }>,
+  ) => {
     const doneAttachments = attachments.filter((a) => a.status === 'done' && a.remoteUrl);
-    const files = doneAttachments.length > 0
-      ? doneAttachments.map((a) => ({
-          type: 'file' as const,
-          mediaType: a.file.type,
-          url: new URL(a.remoteUrl!, window.location.origin).toString(),
-          filename: a.file.name,
-        }))
-      : undefined;
+    const localFiles = doneAttachments.map((a) => ({
+      type: 'file' as const,
+      mediaType: a.file.type,
+      url: new URL(a.remoteUrl!, window.location.origin).toString(),
+      filename: a.file.name,
+    }));
+    const merged = [...localFiles, ...(extraFiles ?? [])];
+    const files = merged.length > 0 ? merged : undefined;
     await sendMessage(text, skipAddingUserMessage, files);
-    if (files) setAttachments([]);
+    if (localFiles.length > 0) setAttachments([]);
   }, [sendMessage, attachments]);
 
   // Auto-send initial message from navigation state

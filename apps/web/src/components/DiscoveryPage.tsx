@@ -12,6 +12,13 @@ import { ChatInput } from './chat/ChatInput';
 import { API_BASE } from '../config/api';
 import type { Conversation } from '../types';
 
+type Attachment = {
+  file: File;
+  status: 'uploading' | 'done' | 'error';
+  remoteUrl?: string;
+  error?: string;
+};
+
 interface DiscoveryPageProps {
   conversations: Conversation[];
   userId: string | null;
@@ -49,12 +56,59 @@ export function DiscoveryPage({ conversations, userId, onSessionCreated }: Disco
   const navigate = useNavigate();
   const [input, setInput] = useState('');
   const [isCreating, setIsCreating] = useState(false);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+
+  // Mirror ChatInterface's upload pipeline so attachments behave the same
+  // whether the user attaches from cold start or inside an active chat.
+  const uploadFile = useCallback(async (file: File): Promise<string> => {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetch(`${API_BASE}/uploads/image`, { method: 'POST', body: form });
+    if (!res.ok) throw new Error(`upload failed ${res.status}`);
+    const json = (await res.json()) as { url: string };
+    return json.url;
+  }, []);
+
+  const handleAttach = useCallback((files: File[]) => {
+    const newOnes: Attachment[] = files.map((f) => ({ file: f, status: 'uploading' as const }));
+    setAttachments((prev) => [...prev, ...newOnes]);
+    newOnes.forEach((att) => {
+      uploadFile(att.file).then(
+        (url) => {
+          setAttachments((prev) =>
+            prev.map((a) => (a.file === att.file ? { ...a, status: 'done', remoteUrl: url } : a)),
+          );
+        },
+        (err: Error) => {
+          console.error('[DiscoveryPage upload]', err);
+          setAttachments((prev) =>
+            prev.map((a) => (a.file === att.file ? { ...a, status: 'error', error: err.message } : a)),
+          );
+        },
+      );
+    });
+  }, [uploadFile]);
+
+  const handleRemoveAttachment = useCallback((index: number) => {
+    setAttachments((prev) => prev.filter((_, i) => i !== index));
+  }, []);
 
   const startNewTopic = useCallback(
     async (initialMessage?: string) => {
       if (!userId || isCreating) return;
       setIsCreating(true);
       try {
+        // Resolve attachment URLs to absolute FileUIPart objects.
+        const doneAttachments = attachments.filter((a) => a.status === 'done' && a.remoteUrl);
+        const initialFiles = doneAttachments.length > 0
+          ? doneAttachments.map((a) => ({
+              type: 'file' as const,
+              mediaType: a.file.type,
+              url: new URL(a.remoteUrl!, window.location.origin).toString(),
+              filename: a.file.name,
+            }))
+          : undefined;
+
         const res = await fetch(`${API_BASE}/session/create`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -65,9 +119,11 @@ export function DiscoveryPage({ conversations, userId, onSessionCreated }: Disco
         onSessionCreated?.();
         navigate(`/chat/${session_id}`, {
           replace: true,
-          state: initialMessage
-            ? { isNewlyCreated: true, initialMessage }
-            : { isNewlyCreated: true },
+          state: {
+            isNewlyCreated: true,
+            ...(initialMessage ? { initialMessage } : {}),
+            ...(initialFiles ? { initialFiles } : {}),
+          },
         });
       } catch (e) {
         console.error('[DiscoveryPage] new topic failed:', e);
@@ -76,14 +132,15 @@ export function DiscoveryPage({ conversations, userId, onSessionCreated }: Disco
         setIsCreating(false);
       }
     },
-    [userId, isCreating, navigate, onSessionCreated],
+    [userId, isCreating, attachments, navigate, onSessionCreated],
   );
 
   const handleSend = useCallback(() => {
     const trimmed = input.trim();
-    if (!trimmed) return;
-    startNewTopic(trimmed);
-  }, [input, startNewTopic]);
+    const hasAttachments = attachments.some((a) => a.status === 'done');
+    if (!trimmed && !hasAttachments) return;
+    startNewTopic(trimmed || '看下这张图');
+  }, [input, attachments, startNewTopic]);
 
   const recent = useMemo(() => conversations.slice(0, 8), [conversations]);
 
@@ -163,6 +220,9 @@ export function DiscoveryPage({ conversations, userId, onSessionCreated }: Disco
           isPlaying={false}
           onInputChange={setInput}
           onSend={handleSend}
+          onAttach={handleAttach}
+          attachments={attachments.map((a) => a.file)}
+          onRemoveAttachment={handleRemoveAttachment}
         />
       </div>
     </div>
