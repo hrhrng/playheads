@@ -28,11 +28,14 @@ interface PlaylistSidebarProps {
   sessionId?: string | null;
   /** Auth user id, needed by the /api/conversations/{id} endpoint. */
   userId?: string | null;
-  /** Topic-tab actions. Both take a single track from
-   *  conversation.playlist — play replaces what's playing now, add
-   *  appends to the up-next end. */
+  /** Topic-tab actions. Per-track variants take one track from
+   *  conversation.playlist; the *Tracks variants operate on the whole
+   *  list ("Play all" / "Add all"). Play inserts at head & skips,
+   *  Add appends to the up-next end. */
   onPlayTopicTrack?: (track: UnifiedTrack) => void;
   onAddTopicTrack?: (track: UnifiedTrack) => void;
+  onPlayTopicTracks?: (tracks: UnifiedTrack[]) => void;
+  onAddTopicTracks?: (tracks: UnifiedTrack[]) => void;
   /** Whether the sidebar is collapsed */
   collapsed: boolean;
   /** Toggle collapse state */
@@ -66,6 +69,8 @@ export const PlaylistSidebar = ({
   userId,
   onPlayTopicTrack,
   onAddTopicTrack,
+  onPlayTopicTracks,
+  onAddTopicTracks,
   collapsed,
   toggleCollapse,
   showQueue = true,
@@ -286,7 +291,33 @@ export const PlaylistSidebar = ({
                 {t('playlist.topicEmpty')}
               </div>
             ) : (
-              <div className="space-y-1">
+              <>
+                {/* Whole-playlist actions — same shape as the per-track
+                    buttons but operate on the full topic playlist. */}
+                <div className="flex items-center gap-2 px-2 pt-2 pb-3">
+                  <button
+                    type="button"
+                    onClick={() => onPlayTopicTracks?.(topicTracks)}
+                    className="flex-1 h-9 rounded-full bg-ink text-page text-[12px] font-medium flex items-center justify-center gap-1.5 hover:opacity-90 transition-opacity"
+                  >
+                    <svg className="w-3 h-3 ml-0.5" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M8 5v14l11-7z" />
+                    </svg>
+                    {t('playlist.playAll')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onAddTopicTracks?.(topicTracks)}
+                    className="flex-1 h-9 rounded-full hairline text-ink-2 text-[12px] font-medium flex items-center justify-center gap-1.5 hover:text-ink hover:bg-chip transition-colors"
+                  >
+                    <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="12" y1="5" x2="12" y2="19" />
+                      <line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
+                    {t('playlist.addAll')}
+                  </button>
+                </div>
+                <div className="space-y-1">
                 {topicTracks.map((track, i) => (
                   <div
                     key={`topic-${track.id}-${i}`}
@@ -331,7 +362,8 @@ export const PlaylistSidebar = ({
                     </div>
                   </div>
                 ))}
-              </div>
+                </div>
+              </>
             )}
           </div>
         )}
