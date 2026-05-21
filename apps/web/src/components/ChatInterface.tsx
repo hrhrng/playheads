@@ -17,7 +17,6 @@ import { useChat } from '../hooks/useChat';
 import { useLyrics } from '../hooks/useLyrics';
 import { useInitialMessage } from '../hooks/useChatHelpers';
 import { usePlaylistSheet } from '../contexts/PlaylistSheetContext';
-import { API_BASE } from '../config/api';
 import type { PlaybackTime } from '../types';
 import type { UnifiedTrack } from '../providers/types';
 import type { MusicActions, QueueOperations } from '../hooks/useAgentChatAdapter';
@@ -217,28 +216,6 @@ export const ChatInterface = ({
     // Only on mount/session change — NOT on hasHistory change (would yank user back mid-scroll)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
-
-  // Topic playlist restore: when entering a chat, fetch its saved playlist
-  // and prime the queue so the music history of that conversation is back.
-  // Only loads when the current queue is empty — we don't yank tracks away
-  // from a user mid-play.
-  useEffect(() => {
-    if (!sessionId || !userId) return;
-    if ((queueTracks?.length || 0) > 0) return;
-    let cancelled = false;
-    fetch(`${API_BASE}/conversations/${sessionId}?user_id=${userId}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data: { playlist?: UnifiedTrack[] } | null) => {
-        if (cancelled || !data?.playlist?.length) return;
-        const tracks = data.playlist.filter((t): t is UnifiedTrack => !!t?.id);
-        if (tracks.length === 0) return;
-        queueOps?.addTracks?.(tracks);
-      })
-      .catch((e) => console.warn('[topic] playlist load failed:', e));
-    return () => { cancelled = true; };
-    // queueTracks intentionally excluded — we only check it on session change.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId, userId]);
 
   // Detect scroll settle → fire skip if landed on prev/next card
   useEffect(() => {
