@@ -43,6 +43,10 @@ interface Env {
   GOOGLE_CLIENT_ID: string;
   GOOGLE_CLIENT_SECRET: string;
   RESEND_API_KEY: string;
+
+  /** Workers KV for app-level config (waitlist:bypass, etc). Flip live
+   *  via `wrangler kv key put --binding=CONFIG_KV waitlist:bypass true`. */
+  CONFIG_KV: KVNamespace;
 }
 
 function laneProxy(
@@ -87,6 +91,18 @@ export default {
       const db = drizzle(env.DB);
       const auth = await createAuthWithApple(db, env);
       return auth.handler(request);
+    }
+
+    // /api/waitlist/config → global waitlist gate config (frontend reads
+    // this once to know whether the waitlist is currently bypassed).
+    // Value comes from Workers KV so it can be flipped live without a
+    // redeploy. Default closed if the key is missing.
+    if (url.pathname === "/api/waitlist/config" && request.method === "GET") {
+      const raw = await env.CONFIG_KV.get("waitlist:bypass");
+      return Response.json(
+        { bypass: raw === "true" },
+        { headers: { "cache-control": "public, max-age=30" } },
+      );
     }
 
     // /api/waitlist → landing worker (waitlist API)

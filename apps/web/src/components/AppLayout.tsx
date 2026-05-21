@@ -255,7 +255,7 @@ export const AppLayout = ({
 
   return (
     <PlaylistSheetContext.Provider value={{ openPlaylist: () => { onOpenPlaylist?.(); setMobilePlaylistOpen(true); }, hasPlaylist, isMobileSheet: false }}>
-      <div className="flex flex-col h-screen font-sans text-ink overflow-hidden">
+      <div className="flex flex-col h-[100dvh] font-sans text-ink overflow-hidden overscroll-none">
 
         {/* Mobile Top Bar */}
         <div className="flex md:hidden items-center h-14 px-2 shrink-0 hairline-b">

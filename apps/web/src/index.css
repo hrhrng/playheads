@@ -42,6 +42,16 @@
  * pseudo-element so the colour transition is smooth and isolated from
  * the page chrome above. `--has-mood` flips opacity 0 ↔ 1.
  * ------------------------------------------------------------- */
+/* Lock the document so only designated inner containers scroll
+ * (chat messages, the swipe-snap feed). Without this, scroll-chain on
+ * the snap container can bubble up and drift the whole page, dragging
+ * the sidebar / chat input with it. */
+html, body, #root {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 body {
   @apply text-ink antialiased;
   font-family: "Noto Serif SC", -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", serif;
