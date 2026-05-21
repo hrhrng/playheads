@@ -243,11 +243,16 @@ function IntegrationsTab({
         <div className="flex items-center justify-between py-4">
           <div className="flex items-center gap-3">
             {/* Official Apple Music app icon (from Apple mzstatic CDN — App Store
-                id 1108187390). PNG lives in apps/web/public/. */}
+                id 1108187390). PNG lives in apps/web/public/.
+                The PNG is RGB-no-alpha (square red corners), so we mask the
+                iOS squircle with border-radius. iOS uses ~22.37% of side for
+                its app-icon corner — using `rounded-[22%]` so it scales right
+                regardless of w/h. (rounded-card = 10px gave ~28% on w-9 and
+                looked too bubbly next to the real squircle.) */}
             <img
               src="/apple-music-icon.png"
               alt="Apple Music"
-              className="w-9 h-9 rounded-card shrink-0 shadow-sm"
+              className="w-9 h-9 rounded-[22%] shrink-0 shadow-sm"
             />
             <div>
               <p className="text-sm font-medium text-ink">{t('settings.appleMusic')}</p>
