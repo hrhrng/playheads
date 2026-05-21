@@ -202,6 +202,8 @@ export function ChatRoute({
           onPlayFromHistory={(index) => queue.playFromHistory(index)}
           sessionId={sessionId}
           userId={session?.user.id || null}
+          onPlayTopicTrack={(track) => queue.playTracks([track])}
+          onAddTopicTrack={(track) => queue.addTracks([track])}
           collapsed={collapsed}
           toggleCollapse={toggleCollapse}
           width={width}

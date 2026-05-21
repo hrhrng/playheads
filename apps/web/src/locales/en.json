@@ -66,7 +66,9 @@
     "resize": "Drag to resize",
     "tabQueue": "Queue",
     "tabTopic": "Topic",
-    "topicEmpty": "This conversation hasn't built up a playlist yet — chat about a vibe you like."
+    "topicEmpty": "This conversation hasn't built up a playlist yet — chat about a vibe you like.",
+    "playNow": "Play now",
+    "addToQueue": "Add to queue"
   },
   "lyrics": {
     "tapToView": "Lyrics available · tap to view",

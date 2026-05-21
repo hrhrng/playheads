@@ -28,6 +28,11 @@ interface PlaylistSidebarProps {
   sessionId?: string | null;
   /** Auth user id, needed by the /api/conversations/{id} endpoint. */
   userId?: string | null;
+  /** Topic-tab actions. Both take a single track from
+   *  conversation.playlist — play replaces what's playing now, add
+   *  appends to the up-next end. */
+  onPlayTopicTrack?: (track: UnifiedTrack) => void;
+  onAddTopicTrack?: (track: UnifiedTrack) => void;
   /** Whether the sidebar is collapsed */
   collapsed: boolean;
   /** Toggle collapse state */
@@ -59,6 +64,8 @@ export const PlaylistSidebar = ({
   onPlayFromHistory,
   sessionId,
   userId,
+  onPlayTopicTrack,
+  onAddTopicTrack,
   collapsed,
   toggleCollapse,
   showQueue = true,
@@ -283,7 +290,7 @@ export const PlaylistSidebar = ({
                 {topicTracks.map((track, i) => (
                   <div
                     key={`topic-${track.id}-${i}`}
-                    className="flex items-center gap-3 p-2 rounded-2xl hover:bg-chip cursor-pointer group transition-colors"
+                    className="flex items-center gap-3 p-2 rounded-2xl hover:bg-chip group transition-colors"
                   >
                     <div className="w-10 h-10 rounded-card bg-chip overflow-hidden relative shrink-0">
                       <img
@@ -296,6 +303,31 @@ export const PlaylistSidebar = ({
                     <div className="flex-1 min-w-0">
                       <div className="text-[13px] font-medium font-display text-ink truncate leading-snug text-left">{track.name || 'Unknown'}</div>
                       <div className="text-[11px] text-ink-3 truncate text-left">{track.artist || 'Unknown Artist'}</div>
+                    </div>
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); onPlayTopicTrack?.(track); }}
+                        className="w-7 h-7 rounded-full flex items-center justify-center text-ink-2 hover:text-ink hover:bg-chip-2 transition-colors"
+                        aria-label={t('playlist.playNow')}
+                        title={t('playlist.playNow')}
+                      >
+                        <svg className="w-3.5 h-3.5 ml-0.5" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M8 5v14l11-7z" />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); onAddTopicTrack?.(track); }}
+                        className="w-7 h-7 rounded-full flex items-center justify-center text-ink-2 hover:text-ink hover:bg-chip-2 transition-colors"
+                        aria-label={t('playlist.addToQueue')}
+                        title={t('playlist.addToQueue')}
+                      >
+                        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <line x1="12" y1="5" x2="12" y2="19" />
+                          <line x1="5" y1="12" x2="19" y2="12" />
+                        </svg>
+                      </button>
                     </div>
                   </div>
                 ))}
