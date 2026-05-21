@@ -242,11 +242,9 @@ function IntegrationsTab({
         {/* Apple Music */}
         <div className="flex items-center justify-between py-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-card bg-gradient-to-br from-pink-500 to-red-500 flex items-center justify-center shrink-0">
-              <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M9 18V5l12-2v13" />
-                <circle cx="6" cy="18" r="3" />
-                <circle cx="18" cy="16" r="3" />
+            <div className="w-9 h-9 rounded-card bg-gradient-to-br from-fuchsia-500 via-pink-500 to-rose-500 flex items-center justify-center shrink-0 shadow-sm">
+              <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M18.5 3.04a.5.5 0 00-.6-.49L8.5 4.62a.5.5 0 00-.4.49v10.4a3.6 3.6 0 00-1.6-.37 3.05 3.05 0 100 6.1 3.05 3.05 0 003.05-3.05V8.78l7.4-1.48v6.49a3.6 3.6 0 00-1.6-.37 3.05 3.05 0 100 6.1A3.05 3.05 0 0018.4 16.5l.1-13.46z" />
               </svg>
             </div>
             <div>
@@ -316,8 +314,16 @@ export function SettingsModal({
       {/* Backdrop */}
       <div className="absolute inset-0 bg-black/35 backdrop-blur-sm" onClick={onClose} />
 
-      {/* Dialog */}
-      <div className="relative glass-strong rounded-sheet shadow-glass w-full max-w-2xl h-[480px] flex overflow-hidden animate-scale-in">
+      {/* Dialog. Pin neutral palette so mood-shifted --ink / --accent on the
+          root don't tint Settings text. */}
+      <div
+        className="relative glass-strong rounded-sheet shadow-glass w-full max-w-2xl h-[480px] flex overflow-hidden animate-scale-in"
+        style={{
+          ['--ink' as string]: '216 207 191',
+          ['--accent' as string]: '216 207 191',
+          ['--accent-2' as string]: '180 170 152',
+        }}
+      >
         {/* Close button */}
         <button
           onClick={onClose}
