@@ -68,6 +68,10 @@
     "tabTopic": "本话题",
     "topicEmpty": "这段对话还没攒出歌单——跟它聊聊喜欢的风格。"
   },
+  "lyrics": {
+    "tapToView": "有歌词 · 点击查看",
+    "notAvailable": "暂无歌词"
+  },
   "chat": {
     "connectAppleMusic": "连接 Apple Music 听全曲",
     "viewTranscript": "查看历史消息",

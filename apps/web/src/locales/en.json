@@ -68,6 +68,10 @@
     "tabTopic": "Topic",
     "topicEmpty": "This conversation hasn't built up a playlist yet — chat about a vibe you like."
   },
+  "lyrics": {
+    "tapToView": "Lyrics available · tap to view",
+    "notAvailable": "No lyrics available"
+  },
   "chat": {
     "connectAppleMusic": "Connect Apple Music for full playback",
     "viewTranscript": "View transcript",
