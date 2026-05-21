@@ -264,6 +264,12 @@ export class AppleMusicProvider implements MusicProvider {
           ? this.formatMusicKitTrack(mk.nowPlayingItem)
           : this._playbackState.currentTrack;
         this.setPhase('playing', { currentTrack });
+        // Apply pending restore seek now that playback is truly started
+        // (nowPlayingItem attached). seekTarget is cleared by
+        // playbackTimeDidChange when MusicKit's reported time converges.
+        if (this.seekTarget !== null) {
+          try { this.musicKit?.seekToTime(this.seekTarget); } catch {}
+        }
       } else if (paused) {
         this.clearTransitionTimeout();
         this.setPhase('paused');
@@ -574,20 +580,9 @@ export class AppleMusicProvider implements MusicProvider {
       if (trackId) {
         // startTime is passed directly to setQueue — MusicKit handles seek atomically.
         await this.musicKit.setQueue({ song: trackId, startPlaying: true, startTime } as any);
-      } else if (this.seekTarget !== null && this._playbackState.currentTrack?.id) {
-        // Restore path: see togglePlay() for why we use setQueue+startTime
-        // here instead of play()+seekToTime() (race-free atomic seek).
-        const restoreId = this._playbackState.currentTrack.id;
-        const target = this.seekTarget;
-        this.updateState({
-          playbackTime: {
-            current: target,
-            total: this._playbackState.playbackTime?.total ?? 0,
-          },
-        });
-        await this.musicKit.setQueue({ song: restoreId, startPlaying: true, startTime: target } as any);
       } else {
         await this.musicKit.play();
+        // Restore seek applied by playbackStateDidChange — see togglePlay().
       }
       // Phase transitions to 'playing' via playbackStateDidChange event.
     } catch (e) {
@@ -621,34 +616,12 @@ export class AppleMusicProvider implements MusicProvider {
       } else {
         this.setPhase('buffering');
         this.startTransitionTimeout();
-        // Restore path: if we have a saved seek target (set by
-        // setQueueWithoutPlaying after a refresh), use the atomic
-        // setQueue({song,startTime,startPlaying:true}) instead of
-        // play()+seekToTime(). The latter races — play() can resolve
-        // before nowPlayingItem is attached, in which case seekToTime
-        // is a no-op and MusicKit starts at 0 while our UI stays at
-        // the restored value, mismatching audio vs progress bar.
-        const trackId = this._playbackState.currentTrack?.id;
-        if (this.seekTarget !== null && trackId) {
-          const target = this.seekTarget;
-          // Optimistically reflect the restored position in UI;
-          // playbackTimeDidChange events stay suppressed until time
-          // converges to `target`, so no flicker.
-          this.updateState({
-            playbackTime: {
-              current: target,
-              total: this._playbackState.playbackTime?.total ?? 0,
-            },
-          });
-          await this.musicKit.setQueue({
-            song: trackId,
-            startPlaying: true,
-            startTime: target,
-          } as any);
-        } else {
-          await this.musicKit.play();
-        }
-        // Phase transitions to 'playing' via playbackStateDidChange event.
+        await this.musicKit.play();
+        // Restore seek is applied by playbackStateDidChange when state
+        // flips to 'playing' — that's the earliest moment nowPlayingItem
+        // is guaranteed to be attached. Doing seekToTime() right after
+        // await play() races: play() can resolve before MusicKit has
+        // actually started, leaving seekToTime() a silent no-op.
       }
     } catch (e) {
       this.setPhase(prevPhase); // Revert on failure.
