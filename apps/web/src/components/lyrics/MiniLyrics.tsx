@@ -12,25 +12,17 @@ interface MiniLyricsProps {
 export const MiniLyrics = ({ lyrics, onClick }: MiniLyricsProps) => {
   const { status, lines, currentIndex } = lyrics;
 
-  // Don't render for states with no useful lyrics
-  if (status === 'idle' || status === 'not-found' || status === 'error') return null;
-
-  // Loading placeholder
-  if (status === 'loading') {
-    return (
-      <div className="mt-5 max-w-sm mx-auto flex flex-col items-center gap-2 animate-pulse">
-        <div className="h-4 w-48 bg-chip-2 rounded" />
-        <div className="h-3 w-32 bg-chip rounded" />
-      </div>
-    );
-  }
+  // Stay silent until we actually have lyrics. Showing a skeleton during
+  // `loading` would just flash away when the fetch returns `not-found`
+  // (lyrics aren't guaranteed to exist for every track).
+  if (status !== 'synced' && status !== 'plain') return null;
 
   // Plain lyrics — show a hint
   if (status === 'plain') {
     return (
       <button
         onClick={onClick}
-        className="mt-5 max-w-sm mx-auto block text-center cursor-pointer group"
+        className="mt-5 max-w-sm mx-auto block text-center cursor-pointer group animate-fade-in"
       >
         <span className="text-xs text-ink-3 group-hover:text-ink-2 transition-colors flex items-center justify-center gap-1.5">
           <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -52,7 +44,7 @@ export const MiniLyrics = ({ lyrics, onClick }: MiniLyricsProps) => {
   return (
     <button
       onClick={onClick}
-      className="mt-5 max-w-sm mx-auto block text-center cursor-pointer group w-full"
+      className="mt-5 max-w-sm mx-auto block text-center cursor-pointer group w-full animate-fade-in"
     >
       <div className="space-y-1 overflow-hidden">
         {/* Current line — slides in on change */}
