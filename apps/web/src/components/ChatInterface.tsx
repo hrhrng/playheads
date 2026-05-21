@@ -457,10 +457,13 @@ export const ChatInterface = ({
             </div>
           </div>
 
-          {/* Next track card — only when there's a next track */}
+          {/* Next track card — mirror the current card's wrapper *exactly*
+              (max-w-xl px-6, pb-20) so the cover lands at the same X/Y
+              position. Swipe-to-next then becomes "track info crossfades"
+              instead of "cover suddenly resizes". */}
           {nextTrack && (
-            <div className="h-full shrink-0 snap-start snap-always flex flex-col items-center justify-center pb-36">
-              <div className="relative z-10 w-full max-w-xl px-8 pointer-events-none">
+            <div className="h-full shrink-0 snap-start snap-always flex flex-col items-center justify-center pb-20">
+              <div className="relative z-10 w-full max-w-xl px-6 pointer-events-none">
                 <RecordPlayer
                   currentTrack={nextTrack}
                   isPaused={true}
@@ -468,6 +471,10 @@ export const ChatInterface = ({
                   togglePlay={() => {}}
                   isAppleMusicAuthorized={isAppleMusicAuthorized}
                 />
+                {/* Reserve vertical space that the current-track card uses
+                    for MiniLyrics + seek bar, so the cover sits at the same
+                    Y on both cards (no vertical jump during swipe). */}
+                <div className="h-[120px]" aria-hidden />
               </div>
             </div>
           )}
