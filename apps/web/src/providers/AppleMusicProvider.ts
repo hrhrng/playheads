@@ -574,13 +574,20 @@ export class AppleMusicProvider implements MusicProvider {
       if (trackId) {
         // startTime is passed directly to setQueue — MusicKit handles seek atomically.
         await this.musicKit.setQueue({ song: trackId, startPlaying: true, startTime } as any);
+      } else if (this.seekTarget !== null && this._playbackState.currentTrack?.id) {
+        // Restore path: see togglePlay() for why we use setQueue+startTime
+        // here instead of play()+seekToTime() (race-free atomic seek).
+        const restoreId = this._playbackState.currentTrack.id;
+        const target = this.seekTarget;
+        this.updateState({
+          playbackTime: {
+            current: target,
+            total: this._playbackState.playbackTime?.total ?? 0,
+          },
+        });
+        await this.musicKit.setQueue({ song: restoreId, startPlaying: true, startTime: target } as any);
       } else {
         await this.musicKit.play();
-        if (this.seekTarget !== null) {
-          // Apply restore seek: now that play has started, nowPlayingItem exists.
-          this.musicKit.seekToTime(this.seekTarget);
-          // seekTarget cleared by playbackTimeDidChange when seek lands.
-        }
       }
       // Phase transitions to 'playing' via playbackStateDidChange event.
     } catch (e) {
@@ -614,11 +621,32 @@ export class AppleMusicProvider implements MusicProvider {
       } else {
         this.setPhase('buffering');
         this.startTransitionTimeout();
-        await this.musicKit.play();
-        if (this.seekTarget !== null) {
-          // Apply restore seek now that nowPlayingItem exists.
-          // seekTarget is cleared by playbackTimeDidChange when time converges.
-          this.musicKit.seekToTime(this.seekTarget);
+        // Restore path: if we have a saved seek target (set by
+        // setQueueWithoutPlaying after a refresh), use the atomic
+        // setQueue({song,startTime,startPlaying:true}) instead of
+        // play()+seekToTime(). The latter races — play() can resolve
+        // before nowPlayingItem is attached, in which case seekToTime
+        // is a no-op and MusicKit starts at 0 while our UI stays at
+        // the restored value, mismatching audio vs progress bar.
+        const trackId = this._playbackState.currentTrack?.id;
+        if (this.seekTarget !== null && trackId) {
+          const target = this.seekTarget;
+          // Optimistically reflect the restored position in UI;
+          // playbackTimeDidChange events stay suppressed until time
+          // converges to `target`, so no flicker.
+          this.updateState({
+            playbackTime: {
+              current: target,
+              total: this._playbackState.playbackTime?.total ?? 0,
+            },
+          });
+          await this.musicKit.setQueue({
+            song: trackId,
+            startPlaying: true,
+            startTime: target,
+          } as any);
+        } else {
+          await this.musicKit.play();
         }
         // Phase transitions to 'playing' via playbackStateDidChange event.
       }
