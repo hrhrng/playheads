@@ -119,7 +119,16 @@ function App() {
   // Render
   // ============================================================================
 
-  if (!isDev && (isSessionLoading || (isLoggedIn && isInitializing))) {
+  // Gate the shell until *everything* is settled:
+  //   1. session lookup finishes (avoid flashing login)
+  //   2. MusicKit provider has initialized (isInitializing false)
+  //   3. localStorage queue restore has finished (queue.isRestoring false)
+  //   4. /api/profile bootstrap (covered by isInitializing via provider)
+  // Otherwise the user can click Play before MusicKit has the queue
+  // attached, which leads to "queue cleared", wrong seek position, etc.
+  const stillBooting =
+    isSessionLoading || (isLoggedIn && (isInitializing || queue.isRestoring));
+  if (!isDev && stillBooting) {
     return <LoadingScreen />;
   }
 

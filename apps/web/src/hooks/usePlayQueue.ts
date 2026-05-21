@@ -18,6 +18,11 @@ export interface UsePlayQueueReturn {
   queue: UnifiedTrack[];
   /** Previously played tracks */
   history: UnifiedTrack[];
+  /** True while the initial queue restore from localStorage is still in
+   *  flight (set true on mount, flipped false by finishRestore). Used to
+   *  gate the app shell so the user can't click play before MusicKit
+   *  has the queue attached and a saved seek target. */
+  isRestoring: boolean;
   addTrack(track: UnifiedTrack): void;
   addTracks(tracks: UnifiedTrack[]): void;
   /** Insert tracks at head of queue and start playing the first one. */
@@ -252,6 +257,7 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
   return {
     queue,
     history,
+    isRestoring: isRestoringRef.current,
     addTrack,
     addTracks,
     playTracks,
