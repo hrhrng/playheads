@@ -4,5 +4,6 @@ packages:
   - 'apps/gateway'
   - 'apps/admin'
   - 'apps/agent'
+  - 'apps/billing'
   - 'apps/mobile-chat'
   - 'packages/*'

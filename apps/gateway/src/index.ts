@@ -23,6 +23,7 @@ interface Env {
   LANDING: Fetcher;
   ADMIN: Fetcher;
   AGENT: Fetcher;
+  BILLING: Fetcher;
   DB: D1Database;
   UPLOADS: R2Bucket;
   /** Empty in production (uploads stay behind our gateway); set to a public
@@ -144,6 +145,26 @@ export default {
     }
     if (url.pathname === "/api/queue/sync" && request.method === "POST") {
       return handleSyncQueue(request, env.DB);
+    }
+
+    // /api/billing/* and /api/webhooks/polar → billing worker (service binding).
+    // The billing worker is private — only reachable via this binding, never
+    // through a public custom domain. Strip /api so its handlers see
+    // /billing/* and /webhooks/polar.
+    if (
+      url.pathname.startsWith("/api/billing/") ||
+      url.pathname === "/api/webhooks/polar"
+    ) {
+      const billingPath = url.pathname.replace(/^\/api/, "") + url.search;
+      const billingReq = new Request(
+        new URL(billingPath, "http://billing").toString(),
+        {
+          method: request.method,
+          headers: request.headers,
+          body: request.body,
+        },
+      );
+      return env.BILLING.fetch(billingReq);
     }
 
     // /api/uploads/image → POST image to R2

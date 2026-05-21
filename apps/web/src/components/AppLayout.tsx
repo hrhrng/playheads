@@ -49,6 +49,8 @@ interface AppLayoutProps {
   userEmail?: string;
   /** User display name */
   userName?: string;
+  /** User id — required for billing routes */
+  userId?: string | null;
   /** Logout handler */
   onLogout?: () => void;
   /** Apple Music authorization state */
@@ -80,6 +82,7 @@ export const AppLayout = ({
   isLoadingMoreConversations,
   userEmail = '',
   userName = 'User',
+  userId = null,
   onLogout,
   isAppleMusicAuthorized,
   onConnectAppleMusic,
@@ -373,6 +376,8 @@ export const AppLayout = ({
         <SettingsModal
           isOpen={settingsOpen}
           onClose={() => setSettingsOpen(false)}
+          userId={userId}
+          userEmail={userEmail}
           isAppleMusicAuthorized={isAppleMusicAuthorized}
           onConnectAppleMusic={onConnectAppleMusic}
           onDisconnectAppleMusic={onDisconnectAppleMusic}

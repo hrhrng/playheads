@@ -120,3 +120,37 @@ export const conversationState = sqliteTable('conversationState', {
   createdAt: integer('createdAt', { mode: 'number' }).notNull(),
   updatedAt: integer('updatedAt', { mode: 'number' }).notNull(),
 });
+
+// ============================================================
+// Billing (Polar)
+// ============================================================
+
+// One row per Polar subscription. A user with an upgrade history can
+// own multiple rows (one active + previously canceled), so always pick
+// status IN ('active','trialing','past_due') ORDER BY createdAt DESC.
+// Free is the absence of any non-ended row.
+export const subscription = sqliteTable('subscription', {
+  id: text('id').primaryKey(),
+  userId: text('userId').notNull().references(() => user.id),
+  polarSubscriptionId: text('polarSubscriptionId').notNull().unique(),
+  polarCustomerId: text('polarCustomerId').notNull(),
+  polarProductId: text('polarProductId').notNull(),
+  tier: text('tier').notNull(),
+  status: text('status').notNull(),
+  currentPeriodStart: integer('currentPeriodStart', { mode: 'number' }),
+  currentPeriodEnd: integer('currentPeriodEnd', { mode: 'number' }),
+  cancelAtPeriodEnd: integer('cancelAtPeriodEnd', { mode: 'boolean' }).notNull().default(false),
+  createdAt: integer('createdAt', { mode: 'number' }).notNull(),
+  updatedAt: integer('updatedAt', { mode: 'number' }).notNull(),
+});
+
+// Standard Webhooks dedup. We INSERT OR IGNORE on the `webhook-id`
+// header so retries are no-ops. Body kept for replay.
+export const polarWebhookEvent = sqliteTable('polarWebhookEvent', {
+  eventId: text('eventId').primaryKey(),
+  type: text('type').notNull(),
+  payloadJson: text('payloadJson').notNull(),
+  receivedAt: integer('receivedAt', { mode: 'number' }).notNull(),
+  processedAt: integer('processedAt', { mode: 'number' }),
+  processError: text('processError'),
+});

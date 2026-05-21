@@ -79,6 +79,7 @@
     "title": "Settings",
     "general": "General",
     "integrations": "Integrations",
+    "billing": "Billing",
     "appearance": "Appearance",
     "appearanceSystem": "System",
     "appearanceLight": "Light",
@@ -109,6 +110,21 @@
     "sendingMagicLink": "Sending Magic Link...",
     "continueWithApple": "Continue with Apple",
     "continueWithGoogle": "Continue with Google"
+  },
+  "billing": {
+    "tier": { "free": "Free", "plus": "Plus", "pro": "Pro" },
+    "currentPlan": "Current plan",
+    "upgrade": "Upgrade",
+    "manage": "Manage subscription",
+    "manageToDowngrade": "Manage to switch",
+    "renewsOn": "Renews on {{date}}",
+    "cancelsOn": "Cancels on {{date}}",
+    "perks": {
+      "unlimited": "Unlimited chats",
+      "priorityModel": "Priority model access",
+      "advancedModel": "Advanced models + voice",
+      "earlyAccess": "Early access to new features"
+    }
   },
   "waitlist": {
     "title": "You're on the list",

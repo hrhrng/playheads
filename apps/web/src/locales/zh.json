@@ -79,6 +79,7 @@
     "title": "设置",
     "general": "通用",
     "integrations": "集成",
+    "billing": "订阅",
     "appearance": "外观",
     "appearanceSystem": "跟随系统",
     "appearanceLight": "浅色",
@@ -109,6 +110,21 @@
     "sendingMagicLink": "发送登录链接...",
     "continueWithApple": "用 Apple 继续",
     "continueWithGoogle": "用 Google 继续"
+  },
+  "billing": {
+    "tier": { "free": "免费版", "plus": "Plus", "pro": "Pro" },
+    "currentPlan": "当前套餐",
+    "upgrade": "升级",
+    "manage": "管理订阅",
+    "manageToDowngrade": "通过管理切换",
+    "renewsOn": "{{date}} 续费",
+    "cancelsOn": "{{date}} 到期取消",
+    "perks": {
+      "unlimited": "无限聊天",
+      "priorityModel": "优先模型",
+      "advancedModel": "高级模型 + 语音",
+      "earlyAccess": "抢先体验新功能"
+    }
   },
   "waitlist": {
     "title": "你在候补名单上",

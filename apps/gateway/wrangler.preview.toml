@@ -22,6 +22,12 @@ service = "playheads-admin"
 binding = "AGENT"
 service = "playheads-agent-preview"
 
+[[services]]
+binding = "BILLING"
+# `-preview` is a placeholder — deploy-preview workflow sed-rewrites to
+# `playheads-billing-${SLUG}`.
+service = "playheads-billing-preview"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "playheads-db"

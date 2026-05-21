@@ -77,6 +77,17 @@ jobs:
           npx wrangler deploy --config wrangler.branch.toml \
             --name "playheads-web-${SLUG}"
 
+      - name: Deploy billing worker
+        working-directory: apps/billing
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          SLUG="${{ steps.branch.outputs.slug }}"
+          cp wrangler.preview.toml wrangler.branch.toml
+          npx wrangler deploy --config wrangler.branch.toml \
+            --name "playheads-billing-${SLUG}"
+
       - name: Deploy agent worker
         working-directory: apps/agent
         env:
@@ -106,6 +117,7 @@ jobs:
           cp wrangler.preview.toml wrangler.branch.toml
           sed -i "s/playheads-agent-preview/playheads-agent-${SLUG}/" wrangler.branch.toml
           sed -i "s/playheads-web-preview/playheads-web-${SLUG}/" wrangler.branch.toml
+          sed -i "s/playheads-billing-preview/playheads-billing-${SLUG}/" wrangler.branch.toml
           cat >> wrangler.branch.toml <<TOML
 
           [[routes]]
@@ -223,4 +235,23 @@ jobs:
             fi
           done
           if [ "$FAILED" -eq 1 ]; then exit 1; fi
+
+      - name: Sync billing worker secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          WORKER="playheads-billing-${{ steps.branch.outputs.slug }}"
+          declare -A SECRETS=(
+            [POLAR_API_KEY]="${{ secrets.POLAR_API_KEY }}"
+            [POLAR_WEBHOOK_SECRET]="${{ secrets.POLAR_WEBHOOK_SECRET }}"
+          )
+          for KEY in "${!SECRETS[@]}"; do
+            VAL="${SECRETS[$KEY]}"
+            if [ -n "$VAL" ]; then
+              printf '%s' "$VAL" | npx wrangler secret put "$KEY" --name "$WORKER" && echo "✓ $KEY" || echo "✗ $KEY failed"
+            else
+              echo "○ $KEY not set in GitHub yet — billing routes will 500 until configured"
+            fi
+          done
 

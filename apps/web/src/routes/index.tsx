@@ -104,6 +104,7 @@ export function HomeRoute({
       isLoadingMoreConversations={isLoadingMoreConversations}
       userEmail={session?.user.email || ''}
       userName={session?.user.email?.split('@')[0] || 'User'}
+      userId={session?.user.id || null}
       onLogout={onLogout}
       isAppleMusicAuthorized={isAppleMusicAuthorized}
       onConnectAppleMusic={onLinkApple}
@@ -185,6 +186,7 @@ export function ChatRoute({
       isLoadingMoreConversations={isLoadingMoreConversations}
       userEmail={session?.user.email || ''}
       userName={session?.user.email?.split('@')[0] || 'User'}
+      userId={session?.user.id || null}
       onLogout={onLogout}
       isAppleMusicAuthorized={isAppleMusicAuthorized}
       onConnectAppleMusic={onLinkApple}

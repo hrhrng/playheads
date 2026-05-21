@@ -1,15 +1,18 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useSubscription, startCheckout, openCustomerPortal, type Tier } from '../hooks/useSubscription';
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
+  userId?: string | null;
+  userEmail?: string;
   isAppleMusicAuthorized?: boolean;
   onConnectAppleMusic?: () => void;
   onDisconnectAppleMusic?: () => void;
 }
 
-type Tab = 'general' | 'integrations';
+type Tab = 'general' | 'integrations' | 'billing';
 
 const tabs: { id: Tab; labelKey: string; icon: React.ReactNode }[] = [
   {
@@ -33,7 +36,160 @@ const tabs: { id: Tab; labelKey: string; icon: React.ReactNode }[] = [
       </svg>
     ),
   },
+  {
+    id: 'billing',
+    labelKey: 'settings.billing',
+    icon: (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="2" y="5" width="20" height="14" rx="2" />
+        <line x1="2" y1="10" x2="22" y2="10" />
+      </svg>
+    ),
+  },
 ];
+
+interface PlanCardProps {
+  tier: 'plus' | 'pro';
+  priceLabel: string;
+  currentTier: Tier;
+  perks: string[];
+  onUpgrade: (tier: 'plus' | 'pro') => void;
+  busy: boolean;
+}
+
+function PlanCard({ tier, priceLabel, currentTier, perks, onUpgrade, busy }: PlanCardProps) {
+  const { t } = useTranslation();
+  const isCurrent = currentTier === tier;
+  const isDowngradeFromHigher = currentTier === 'pro' && tier === 'plus';
+
+  return (
+    <div className={`relative rounded-2xl p-4 hairline ${isCurrent ? 'bg-chip-2' : 'bg-chip/40'}`}>
+      <div className="flex items-baseline justify-between mb-3">
+        <h3 className="text-base font-medium text-ink capitalize">{t(`billing.tier.${tier}`)}</h3>
+        <span className="text-sm text-ink-2">{priceLabel}</span>
+      </div>
+      <ul className="space-y-1.5 mb-4">
+        {perks.map((p, i) => (
+          <li key={i} className="text-xs text-ink-2 flex items-start gap-1.5">
+            <svg className="w-3.5 h-3.5 mt-0.5 shrink-0 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+            <span>{p}</span>
+          </li>
+        ))}
+      </ul>
+      {isCurrent ? (
+        <div className="text-xs text-ink-3 text-center py-1.5">{t('billing.currentPlan')}</div>
+      ) : isDowngradeFromHigher ? (
+        <div className="text-xs text-ink-3 text-center py-1.5">{t('billing.manageToDowngrade')}</div>
+      ) : (
+        <button
+          onClick={() => onUpgrade(tier)}
+          disabled={busy}
+          className="w-full text-sm py-1.5 rounded-full border border-accent text-accent hover:bg-accent hover:text-page transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {busy ? t('common.loading') : t('billing.upgrade')}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function BillingTab({ userId, userEmail }: { userId: string | null; userEmail: string }) {
+  const { t } = useTranslation();
+  const { summary, loading } = useSubscription(userId);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const currentTier: Tier = summary?.tier ?? 'free';
+
+  const handleUpgrade = async (tier: 'plus' | 'pro') => {
+    if (!userId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const url = await startCheckout(userId, tier, userEmail || undefined);
+      window.location.href = url;
+    } catch (e) {
+      setError((e as Error).message);
+      setBusy(false);
+    }
+  };
+
+  const handleManage = async () => {
+    if (!userId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const url = await openCustomerPortal(userId);
+      window.location.href = url;
+    } catch (e) {
+      setError((e as Error).message);
+      setBusy(false);
+    }
+  };
+
+  const renewLabel = summary?.current_period_end
+    ? new Date(summary.current_period_end).toLocaleDateString()
+    : null;
+
+  return (
+    <div>
+      <h2 className="text-lg font-display font-medium text-ink mb-6">{t('settings.billing')}</h2>
+
+      {/* Current plan banner */}
+      <div className="mb-6 rounded-2xl p-4 bg-chip-2">
+        <p className="text-xs text-ink-3 uppercase tracking-wide mb-1">{t('billing.currentPlan')}</p>
+        <p className="text-lg font-medium text-ink capitalize">{t(`billing.tier.${currentTier}`)}</p>
+        {currentTier !== 'free' && summary && (
+          <p className="text-xs text-ink-3 mt-1">
+            {summary.cancel_at_period_end
+              ? t('billing.cancelsOn', { date: renewLabel })
+              : renewLabel
+                ? t('billing.renewsOn', { date: renewLabel })
+                : null}
+          </p>
+        )}
+        {currentTier !== 'free' && summary?.has_customer && (
+          <button
+            onClick={handleManage}
+            disabled={busy}
+            className="mt-3 text-xs text-accent hover:underline disabled:opacity-40"
+          >
+            {t('billing.manage')} →
+          </button>
+        )}
+      </div>
+
+      {/* Plans */}
+      <div className="grid grid-cols-2 gap-3">
+        <PlanCard
+          tier="plus"
+          priceLabel="$9.99/mo"
+          currentTier={currentTier}
+          perks={[t('billing.perks.unlimited'), t('billing.perks.priorityModel')]}
+          onUpgrade={handleUpgrade}
+          busy={busy}
+        />
+        <PlanCard
+          tier="pro"
+          priceLabel="$19.99/mo"
+          currentTier={currentTier}
+          perks={[
+            t('billing.perks.unlimited'),
+            t('billing.perks.advancedModel'),
+            t('billing.perks.earlyAccess'),
+          ]}
+          onUpgrade={handleUpgrade}
+          busy={busy}
+        />
+      </div>
+
+      {loading && <p className="text-xs text-ink-3 mt-4">{t('common.loading')}</p>}
+      {error && <p className="text-xs text-red-500 mt-4">{error}</p>}
+    </div>
+  );
+}
 
 function GeneralTab() {
   const { t, i18n } = useTranslation();
@@ -124,6 +280,8 @@ function IntegrationsTab({
 export function SettingsModal({
   isOpen,
   onClose,
+  userId = null,
+  userEmail = '',
   isAppleMusicAuthorized,
   onConnectAppleMusic,
   onDisconnectAppleMusic,
@@ -197,6 +355,9 @@ export function SettingsModal({
               onConnect={onConnectAppleMusic}
               onDisconnect={onDisconnectAppleMusic}
             />
+          )}
+          {activeTab === 'billing' && (
+            <BillingTab userId={userId} userEmail={userEmail} />
           )}
         </div>
       </div>

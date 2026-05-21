@@ -19,6 +19,10 @@ service = "playheads-admin"
 binding = "AGENT"
 service = "playheads-agent"
 
+[[services]]
+binding = "BILLING"
+service = "playheads-billing"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "playheads-db"
