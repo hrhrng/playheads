@@ -230,7 +230,22 @@ export class AppleMusicProvider implements MusicProvider {
       if (this.phase === 'init' || this.phase === 'idle') return;
       const item = mk.nowPlayingItem;
       if (item) {
-        this.updateState({ currentTrack: this.formatMusicKitTrack(item) });
+        const next = this.formatMusicKitTrack(item);
+        // When the track id actually changes, reset playbackTime in the
+        // same React update so the progress bar doesn't carry over the
+        // previous track's position. MusicKit fires nowPlayingItemDidChange
+        // and the first playbackTimeDidChange for the new track in separate
+        // ticks; without this reset, the bar shows stale time/duration
+        // (sometimes overflowing the new track's duration).
+        const prevId = this._playbackState.currentTrack?.id;
+        if (prevId !== next.id) {
+          this.updateState({
+            currentTrack: next,
+            playbackTime: { current: 0, total: next.durationSeconds },
+          });
+        } else {
+          this.updateState({ currentTrack: next });
+        }
         for (const cb of this.nowPlayingListeners) cb(item.id);
       }
     });
