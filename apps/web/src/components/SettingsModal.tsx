@@ -63,12 +63,12 @@ function PlanCard({ tier, priceLabel, currentTier, perks, onUpgrade, busy }: Pla
   const isDowngradeFromHigher = currentTier === 'pro' && tier === 'plus';
 
   return (
-    <div className={`relative rounded-2xl p-4 hairline ${isCurrent ? 'bg-chip-2' : 'bg-chip/40'}`}>
+    <div className={`relative rounded-2xl p-4 hairline flex flex-col ${isCurrent ? 'bg-chip-2' : 'bg-chip/40'}`}>
       <div className="flex items-baseline justify-between mb-3">
         <h3 className="text-base font-medium text-ink capitalize">{t(`billing.tier.${tier}`)}</h3>
         <span className="text-sm text-ink-2">{priceLabel}</span>
       </div>
-      <ul className="space-y-1.5 mb-4">
+      <ul className="space-y-1.5 mb-4 flex-1">
         {perks.map((p, i) => (
           <li key={i} className="text-xs text-ink-2 flex items-start gap-1.5">
             <svg className="w-3.5 h-3.5 mt-0.5 shrink-0 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
