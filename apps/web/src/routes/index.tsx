@@ -40,8 +40,6 @@ interface RouteComponentProps {
   onLogout: () => void;
   onLinkApple?: () => Promise<void>;
   onDisconnectApple?: () => Promise<void>;
-  skipNext?: () => Promise<void>;
-  skipPrev?: () => Promise<void>;
   queue: UsePlayQueueReturn;
   playTrackById?: (trackId: string) => Promise<void>;
 }
@@ -145,8 +143,6 @@ export function ChatRoute({
   onLogout,
   onLinkApple,
   onDisconnectApple,
-  skipNext,
-  skipPrev,
   queue,
   playTrackById,
 }: RouteComponentProps) {
@@ -229,11 +225,9 @@ export function ChatRoute({
         onMessageSent={fetchConversations}
         onSessionCreated={handleSessionCreated}
         onLinkApple={onLinkApple}
-        onSkipNext={skipNext}
-        onSkipPrev={skipPrev}
         queue={queue.queue}
-        hasHistory={queue.history.length > 0}
-        onFinishQueue={() => queue.finishQueue()}
+        history={queue.history}
+        jumpToIndex={(i) => queue.jumpToIndex(i)}
         playTrackById={playTrackById}
       />
     </AppLayout>

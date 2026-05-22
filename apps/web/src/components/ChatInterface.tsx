@@ -3,7 +3,7 @@
  * @module components/ChatInterface
  */
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { RecordPlayer } from './RecordPlayer';
@@ -52,16 +52,13 @@ interface ChatInterfaceProps {
   onSessionCreated?: (newSessionId: string, initialMessage: string) => void;
   /** Callback to link Apple Music account */
   onLinkApple?: () => Promise<void>;
-  /** Skip to next track */
-  onSkipNext?: () => Promise<void>;
-  /** Skip to previous track */
-  onSkipPrev?: () => Promise<void>;
   /** Full queue — queue[0] is now playing, queue[1..] is up next */
   queue?: UnifiedTrack[];
+  /** Previously-played tracks (queue[0..position-1] in MusicKit terms). */
+  history?: UnifiedTrack[];
+  /** Jump to an absolute index in the full track list (history + current + upcoming). */
+  jumpToIndex?: (absoluteIndex: number) => Promise<void>;
   playTrackById?: (trackId: string) => Promise<void>;
-  /** Whether there are previously played tracks (enables swipe-up) */
-  hasHistory?: boolean;
-  onFinishQueue?: () => Promise<void>;
 }
 
 /**
@@ -89,12 +86,10 @@ export const ChatInterface = ({
   onMessageSent,
   onSessionCreated,
   onLinkApple,
-  onSkipNext,
-  onSkipPrev,
   queue: queueTracks = [],
+  history: historyTracks = [],
+  jumpToIndex,
   playTrackById,
-  hasHistory = false,
-  onFinishQueue,
 }: ChatInterfaceProps) => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -179,113 +174,81 @@ export const ChatInterface = ({
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
-  // --- Native scroll-snap vertical swipe (TikTok-style physics) ---
-  // Uses CSS scroll-snap for native inertia, momentum, and dampening.
-  // Layout: [prev placeholder] [current card] [next card]
-  // Always scrolled to the middle card (index 1). When the user scrolls
-  // to prev/next, we fire skip and reset scroll position on track change.
+  // --- N-card swipe feed ---
+  //
+  // The feed is the *flat* MusicKit item list: history + currentTrack +
+  // upcoming. Each track gets its own card (keyed by track.id); the
+  // currently-playing card is the one whose index equals
+  // `currentTrackIndex`. Scroll-snap moves the viewport between cards
+  // natively — when the user lands on a non-current card we call
+  // jumpToIndex(absoluteIndex) so MusicKit advances. No role-swap,
+  // no 400 ms scrollTo bounce-back, no shrinking-cover transition;
+  // cards stay mounted, owned by their track id.
+  //
+  // Auto-advance / external skip / LLM add_to_queue → currentTrackIndex
+  // changes, the feed scrolls itself to that index (only when the user
+  // isn't actively scrolling so we don't yank).
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  const isResettingRef = useRef(false);
-  const scrollTimerRef = useRef<number>(0);
-  const pendingResetRef = useRef(false);
-  const currentTrackIdRef = useRef(currentTrack?.id);
 
-  const onSkipNextRef = useRef(onSkipNext);
-  onSkipNextRef.current = onSkipNext;
-  const onSkipPrevRef = useRef(onSkipPrev);
-  onSkipPrevRef.current = onSkipPrev;
-  const showHistoryRef = useRef(showHistory);
-  showHistoryRef.current = showHistory;
-  const nextTrack = queueTracks[1] || null;
+  const feedTracks = useMemo<UnifiedTrack[]>(() => {
+    // queueTracks = [currentTrack, ...upcoming], history = items before position
+    return [...historyTracks, ...queueTracks];
+  }, [historyTracks, queueTracks]);
 
-  const hasHistoryRef = useRef(hasHistory);
-  hasHistoryRef.current = hasHistory;
-  const nextTrackRef = useRef(nextTrack);
-  nextTrackRef.current = nextTrack;
-  const onFinishQueueRef = useRef(onFinishQueue);
-  onFinishQueueRef.current = onFinishQueue;
+  const currentTrackIndex = historyTracks.length;
 
-  // Scroll to first card (current) on mount
+  // User-gesture lock: while the user is mid-touch / wheeling, we
+  // suppress the auto-scroll-to-current effect to avoid yanking them.
+  const userScrollingRef = useRef(false);
+  // While a programmatic scrollTo is animating, ignore landing-detection
+  // (else we'd fire jumpToIndex on the snap we initiated ourselves).
+  const programmaticScrollRef = useRef(false);
+  const scrollSettleTimerRef = useRef<number>(0);
+
+  // Center the playing track on mount + whenever it changes externally.
   useEffect(() => {
     const el = scrollRef.current;
-    if (!el) return;
+    if (!el || currentTrackIndex < 0) return;
+    if (userScrollingRef.current) return;
+    programmaticScrollRef.current = true;
+    el.scrollTo({ top: currentTrackIndex * el.clientHeight, behavior: 'instant' as ScrollBehavior });
+    // Release the lock on next frame so the snap event we just caused
+    // doesn't bounce into landing-detection.
     requestAnimationFrame(() => {
-      el.scrollTo({ top: hasHistory ? el.clientHeight : 0, behavior: 'instant' as ScrollBehavior });
+      programmaticScrollRef.current = false;
     });
-    // Only on mount/session change — NOT on hasHistory change (would yank user back mid-scroll)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId]);
+  }, [currentTrackIndex, sessionId]);
 
-  // Detect scroll settle → fire skip if landed on prev/next card
+  // Scroll-snap landing detection: when the user settles on a card,
+  // jump MusicKit to that index. Debounced so wheel/touch don't fire
+  // multiple times during inertia.
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-
     const onScroll = () => {
-      if (isResettingRef.current) return;
-      clearTimeout(scrollTimerRef.current);
-      scrollTimerRef.current = window.setTimeout(() => {
-        const page = Math.round(el.scrollTop / el.clientHeight);
-        const h = hasHistoryRef.current;
-        const currentPage = h ? 1 : 0;
-        const resetTop = h ? el.clientHeight : 0;
-
-        if (h && page === 0 && !pendingResetRef.current) {
-          // Swiped up → previous track
-          pendingResetRef.current = true;
-          onSkipPrevRef.current?.();
-          setTimeout(() => {
-            if (pendingResetRef.current) {
-              isResettingRef.current = true;
-              el.scrollTo({ top: resetTop, behavior: 'smooth' });
-              requestAnimationFrame(() => { isResettingRef.current = false; pendingResetRef.current = false; });
-            }
-          }, 400);
-        } else if (page > currentPage && !pendingResetRef.current) {
-          // Swiped down → next track
-          pendingResetRef.current = true;
-          onSkipNextRef.current?.();
-          setTimeout(() => {
-            if (pendingResetRef.current) {
-              isResettingRef.current = true;
-              el.scrollTo({ top: resetTop, behavior: 'smooth' });
-              requestAnimationFrame(() => { isResettingRef.current = false; pendingResetRef.current = false; });
-            }
-          }, 400);
+      if (programmaticScrollRef.current) return;
+      userScrollingRef.current = true;
+      clearTimeout(scrollSettleTimerRef.current);
+      scrollSettleTimerRef.current = window.setTimeout(() => {
+        userScrollingRef.current = false;
+        const idx = Math.round(el.scrollTop / el.clientHeight);
+        if (idx !== currentTrackIndex && idx >= 0 && idx < feedTracks.length) {
+          jumpToIndex?.(idx).catch((e) => console.warn('[feed] jumpToIndex failed', e));
         }
-      }, 80);
+      }, 140);
     };
-
     el.addEventListener('scroll', onScroll, { passive: true });
     return () => {
       el.removeEventListener('scroll', onScroll);
-      clearTimeout(scrollTimerRef.current);
+      clearTimeout(scrollSettleTimerRef.current);
     };
-  }, []);
+  }, [currentTrackIndex, feedTracks.length, jumpToIndex]);
 
-  // When track changes after a skip, reset scroll to center
-  useEffect(() => {
-    if (currentTrackIdRef.current !== currentTrack?.id) {
-      currentTrackIdRef.current = currentTrack?.id;
-      if (pendingResetRef.current) {
-        const el = scrollRef.current;
-        if (el) {
-          isResettingRef.current = true;
-          el.scrollTo({ top: hasHistoryRef.current ? el.clientHeight : 0, behavior: 'instant' as ScrollBehavior });
-          requestAnimationFrame(() => {
-            isResettingRef.current = false;
-            pendingResetRef.current = false;
-          });
-        }
-      }
-    }
-  }, [currentTrack?.id]);
-
-  // Keyboard: arrow keys trigger programmatic smooth scroll
+  // Arrow keys = step ±1 (smooth, native scroll-snap handles physics).
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (showHistoryRef.current) return;
+      if (showHistory) return;
       const tag = (e.target as HTMLElement).tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
       const el = scrollRef.current;
@@ -300,7 +263,7 @@ export const ChatInterface = ({
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, []);
+  }, [showHistory]);
 
   // Wrap sendMessage — allow chatting without Apple Music auth;
   // playback errors are caught at the MusicKit layer with reconnect prompts.
@@ -359,7 +322,9 @@ export const ChatInterface = ({
           </div>
         )}
 
-        {/* Scroll-snap vertical swipe container */}
+        {/* N-card feed — one card per track in history + currentTrack
+            + upcoming. Cards are keyed by track id and never role-swap.
+            See ChatInterface comment above the swipe useEffects. */}
         <div
           ref={scrollRef}
           className={`absolute inset-0 snap-y snap-mandatory no-scrollbar ${
@@ -367,94 +332,117 @@ export const ChatInterface = ({
           }`}
           style={{ overscrollBehaviorY: 'contain' }}
         >
-          {/* Previous card — only when there's history */}
-          {hasHistory && <div className="h-full shrink-0 snap-start snap-always" />}
-
-          {/* Current track card */}
-          <div className="h-full shrink-0 snap-start snap-always flex flex-col items-center justify-center pb-20">
-            <div className="relative z-10 w-full max-w-xl px-6">
-              <RecordPlayer
-                currentTrack={currentTrack}
-                isPaused={!isPlaying}
-                isTransitioning={isTransitioning}
-                togglePlay={togglePlay}
-                isAppleMusicAuthorized={isAppleMusicAuthorized}
-                onLinkApple={onLinkApple}
-              />
-              <MiniLyrics lyrics={lyrics} onClick={() => setShowLyrics(true)} />
-
-              {/* Seek bar — inside same max-w-xl container as album art */}
-              {!isAppleMusicAuthorized && onLinkApple && (
-                <div className={`mt-4 flex justify-center transition-opacity duration-200 ${showHistory || !currentTrack ? 'opacity-0 pointer-events-none' : ''}`}>
-                  <button
-                    onClick={onLinkApple}
-                    className="text-[13px] text-accent hover:text-accent-2 transition-colors font-medium flex items-center gap-1.5"
-                  >
-                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M9 18V5l12-2v13" />
-                      <circle cx="6" cy="18" r="3" />
-                      <circle cx="18" cy="16" r="3" />
-                    </svg>
-                    {t('chat.connectAppleMusic')}
-                  </button>
-                </div>
-              )}
-              {isAppleMusicAuthorized && (playbackTime?.total || 0) > 0 && (
-                <div className={`max-w-sm mx-auto px-2 mt-4 flex items-center gap-3 transition-opacity duration-200 ${showHistory || !currentTrack ? 'opacity-0 pointer-events-none' : ''}`}>
-                  <span className="text-[11px] font-mono text-ink-3 tabular-nums shrink-0">
-                    {formatTime(seekDisplayValue)}
-                  </span>
-                  <div className="relative flex-1 h-5 flex items-center">
-                    <div className="w-full h-1 bg-ink/15 rounded-full pointer-events-none overflow-hidden">
-                      <div
-                        className="h-full bg-ink rounded-full"
-                        style={{ width: `${Math.min(100, (seekDisplayValue / (playbackTime?.total || 1)) * 100)}%` }}
-                      />
-                    </div>
-                    <div
-                      className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-ink rounded-full shadow pointer-events-none"
-                      style={{ left: `calc(${Math.min(100, (seekDisplayValue / (playbackTime?.total || 1)) * 100)}% - 5px)` }}
-                    />
-                    <input
-                      type="range"
-                      min={0}
-                      max={playbackTime?.total || 1}
-                      step={0.1}
-                      value={seekDisplayValue}
-                      onChange={(e) => { setSeekDragging(true); setSeekDragValue(parseFloat(e.target.value)); }}
-                      onPointerUp={(e) => { onSeek?.(parseFloat((e.target as HTMLInputElement).value)); setSeekDragging(false); }}
-                      className="absolute inset-0 w-full opacity-0 cursor-pointer"
-                    />
-                  </div>
-                  <span className="text-[11px] font-mono text-ink-3 tabular-nums shrink-0">
-                    {formatTime(playbackTime?.total || 0)}
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Next track card — mirror the current card's wrapper *exactly*
-              (max-w-xl px-6, pb-20) so the cover lands at the same X/Y
-              position. Swipe-to-next then becomes "track info crossfades"
-              instead of "cover suddenly resizes". */}
-          {nextTrack && (
-            <div className="h-full shrink-0 snap-start snap-always flex flex-col items-center justify-center pb-20">
-              <div className="relative z-10 w-full max-w-xl px-6 pointer-events-none">
+          {feedTracks.length === 0 && (
+            <div className="h-full snap-start snap-always flex flex-col items-center justify-center pb-20">
+              <div className="relative z-10 w-full max-w-xl px-6">
                 <RecordPlayer
-                  currentTrack={nextTrack}
-                  isPaused={true}
-                  isTransitioning={false}
+                  currentTrack={null}
+                  isPaused
                   togglePlay={() => {}}
                   isAppleMusicAuthorized={isAppleMusicAuthorized}
+                  onLinkApple={onLinkApple}
                 />
-                {/* Reserve vertical space that the current-track card uses
-                    for MiniLyrics + seek bar, so the cover sits at the same
-                    Y on both cards (no vertical jump during swipe). */}
                 <div className="h-[120px]" aria-hidden />
               </div>
             </div>
           )}
+          {feedTracks.map((track, idx) => {
+            const isCenter = idx === currentTrackIndex;
+            // Lazy: only render cover artwork for ±2 cards around current.
+            // Outside that window the card stays as a sized placeholder
+            // so the scroll height stays correct.
+            const inWindow = Math.abs(idx - currentTrackIndex) <= 2;
+            return (
+              <div
+                key={track.id}
+                className="h-full shrink-0 snap-start snap-always flex flex-col items-center justify-center pb-20"
+              >
+                <div className={`relative z-10 w-full max-w-xl px-6 ${isCenter ? '' : 'pointer-events-none'}`}>
+                  {inWindow ? (
+                    <RecordPlayer
+                      currentTrack={track}
+                      isPaused={isCenter ? !isPlaying : false}
+                      isTransitioning={isCenter ? isTransitioning : false}
+                      togglePlay={isCenter ? togglePlay : () => {}}
+                      isAppleMusicAuthorized={isAppleMusicAuthorized}
+                      onLinkApple={isCenter ? onLinkApple : undefined}
+                    />
+                  ) : (
+                    // Outside the lazy window — keep the card shape so
+                    // scroll height matches feedTracks.length * vh, but
+                    // skip the image network request.
+                    <div className="flex flex-col items-center gap-7 w-full">
+                      <div className="w-full aspect-square rounded-card bg-chip" aria-hidden />
+                      <div className="text-center space-y-1.5 max-w-lg px-4 w-full">
+                        <h2 className="text-[26px] font-display font-medium text-ink-3 line-clamp-1">{track.name || 'Unknown'}</h2>
+                        <p className="text-[15px] text-ink-3 font-display">{track.artist || 'Unknown Artist'}</p>
+                      </div>
+                    </div>
+                  )}
+                  {isCenter && (
+                    <>
+                      <MiniLyrics lyrics={lyrics} onClick={() => setShowLyrics(true)} />
+                      {/* Connect Apple Music banner (when not authorized) */}
+                      {!isAppleMusicAuthorized && onLinkApple && (
+                        <div className={`mt-4 flex justify-center transition-opacity duration-200 ${showHistory || !currentTrack ? 'opacity-0 pointer-events-none' : ''}`}>
+                          <button
+                            onClick={onLinkApple}
+                            className="text-[13px] text-accent hover:text-accent-2 transition-colors font-medium flex items-center gap-1.5"
+                          >
+                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M9 18V5l12-2v13" />
+                              <circle cx="6" cy="18" r="3" />
+                              <circle cx="18" cy="16" r="3" />
+                            </svg>
+                            {t('chat.connectAppleMusic')}
+                          </button>
+                        </div>
+                      )}
+                      {/* Seek bar */}
+                      {isAppleMusicAuthorized && (playbackTime?.total || 0) > 0 && (
+                        <div className={`max-w-sm mx-auto px-2 mt-4 flex items-center gap-3 transition-opacity duration-200 ${showHistory || !currentTrack ? 'opacity-0 pointer-events-none' : ''}`}>
+                          <span className="text-[11px] font-mono text-ink-3 tabular-nums shrink-0">
+                            {formatTime(seekDisplayValue)}
+                          </span>
+                          <div className="relative flex-1 h-5 flex items-center">
+                            <div className="w-full h-1 bg-ink/15 rounded-full pointer-events-none overflow-hidden">
+                              <div
+                                className="h-full bg-ink rounded-full"
+                                style={{ width: `${Math.min(100, (seekDisplayValue / (playbackTime?.total || 1)) * 100)}%` }}
+                              />
+                            </div>
+                            <div
+                              className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-ink rounded-full shadow pointer-events-none"
+                              style={{ left: `calc(${Math.min(100, (seekDisplayValue / (playbackTime?.total || 1)) * 100)}% - 5px)` }}
+                            />
+                            <input
+                              type="range"
+                              min={0}
+                              max={playbackTime?.total || 1}
+                              step={0.1}
+                              value={seekDisplayValue}
+                              onChange={(e) => { setSeekDragging(true); setSeekDragValue(parseFloat(e.target.value)); }}
+                              onPointerUp={(e) => { onSeek?.(parseFloat((e.target as HTMLInputElement).value)); setSeekDragging(false); }}
+                              className="absolute inset-0 w-full opacity-0 cursor-pointer"
+                            />
+                          </div>
+                          <span className="text-[11px] font-mono text-ink-3 tabular-nums shrink-0">
+                            {formatTime(playbackTime?.total || 0)}
+                          </span>
+                        </div>
+                      )}
+                    </>
+                  )}
+                  {!isCenter && (
+                    // Reserve the same vertical space the playing card
+                    // uses for MiniLyrics + seek bar, so the cover sits at
+                    // the same Y across every card in the feed (no jump).
+                    <div className="h-[120px]" aria-hidden />
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
 
         {/* Transcript Overlay */}

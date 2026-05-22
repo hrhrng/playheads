@@ -59,7 +59,11 @@ export const RecordPlayer = ({
          max-w-xl so cover + composer line up), aspect-square keeps it
          a perfect square, 10px radius + dual cover shadow per iOS Spec. */}
       <div className="relative pointer-events-auto w-full">
-        <div className={`w-full aspect-square rounded-card shadow-cover overflow-hidden relative transition-transform duration-700 ease-spring ${!isPaused ? 'scale-100' : 'scale-[0.97] opacity-95'}`}>
+        {/* Cover stays at scale-1.0 always. The previous pause-shrink
+            animation read fine on a single-track view, but in the feed
+            it caused a visible size jump on every swap (preview card
+            renders at 0.97, then becomes the playing card at 1.0). */}
+        <div className="w-full aspect-square rounded-card shadow-cover overflow-hidden relative">
           {artworkUrl ? (
             <img src={artworkUrl} alt={trackName} className="w-full h-full object-cover" />
           ) : (
