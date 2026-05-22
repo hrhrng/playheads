@@ -4,6 +4,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
+import { Virtuoso, type VirtuosoHandle } from 'react-virtuoso';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { RecordPlayer } from './RecordPlayer';
@@ -174,73 +175,70 @@ export const ChatInterface = ({
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
-  // --- N-card swipe feed ---
+  // --- Virtualized N-card swipe feed (react-virtuoso) ---
   //
-  // The feed is the *flat* MusicKit item list: history + currentTrack +
-  // upcoming. Each track gets its own card (keyed by track.id); the
-  // currently-playing card is the one whose index equals
-  // `currentTrackIndex`. Scroll-snap moves the viewport between cards
-  // natively — when the user lands on a non-current card we call
-  // jumpToIndex(absoluteIndex) so MusicKit advances. No role-swap,
-  // no 400 ms scrollTo bounce-back, no shrinking-cover transition;
-  // cards stay mounted, owned by their track id.
+  // The feed is the flat MusicKit item list: history + currentTrack +
+  // upcoming. Each track gets its own card (keyed by track.id); cards
+  // outside the viewport are unmounted by Virtuoso so DOM stays at a
+  // small fixed size regardless of list length. Industry-standard
+  // pattern for vertically-scrolling feeds (TikTok / Reels / Shorts
+  // all do the equivalent natively).
   //
   // Auto-advance / external skip / LLM add_to_queue → currentTrackIndex
-  // changes, the feed scrolls itself to that index (only when the user
-  // isn't actively scrolling so we don't yank).
+  // changes → Virtuoso scrolls to it, *unless* the user is actively
+  // gesturing (then we hold back so we don't yank them).
 
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const virtuosoRef = useRef<VirtuosoHandle>(null);
+  const scrollerRef = useRef<HTMLElement | null>(null);
+  const feedContainerRef = useRef<HTMLDivElement>(null);
 
-  // Cap rendered cards so a long-running session (e.g. 3 hrs of listening,
-  // 200+ tracks in history) doesn't grow the feed DOM unbounded. The full
-  // history is still available in the sidebar Topic tab — the feed is
-  // just the "TikTok-style now playing" view, not a full archive.
-  const MAX_HISTORY = 50;
-  const MAX_UPCOMING = 50;
+  // Virtuoso wants a numeric item height for predictable virtualization.
+  // Each feed card fills the available scrollable area; we measure it
+  // and re-measure on resize.
+  const [itemHeight, setItemHeight] = useState(0);
+  useEffect(() => {
+    const el = feedContainerRef.current;
+    if (!el) return;
+    const measure = () => setItemHeight(el.clientHeight);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const feedTracks = useMemo<UnifiedTrack[]>(() => {
-    const trimmedHistory = historyTracks.slice(-MAX_HISTORY);
-    // queueTracks[0] is currentTrack, [1..] is upcoming.
-    const trimmedQueue = queueTracks.slice(0, 1 + MAX_UPCOMING);
-    return [...trimmedHistory, ...trimmedQueue];
+    return [...historyTracks, ...queueTracks];
   }, [historyTracks, queueTracks]);
 
-  // Index of the currently-playing track inside `feedTracks`. After
-  // capping, this is min(history.length, MAX_HISTORY).
-  const currentTrackIndex = Math.min(historyTracks.length, MAX_HISTORY);
+  // Index of the currently-playing track in `feedTracks` = MusicKit's
+  // absolute position. No offset math needed since the feed is the
+  // full list — Virtuoso virtualizes rendering, not data.
+  const currentTrackIndex = historyTracks.length;
 
-  // When history is trimmed, feedTracks[i] corresponds to MusicKit
-  // items[historyOffset + i]. jumpToIndex takes an *absolute* index in
-  // the MusicKit queue, so we add this offset when firing.
-  const historyOffset = Math.max(0, historyTracks.length - MAX_HISTORY);
-
-  // User-gesture lock: while the user is mid-touch / wheeling, we
-  // suppress the auto-scroll-to-current effect to avoid yanking them.
+  // User-gesture lock: set true while the user is mid-touch / wheeling,
+  // cleared on settle. Suppresses the auto-scroll-to-current effect so
+  // we don't yank the user mid-gesture.
   const userScrollingRef = useRef(false);
-  // While a programmatic scrollTo is animating, ignore landing-detection
-  // (else we'd fire jumpToIndex on the snap we initiated ourselves).
+  // While Virtuoso is performing a programmatic scrollToIndex we ignore
+  // landing detection — otherwise our own auto-center would round-trip
+  // into another jumpToIndex.
   const programmaticScrollRef = useRef(false);
   const scrollSettleTimerRef = useRef<number>(0);
 
   // Center the playing track on mount + whenever it changes externally.
   useEffect(() => {
-    const el = scrollRef.current;
-    if (!el || currentTrackIndex < 0) return;
+    if (currentTrackIndex < 0) return;
     if (userScrollingRef.current) return;
+    if (!virtuosoRef.current) return;
     programmaticScrollRef.current = true;
-    el.scrollTo({ top: currentTrackIndex * el.clientHeight, behavior: 'instant' as ScrollBehavior });
-    // Release the lock on next frame so the snap event we just caused
-    // doesn't bounce into landing-detection.
-    requestAnimationFrame(() => {
-      programmaticScrollRef.current = false;
-    });
+    virtuosoRef.current.scrollToIndex({ index: currentTrackIndex, behavior: 'auto' });
+    requestAnimationFrame(() => { programmaticScrollRef.current = false; });
   }, [currentTrackIndex, sessionId]);
 
-  // Scroll-snap landing detection: when the user settles on a card,
-  // jump MusicKit to that index. Debounced so wheel/touch don't fire
-  // multiple times during inertia.
+  // Scroll-snap landing detection on Virtuoso's scroller element.
+  // Same debounce window as before (140 ms covers wheel inertia, finger lift).
   useEffect(() => {
-    const el = scrollRef.current;
+    const el = scrollerRef.current;
     if (!el) return;
     const onScroll = () => {
       if (programmaticScrollRef.current) return;
@@ -248,10 +246,11 @@ export const ChatInterface = ({
       clearTimeout(scrollSettleTimerRef.current);
       scrollSettleTimerRef.current = window.setTimeout(() => {
         userScrollingRef.current = false;
-        const idx = Math.round(el.scrollTop / el.clientHeight);
+        const h = el.clientHeight;
+        if (!h) return;
+        const idx = Math.round(el.scrollTop / h);
         if (idx !== currentTrackIndex && idx >= 0 && idx < feedTracks.length) {
-          const absoluteIndex = historyOffset + idx;
-          jumpToIndex?.(absoluteIndex).catch((e) => console.warn('[feed] jumpToIndex failed', e));
+          jumpToIndex?.(idx).catch((e) => console.warn('[feed] jumpToIndex failed', e));
         }
       }, 140);
     };
@@ -260,27 +259,25 @@ export const ChatInterface = ({
       el.removeEventListener('scroll', onScroll);
       clearTimeout(scrollSettleTimerRef.current);
     };
-  }, [currentTrackIndex, feedTracks.length, historyOffset, jumpToIndex]);
+  }, [currentTrackIndex, feedTracks.length, jumpToIndex]);
 
-  // Arrow keys = step ±1 (smooth, native scroll-snap handles physics).
+  // Arrow keys = step ±1 (Virtuoso's scrollToIndex handles the rest).
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (showHistory) return;
       const tag = (e.target as HTMLElement).tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
-      const el = scrollRef.current;
-      if (!el) return;
       if (e.key === 'ArrowDown') {
         e.preventDefault();
-        el.scrollBy({ top: el.clientHeight, behavior: 'smooth' });
+        virtuosoRef.current?.scrollToIndex({ index: currentTrackIndex + 1, behavior: 'smooth' });
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
-        el.scrollBy({ top: -el.clientHeight, behavior: 'smooth' });
+        virtuosoRef.current?.scrollToIndex({ index: Math.max(0, currentTrackIndex - 1), behavior: 'smooth' });
       }
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [showHistory]);
+  }, [showHistory, currentTrackIndex]);
 
   // Wrap sendMessage — allow chatting without Apple Music auth;
   // playback errors are caught at the MusicKit layer with reconnect prompts.
@@ -339,18 +336,13 @@ export const ChatInterface = ({
           </div>
         )}
 
-        {/* N-card feed — one card per track in history + currentTrack
-            + upcoming. Cards are keyed by track id and never role-swap.
-            See ChatInterface comment above the swipe useEffects. */}
-        <div
-          ref={scrollRef}
-          className={`absolute inset-0 snap-y snap-mandatory no-scrollbar ${
-            showHistory ? 'overflow-hidden' : 'overflow-y-scroll'
-          }`}
-          style={{ overscrollBehaviorY: 'contain' }}
-        >
-          {feedTracks.length === 0 && (
-            <div className="h-full snap-start snap-always flex flex-col items-center justify-center pb-20">
+        {/* Virtualized feed (react-virtuoso). One card per track; only
+            the visible card + small overscan are mounted at any time.
+            DOM size stays bounded regardless of history/queue length.
+            See the comment above the feed useEffects for full reasoning. */}
+        <div ref={feedContainerRef} className="absolute inset-0">
+          {feedTracks.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center pb-20">
               <div className="relative z-10 w-full max-w-xl px-6">
                 <RecordPlayer
                   currentTrack={null}
@@ -362,104 +354,95 @@ export const ChatInterface = ({
                 <div className="h-[120px]" aria-hidden />
               </div>
             </div>
-          )}
-          {feedTracks.map((track, idx) => {
-            const isCenter = idx === currentTrackIndex;
-            // Lazy: only render cover artwork for ±2 cards around current.
-            // Outside that window the card stays as a sized placeholder
-            // so the scroll height stays correct.
-            const inWindow = Math.abs(idx - currentTrackIndex) <= 2;
-            return (
-              <div
-                key={track.id}
-                className="h-full shrink-0 snap-start snap-always flex flex-col items-center justify-center pb-20"
-              >
-                <div className={`relative z-10 w-full max-w-xl px-6 ${isCenter ? '' : 'pointer-events-none'}`}>
-                  {inWindow ? (
-                    <RecordPlayer
-                      currentTrack={track}
-                      isPaused={isCenter ? !isPlaying : false}
-                      isTransitioning={isCenter ? isTransitioning : false}
-                      togglePlay={isCenter ? togglePlay : () => {}}
-                      isAppleMusicAuthorized={isAppleMusicAuthorized}
-                      onLinkApple={isCenter ? onLinkApple : undefined}
-                    />
-                  ) : (
-                    // Outside the lazy window — keep the card shape so
-                    // scroll height matches feedTracks.length * vh, but
-                    // skip the image network request.
-                    <div className="flex flex-col items-center gap-7 w-full">
-                      <div className="w-full aspect-square rounded-card bg-chip" aria-hidden />
-                      <div className="text-center space-y-1.5 max-w-lg px-4 w-full">
-                        <h2 className="text-[26px] font-display font-medium text-ink-3 line-clamp-1">{track.name || 'Unknown'}</h2>
-                        <p className="text-[15px] text-ink-3 font-display">{track.artist || 'Unknown Artist'}</p>
-                      </div>
-                    </div>
-                  )}
-                  {isCenter && (
-                    <>
-                      <MiniLyrics lyrics={lyrics} onClick={() => setShowLyrics(true)} />
-                      {/* Connect Apple Music banner (when not authorized) */}
-                      {!isAppleMusicAuthorized && onLinkApple && (
-                        <div className={`mt-4 flex justify-center transition-opacity duration-200 ${showHistory || !currentTrack ? 'opacity-0 pointer-events-none' : ''}`}>
-                          <button
-                            onClick={onLinkApple}
-                            className="text-[13px] text-accent hover:text-accent-2 transition-colors font-medium flex items-center gap-1.5"
-                          >
-                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M9 18V5l12-2v13" />
-                              <circle cx="6" cy="18" r="3" />
-                              <circle cx="18" cy="16" r="3" />
-                            </svg>
-                            {t('chat.connectAppleMusic')}
-                          </button>
-                        </div>
-                      )}
-                      {/* Seek bar */}
-                      {isAppleMusicAuthorized && (playbackTime?.total || 0) > 0 && (
-                        <div className={`max-w-sm mx-auto px-2 mt-4 flex items-center gap-3 transition-opacity duration-200 ${showHistory || !currentTrack ? 'opacity-0 pointer-events-none' : ''}`}>
-                          <span className="text-[11px] font-mono text-ink-3 tabular-nums shrink-0">
-                            {formatTime(seekDisplayValue)}
-                          </span>
-                          <div className="relative flex-1 h-5 flex items-center">
-                            <div className="w-full h-1 bg-ink/15 rounded-full pointer-events-none overflow-hidden">
-                              <div
-                                className="h-full bg-ink rounded-full"
-                                style={{ width: `${Math.min(100, (seekDisplayValue / (playbackTime?.total || 1)) * 100)}%` }}
-                              />
+          ) : itemHeight > 0 ? (
+            <Virtuoso
+              ref={virtuosoRef}
+              scrollerRef={(el) => { scrollerRef.current = el as HTMLElement | null; }}
+              data={feedTracks}
+              computeItemKey={(_, track) => track.id}
+              fixedItemHeight={itemHeight}
+              overscan={itemHeight} // ±1 viewport-height of overscan
+              className={`no-scrollbar ${showHistory ? 'pointer-events-none' : ''}`}
+              style={{ height: '100%', overscrollBehaviorY: 'contain', scrollSnapType: 'y mandatory' }}
+              itemContent={(idx, track) => {
+                const isCenter = idx === currentTrackIndex;
+                return (
+                  <div
+                    style={{ height: itemHeight, scrollSnapAlign: 'start', scrollSnapStop: 'always' }}
+                    className="flex flex-col items-center justify-center pb-20"
+                  >
+                    <div className={`relative z-10 w-full max-w-xl px-6 ${isCenter ? '' : 'pointer-events-none'}`}>
+                      <RecordPlayer
+                        currentTrack={track}
+                        isPaused={isCenter ? !isPlaying : false}
+                        isTransitioning={isCenter ? isTransitioning : false}
+                        togglePlay={isCenter ? togglePlay : () => {}}
+                        isAppleMusicAuthorized={isAppleMusicAuthorized}
+                        onLinkApple={isCenter ? onLinkApple : undefined}
+                      />
+                      {isCenter ? (
+                        <>
+                          <MiniLyrics lyrics={lyrics} onClick={() => setShowLyrics(true)} />
+                          {!isAppleMusicAuthorized && onLinkApple && (
+                            <div className={`mt-4 flex justify-center transition-opacity duration-200 ${showHistory || !currentTrack ? 'opacity-0 pointer-events-none' : ''}`}>
+                              <button
+                                onClick={onLinkApple}
+                                className="text-[13px] text-accent hover:text-accent-2 transition-colors font-medium flex items-center gap-1.5"
+                              >
+                                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <path d="M9 18V5l12-2v13" />
+                                  <circle cx="6" cy="18" r="3" />
+                                  <circle cx="18" cy="16" r="3" />
+                                </svg>
+                                {t('chat.connectAppleMusic')}
+                              </button>
                             </div>
-                            <div
-                              className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-ink rounded-full shadow pointer-events-none"
-                              style={{ left: `calc(${Math.min(100, (seekDisplayValue / (playbackTime?.total || 1)) * 100)}% - 5px)` }}
-                            />
-                            <input
-                              type="range"
-                              min={0}
-                              max={playbackTime?.total || 1}
-                              step={0.1}
-                              value={seekDisplayValue}
-                              onChange={(e) => { setSeekDragging(true); setSeekDragValue(parseFloat(e.target.value)); }}
-                              onPointerUp={(e) => { onSeek?.(parseFloat((e.target as HTMLInputElement).value)); setSeekDragging(false); }}
-                              className="absolute inset-0 w-full opacity-0 cursor-pointer"
-                            />
-                          </div>
-                          <span className="text-[11px] font-mono text-ink-3 tabular-nums shrink-0">
-                            {formatTime(playbackTime?.total || 0)}
-                          </span>
-                        </div>
+                          )}
+                          {isAppleMusicAuthorized && (playbackTime?.total || 0) > 0 && (
+                            <div className={`max-w-sm mx-auto px-2 mt-4 flex items-center gap-3 transition-opacity duration-200 ${showHistory || !currentTrack ? 'opacity-0 pointer-events-none' : ''}`}>
+                              <span className="text-[11px] font-mono text-ink-3 tabular-nums shrink-0">
+                                {formatTime(seekDisplayValue)}
+                              </span>
+                              <div className="relative flex-1 h-5 flex items-center">
+                                <div className="w-full h-1 bg-ink/15 rounded-full pointer-events-none overflow-hidden">
+                                  <div
+                                    className="h-full bg-ink rounded-full"
+                                    style={{ width: `${Math.min(100, (seekDisplayValue / (playbackTime?.total || 1)) * 100)}%` }}
+                                  />
+                                </div>
+                                <div
+                                  className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-ink rounded-full shadow pointer-events-none"
+                                  style={{ left: `calc(${Math.min(100, (seekDisplayValue / (playbackTime?.total || 1)) * 100)}% - 5px)` }}
+                                />
+                                <input
+                                  type="range"
+                                  min={0}
+                                  max={playbackTime?.total || 1}
+                                  step={0.1}
+                                  value={seekDisplayValue}
+                                  onChange={(e) => { setSeekDragging(true); setSeekDragValue(parseFloat(e.target.value)); }}
+                                  onPointerUp={(e) => { onSeek?.(parseFloat((e.target as HTMLInputElement).value)); setSeekDragging(false); }}
+                                  className="absolute inset-0 w-full opacity-0 cursor-pointer"
+                                />
+                              </div>
+                              <span className="text-[11px] font-mono text-ink-3 tabular-nums shrink-0">
+                                {formatTime(playbackTime?.total || 0)}
+                              </span>
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        // Reserve the same vertical space the playing card
+                        // uses for MiniLyrics + seek bar, so the cover sits
+                        // at the same Y on every card.
+                        <div className="h-[120px]" aria-hidden />
                       )}
-                    </>
-                  )}
-                  {!isCenter && (
-                    // Reserve the same vertical space the playing card
-                    // uses for MiniLyrics + seek bar, so the cover sits at
-                    // the same Y across every card in the feed (no jump).
-                    <div className="h-[120px]" aria-hidden />
-                  )}
-                </div>
-              </div>
-            );
-          })}
+                    </div>
+                  </div>
+                );
+              }}
+            />
+          ) : null}
         </div>
 
         {/* Transcript Overlay */}
