@@ -191,12 +191,28 @@ export const ChatInterface = ({
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // Cap rendered cards so a long-running session (e.g. 3 hrs of listening,
+  // 200+ tracks in history) doesn't grow the feed DOM unbounded. The full
+  // history is still available in the sidebar Topic tab — the feed is
+  // just the "TikTok-style now playing" view, not a full archive.
+  const MAX_HISTORY = 50;
+  const MAX_UPCOMING = 50;
+
   const feedTracks = useMemo<UnifiedTrack[]>(() => {
-    // queueTracks = [currentTrack, ...upcoming], history = items before position
-    return [...historyTracks, ...queueTracks];
+    const trimmedHistory = historyTracks.slice(-MAX_HISTORY);
+    // queueTracks[0] is currentTrack, [1..] is upcoming.
+    const trimmedQueue = queueTracks.slice(0, 1 + MAX_UPCOMING);
+    return [...trimmedHistory, ...trimmedQueue];
   }, [historyTracks, queueTracks]);
 
-  const currentTrackIndex = historyTracks.length;
+  // Index of the currently-playing track inside `feedTracks`. After
+  // capping, this is min(history.length, MAX_HISTORY).
+  const currentTrackIndex = Math.min(historyTracks.length, MAX_HISTORY);
+
+  // When history is trimmed, feedTracks[i] corresponds to MusicKit
+  // items[historyOffset + i]. jumpToIndex takes an *absolute* index in
+  // the MusicKit queue, so we add this offset when firing.
+  const historyOffset = Math.max(0, historyTracks.length - MAX_HISTORY);
 
   // User-gesture lock: while the user is mid-touch / wheeling, we
   // suppress the auto-scroll-to-current effect to avoid yanking them.
@@ -234,7 +250,8 @@ export const ChatInterface = ({
         userScrollingRef.current = false;
         const idx = Math.round(el.scrollTop / el.clientHeight);
         if (idx !== currentTrackIndex && idx >= 0 && idx < feedTracks.length) {
-          jumpToIndex?.(idx).catch((e) => console.warn('[feed] jumpToIndex failed', e));
+          const absoluteIndex = historyOffset + idx;
+          jumpToIndex?.(absoluteIndex).catch((e) => console.warn('[feed] jumpToIndex failed', e));
         }
       }, 140);
     };
@@ -243,7 +260,7 @@ export const ChatInterface = ({
       el.removeEventListener('scroll', onScroll);
       clearTimeout(scrollSettleTimerRef.current);
     };
-  }, [currentTrackIndex, feedTracks.length, jumpToIndex]);
+  }, [currentTrackIndex, feedTracks.length, historyOffset, jumpToIndex]);
 
   // Arrow keys = step ±1 (smooth, native scroll-snap handles physics).
   useEffect(() => {

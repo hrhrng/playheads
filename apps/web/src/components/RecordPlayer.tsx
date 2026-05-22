@@ -21,10 +21,23 @@ interface RecordPlayerProps {
   onLinkApple?: () => Promise<void>;
 }
 
+function formatArtwork(url: string | undefined, size = 600): string | null {
+  if (!url) return null;
+  return url.replace('{w}', size.toString()).replace('{h}', size.toString());
+}
+
 /**
- * RecordPlayer component - displays album art with playback controls
+ * RecordPlayer component - displays album art with playback controls.
+ *
+ * Wrapped in React.memo: the swipe feed renders one of these per track,
+ * and the parent re-renders frequently (every playbackTime tick, every
+ * isPlaying flip). Without memoization, all N cards would re-render on
+ * every tick. The custom equality fn only diffs the inputs that affect
+ * visual output for this card — function identities (togglePlay,
+ * onLinkApple) are ignored since the body doesn't render them as text
+ * and our callers pass stable references for non-center cards.
  */
-export const RecordPlayer = ({
+const RecordPlayerImpl = ({
   currentTrack,
   isPaused,
   isTransitioning = false,
@@ -32,12 +45,6 @@ export const RecordPlayer = ({
   isAppleMusicAuthorized,
   onLinkApple,
 }: RecordPlayerProps): React.JSX.Element => {
-
-  const formatArtwork = (url: string | undefined, size = 600): string | null => {
-    if (!url) return null;
-    return url.replace('{w}', size.toString()).replace('{h}', size.toString());
-  };
-
   if (!currentTrack) {
     return (
       <div className="flex flex-col items-center gap-6 opacity-40 select-none">
@@ -53,6 +60,12 @@ export const RecordPlayer = ({
   const artistName = currentTrack.artist || 'Unknown Artist';
   const artworkUrl = formatArtwork(currentTrack.artworkUrl);
 
+  // `onLinkApple` is currently unused inside the body (the parent renders
+  // the Connect button beside the card). Keep the prop to preserve the
+  // existing API surface — silence the eslint warning explicitly.
+  void onLinkApple;
+  void isAppleMusicAuthorized;
+
   return (
     <div className="flex flex-col items-center gap-7 group w-full">
       {/* Cover Art — fills the parent container width (matches ChatInput
@@ -60,12 +73,17 @@ export const RecordPlayer = ({
          a perfect square, 10px radius + dual cover shadow per iOS Spec. */}
       <div className="relative pointer-events-auto w-full">
         {/* Cover stays at scale-1.0 always. The previous pause-shrink
-            animation read fine on a single-track view, but in the feed
-            it caused a visible size jump on every swap (preview card
-            renders at 0.97, then becomes the playing card at 1.0). */}
+            animation caused a visible size jump on every swap in the
+            feed (preview card 0.97 → playing card 1.0). */}
         <div className="w-full aspect-square rounded-card shadow-cover overflow-hidden relative">
           {artworkUrl ? (
-            <img src={artworkUrl} alt={trackName} className="w-full h-full object-cover" />
+            <img
+              src={artworkUrl}
+              alt={trackName}
+              loading="lazy"
+              decoding="async"
+              className="w-full h-full object-cover"
+            />
           ) : (
             <div className="w-full h-full bg-chip flex items-center justify-center">
               <svg className="w-20 h-20 text-ink-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -105,3 +123,18 @@ export const RecordPlayer = ({
     </div>
   );
 };
+
+export const RecordPlayer = React.memo(RecordPlayerImpl, (prev, next) => {
+  // Same track id + same paused/transitioning state + same auth state →
+  // visual output is identical, skip re-render. Function identities
+  // (togglePlay, onLinkApple) are ignored on purpose.
+  return (
+    prev.currentTrack?.id === next.currentTrack?.id &&
+    prev.currentTrack?.artworkUrl === next.currentTrack?.artworkUrl &&
+    prev.currentTrack?.name === next.currentTrack?.name &&
+    prev.currentTrack?.artist === next.currentTrack?.artist &&
+    prev.isPaused === next.isPaused &&
+    prev.isTransitioning === next.isTransitioning &&
+    prev.isAppleMusicAuthorized === next.isAppleMusicAuthorized
+  );
+});
