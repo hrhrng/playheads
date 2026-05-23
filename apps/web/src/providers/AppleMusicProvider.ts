@@ -57,8 +57,14 @@ export class AppleMusicProvider implements MusicProvider {
   private metadataCache = new Map<string, UnifiedTrack>();
 
   // Seek target stored during restore: seekToTime() requires nowPlayingItem (i.e. after play()).
-  // Set by setQueueWithoutPlaying, applied in togglePlay/play, cleared by playbackTimeDidChange.
-  private seekTarget: number | null = null;
+  // BOUND TO A TRACK ID — otherwise a leftover target from restore would
+  // leak into whatever track the user plays next (e.g. clicking Play all
+  // on a topic before resuming the restored track would seek the topic's
+  // first song to the restored position, which is nonsense).
+  // Set by setQueueWithoutPlaying, applied by playbackStateDidChange when
+  // the nowPlayingItem id matches, cleared by playbackTimeDidChange when
+  // the seek lands. Setting a new currentTrack (different id) also clears.
+  private seekTarget: { trackId: string; time: number } | null = null;
   private transitionTimeout: ReturnType<typeof setTimeout> | null = null;
   private developerToken: string | null = null;
 
@@ -185,17 +191,16 @@ export class AppleMusicProvider implements MusicProvider {
     if (!this.musicKit || songIds.length === 0) return false;
     try {
       await this.musicKit.setQueue({ songs: songIds, startPlaying: false } as any);
-      // seekToTime() requires a nowPlayingItem (only available after play() starts).
-      // Store the target so togglePlay/play can apply it once playback begins.
-      if (startTime && startTime > 0) {
-        this.seekTarget = startTime;
-      }
       // After setQueue, MusicKit items have resolved metadata (durationInMillis).
-      // Re-format the first item to update the metadata cache with real duration,
-      // then update playbackTime so the seek bar shows correct total on restore.
       const firstItem = this.musicKit.queue?.items?.[0];
       if (firstItem) {
         const track = this.formatMusicKitTrack(firstItem); // merges + updates cache
+        // Bind the saved playback position to this exact track id. If
+        // the user switches to a different track before resuming (e.g.
+        // Play all on a topic), the leftover target won't apply.
+        if (startTime && startTime > 0) {
+          this.seekTarget = { trackId: track.id, time: startTime };
+        }
         this.updateState({
           currentTrack: track,
           playbackTime: { current: startTime || 0, total: track.durationSeconds },
@@ -264,11 +269,18 @@ export class AppleMusicProvider implements MusicProvider {
           ? this.formatMusicKitTrack(mk.nowPlayingItem)
           : this._playbackState.currentTrack;
         this.setPhase('playing', { currentTrack });
-        // Apply pending restore seek now that playback is truly started
-        // (nowPlayingItem attached). seekTarget is cleared by
-        // playbackTimeDidChange when MusicKit's reported time converges.
-        if (this.seekTarget !== null) {
-          try { this.musicKit?.seekToTime(this.seekTarget); } catch {}
+        // Apply pending restore seek now that playback is truly started.
+        // Only honor the target if the nowPlayingItem id matches what
+        // it was saved for — otherwise the user has navigated away from
+        // the restored track and the saved position is meaningless.
+        if (this.seekTarget !== null && currentTrack) {
+          if (this.seekTarget.trackId === currentTrack.id) {
+            try { this.musicKit?.seekToTime(this.seekTarget.time); } catch {}
+          } else {
+            // Stale target — drop it so its suppression doesn't affect
+            // subsequent playbackTimeDidChange events.
+            this.seekTarget = null;
+          }
         }
       } else if (paused) {
         this.clearTransitionTimeout();
@@ -289,8 +301,15 @@ export class AppleMusicProvider implements MusicProvider {
     this.on(mk, 'playbackTimeDidChange', (e: any) => {
       if (this.phase === 'init' || this.phase === 'idle') return;
       if (this.seekTarget !== null) {
+        // Only suppress if the target still belongs to the current track.
+        const nowId = mk.nowPlayingItem?.id;
+        if (nowId && this.seekTarget.trackId !== nowId) {
+          this.seekTarget = null; // stale; let events flow normally
+        }
+      }
+      if (this.seekTarget !== null) {
         // seekToTime() can fire events at time≈0 before the seek lands — suppress them.
-        if (Math.abs(e.currentPlaybackTime - this.seekTarget) > 1) return;
+        if (Math.abs(e.currentPlaybackTime - this.seekTarget.time) > 1) return;
         this.seekTarget = null; // Seek has landed; resume normal updates.
       }
       this.updateState({
@@ -633,8 +652,11 @@ export class AppleMusicProvider implements MusicProvider {
 
   seekTo(seconds: number): void {
     if (!this.musicKit) return;
-    // Keep seekTarget set so playbackTimeDidChange events fired during seekToTime() are suppressed.
-    this.seekTarget = seconds;
+    // Keep seekTarget set so playbackTimeDidChange events fired during
+    // seekToTime() are suppressed until time converges. Bound to the
+    // current track id so a track-swap mid-seek can't apply this.
+    const trackId = this._playbackState.currentTrack?.id;
+    this.seekTarget = trackId ? { trackId, time: seconds } : null;
     // Update UI immediately (optimistic) so the slider position sticks.
     this.updateState({
       playbackTime: { current: seconds, total: this._playbackState.playbackTime?.total ?? 0 },
