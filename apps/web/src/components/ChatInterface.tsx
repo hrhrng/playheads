@@ -281,8 +281,8 @@ export const ChatInterface = ({
             feed useEffects for full reasoning. */}
         <div className="absolute inset-0">
           {feedTracks.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center pb-20">
-              <div className="relative z-10 w-full max-w-xl px-6">
+            <div className="h-full flex flex-col items-center justify-center pb-20 px-6">
+              <div className="relative z-10 w-full max-w-xl mx-auto">
                 <RecordPlayer
                   currentTrack={null}
                   isPaused
@@ -318,8 +318,8 @@ export const ChatInterface = ({
                 const isCenter = idx === currentTrackIndex;
                 return (
                   <SwiperSlide key={track.id} virtualIndex={idx} className="!h-full">
-                    <div className="h-full flex flex-col items-center justify-center pb-20">
-                      <div className={`relative z-10 w-full max-w-xl px-6 ${isCenter ? '' : 'pointer-events-none'}`}>
+                    <div className="h-full flex flex-col items-center justify-center pb-20 px-6">
+                      <div className={`relative z-10 w-full max-w-xl mx-auto ${isCenter ? '' : 'pointer-events-none'}`}>
                         <RecordPlayer
                           currentTrack={track}
                           isPaused={isCenter ? !isPlaying : false}
