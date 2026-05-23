@@ -95,28 +95,10 @@ export const ChatInput = ({
     wasCollapsedRef.current = collapsed;
   }, [collapsed, textareaRef]);
 
-  if (collapsed) {
-    return (
-      <div className="max-w-xl mx-auto">
-        <button
-          type="button"
-          onClick={onActivate}
-          className="w-full glass rounded-full py-3 px-5 text-left text-[15px] text-ink-3 hover:text-ink-2 hover:bg-ink/5 transition-colors font-sans flex items-center justify-between gap-3"
-          aria-label={t('chatInput.askDJ')}
-        >
-          <span className="truncate">{getPlaceholder()}</span>
-          {/* subtle hint glyph on the right — same caret iOS uses */}
-          <svg className="w-4 h-4 text-ink-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M8 12h8M12 8v8" />
-          </svg>
-        </button>
-      </div>
-    );
-  }
-
-  const hasInput = input.trim().length > 0;
-
-  // Voice button handlers (long press detection)
+  // Voice button handlers (long press detection).
+  // NOTE: every hook must live before the `if (collapsed)` early return
+  // below, otherwise React errors with #310 (hook count mismatch) when
+  // collapsed flips.
   const handleVoicePointerDown = useCallback(() => {
     setIsLongPress(false);
     longPressTimer.current = setTimeout(() => {
@@ -143,6 +125,32 @@ export const ChatInput = ({
     // Reset input so same file can be selected again
     e.target.value = '';
   }, [onAttach]);
+
+  if (collapsed) {
+    // Mirror the composer's outer padding (py-2.5 px-2) so the capsule
+    // has the same height before/after — only the content swaps. An
+    // inner h-11 row matches the composer's button height for a stable
+    // capsule shape across the transition.
+    return (
+      <div className="max-w-xl mx-auto">
+        <button
+          type="button"
+          onClick={onActivate}
+          className="w-full glass rounded-full py-2.5 px-2 hover:bg-ink/5 transition-colors text-left font-sans"
+          aria-label={t('chatInput.askDJ')}
+        >
+          <div className="flex items-center gap-2 h-11 px-3.5">
+            <span className="truncate text-[15px] text-ink-3 flex-1">{getPlaceholder()}</span>
+            <svg className="w-5 h-5 text-ink-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 5v14m-7-7h14" />
+            </svg>
+          </div>
+        </button>
+      </div>
+    );
+  }
+
+  const hasInput = input.trim().length > 0;
 
   return (
     <div className="max-w-xl mx-auto">
