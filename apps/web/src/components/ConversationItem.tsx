@@ -77,21 +77,22 @@ export const ConversationItem = ({
   };
 
   return (
-    <div className="group relative mx-2">
+    <div className="group relative mx-3">
       <button
         onClick={() => onSelect?.(conv.id)}
         className={`
-          w-full p-2.5 rounded-2xl transition-colors flex items-center overflow-hidden
+          w-full p-3 rounded-2xl transition-colors flex items-center overflow-hidden
           ${isActive ? 'bg-chip-2 text-ink font-medium hairline' : 'text-ink-2 hover:bg-chip hover:text-ink'}
         `}
       >
-        {/* Icon — vinyl disc. Outer ring + label band + spindle hole.
-            Reads as "music topic" at ~20px without going cartoony. */}
-        <div className="w-6 flex justify-center shrink-0">
-          <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
-            <circle cx="12" cy="12" r="9" />
-            <circle cx="12" cy="12" r="4" />
-            <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
+        {/* Icon — vinyl disc. Filled body + page-bg label disc + ink
+            spindle. Mirrors the New Chat button's `ml-1 + w-6` container
+            so all sidebar icons sit on the same vertical centerline. */}
+        <div className="w-6 flex justify-center shrink-0 ml-1">
+          <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" fill="currentColor" />
+            <circle cx="12" cy="12" r="3.5" fill="rgb(var(--page))" />
+            <circle cx="12" cy="12" r="1" fill="currentColor" />
           </svg>
         </div>
 
