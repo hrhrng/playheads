@@ -101,6 +101,10 @@ export const ChatInterface = ({
   const { openPlaylist, hasPlaylist } = usePlaylistSheet();
   const [seekDragging, setSeekDragging] = useState(false);
   const [seekDragValue, setSeekDragValue] = useState(0);
+  // Track id at drag-start. If the song advances mid-drag (auto-play,
+  // LLM skip, etc.) we throw away the seek on release — the intended
+  // timestamp belongs to a track that's no longer current.
+  const seekDragTrackIdRef = useRef<string | null>(null);
   const seekDisplayValue = seekDragging ? seekDragValue : (playbackTime?.current || 0);
   const [showLyrics, setShowLyrics] = useState(false);
   const lyrics = useLyrics(currentTrack, playbackTime?.current || 0);
@@ -364,8 +368,17 @@ export const ChatInterface = ({
                                     max={playbackTime?.total || 1}
                                     step={0.1}
                                     value={seekDisplayValue}
+                                    onPointerDown={() => { seekDragTrackIdRef.current = currentTrack?.id ?? null; }}
                                     onChange={(e) => { setSeekDragging(true); setSeekDragValue(parseFloat(e.target.value)); }}
-                                    onPointerUp={(e) => { onSeek?.(parseFloat((e.target as HTMLInputElement).value)); setSeekDragging(false); }}
+                                    onPointerUp={(e) => {
+                                      // Only apply seek if the track is still the one we started on.
+                                      // Otherwise the user's intent doesn't transfer cleanly.
+                                      if (seekDragTrackIdRef.current && seekDragTrackIdRef.current === currentTrack?.id) {
+                                        onSeek?.(parseFloat((e.target as HTMLInputElement).value));
+                                      }
+                                      seekDragTrackIdRef.current = null;
+                                      setSeekDragging(false);
+                                    }}
                                     className="absolute inset-0 w-full opacity-0 cursor-pointer"
                                   />
                                 </div>
