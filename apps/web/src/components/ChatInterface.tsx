@@ -238,6 +238,50 @@ export const ChatInterface = ({
     return () => document.removeEventListener('keydown', onKey);
   }, [showHistory, toggleHistory]);
 
+  // Playback shortcuts (feed mode only, no chat / text field focused):
+  //   Space      — toggle play/pause
+  //   ArrowLeft  — seek -5s
+  //   ArrowRight — seek +5s
+  // We bail in chat mode because the user is typing — they need space
+  // and arrow keys for the textarea. Also skip if focus is on an
+  // interactive element that natively consumes these keys.
+  useEffect(() => {
+    if (showHistory) return; // chat mode: cede keys to composer / form fields
+    const SEEK_DELTA = 5; // seconds
+    const isInteractive = (el: EventTarget | null): boolean => {
+      if (!(el instanceof HTMLElement)) return false;
+      const tag = el.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+      if ((el as HTMLElement).isContentEditable) return true;
+      return false;
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (isInteractive(e.target)) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return; // leave OS shortcuts alone
+      if (e.code === 'Space' || e.key === ' ') {
+        e.preventDefault();
+        togglePlay();
+        return;
+      }
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        const t = Math.max(0, (playbackTime?.current ?? 0) - SEEK_DELTA);
+        onSeek?.(t);
+        return;
+      }
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        const cur = playbackTime?.current ?? 0;
+        const total = playbackTime?.total ?? 0;
+        const t = total > 0 ? Math.min(total, cur + SEEK_DELTA) : cur + SEEK_DELTA;
+        onSeek?.(t);
+        return;
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [showHistory, togglePlay, onSeek, playbackTime?.current, playbackTime?.total]);
+
   // Wrap sendMessage — allow chatting without Apple Music auth;
   // playback errors are caught at the MusicKit layer with reconnect prompts.
   // Drains the local `attachments` queue into FileUIParts. Each attachment's
