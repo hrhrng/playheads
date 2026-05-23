@@ -4,7 +4,7 @@
  * @module components/chat/ChatInput
  */
 
-import { useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAutoResizeTextarea } from '../../hooks/useChatHelpers';
 import type { ProviderType } from '../../providers/types';
@@ -36,6 +36,12 @@ interface ChatInputProps {
   attachments?: File[];
   /** Remove an attachment by index */
   onRemoveAttachment?: (index: number) => void;
+  /** Collapsed "pill" mode — shows only placeholder hint, whole capsule is
+   *  a tap target firing `onActivate`. Used in feed mode; in chat/transcript
+   *  mode pass collapsed=false to expose the full composer. */
+  collapsed?: boolean;
+  /** Fired when the user taps the collapsed pill. */
+  onActivate?: () => void;
 }
 
 /**
@@ -55,6 +61,8 @@ export const ChatInput = ({
   onAttach,
   attachments = [],
   onRemoveAttachment,
+  collapsed = false,
+  onActivate,
 }: ChatInputProps): React.JSX.Element => {
   const { t } = useTranslation();
   const textareaRef = useAutoResizeTextarea(input);
@@ -74,6 +82,37 @@ export const ChatInput = ({
     if (isPlaying) return t('chatInput.askDJ');
     return t('chatInput.startVibe');
   };
+
+  // Auto-focus the textarea when we transition from pill to composer
+  // (user just tapped the pill — they want to type immediately, like
+  // tapping the search bar on iOS).
+  const wasCollapsedRef = useRef(collapsed);
+  useEffect(() => {
+    if (wasCollapsedRef.current && !collapsed) {
+      // Wait one tick so the textarea is mounted/visible.
+      requestAnimationFrame(() => textareaRef.current?.focus());
+    }
+    wasCollapsedRef.current = collapsed;
+  }, [collapsed, textareaRef]);
+
+  if (collapsed) {
+    return (
+      <div className="max-w-xl mx-auto">
+        <button
+          type="button"
+          onClick={onActivate}
+          className="w-full glass rounded-full py-3 px-5 text-left text-[15px] text-ink-3 hover:text-ink-2 hover:bg-ink/5 transition-colors font-sans flex items-center justify-between gap-3"
+          aria-label={t('chatInput.askDJ')}
+        >
+          <span className="truncate">{getPlaceholder()}</span>
+          {/* subtle hint glyph on the right — same caret iOS uses */}
+          <svg className="w-4 h-4 text-ink-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M8 12h8M12 8v8" />
+          </svg>
+        </button>
+      </div>
+    );
+  }
 
   const hasInput = input.trim().length > 0;
 

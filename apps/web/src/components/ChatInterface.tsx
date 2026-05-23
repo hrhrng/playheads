@@ -219,6 +219,25 @@ export const ChatInterface = ({
     requestAnimationFrame(() => { programmaticSlideRef.current = false; });
   }, [currentTrackIndex, sessionId]);
 
+  // ESC exits chat mode back to the feed pill (matches iOS chevron-down
+  // tap on the sheet drag handle). Ignored while the user is mid-typing
+  // in another textarea/input outside the composer.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (!showHistory) return;
+      // Don't steal ESC if the user is in a different text field that
+      // might want it (e.g. inline rename in the sidebar).
+      const tag = (e.target as HTMLElement)?.tagName;
+      const inEditable = tag === 'INPUT' || (tag === 'TEXTAREA' && (e.target as HTMLTextAreaElement)?.value?.trim().length > 0);
+      if (inEditable) return;
+      e.preventDefault();
+      toggleHistory();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [showHistory, toggleHistory]);
+
   // Wrap sendMessage — allow chatting without Apple Music auth;
   // playback errors are caught at the MusicKit layer with reconnect prompts.
   // Drains the local `attachments` queue into FileUIParts. Each attachment's
@@ -423,46 +442,49 @@ export const ChatInterface = ({
       <div className={`absolute bottom-0 left-0 right-0 px-6 pb-5 pt-10 z-30 transition-all duration-300 ${
         showLyrics && !showHistory ? 'opacity-0 pointer-events-none translate-y-4' : 'opacity-100 pointer-events-auto translate-y-0'
       }`}>
-        {/* Toggle Button + Mobile Playlist Button */}
-        <div className="max-w-xl mx-auto mb-2 flex items-center">
-          <button
-            onClick={toggleHistory}
-            className="relative w-8 h-8 rounded-full flex items-center justify-center"
-            title={showHistory ? 'Back to Player' : 'View Transcript'}
-          >
-            {(() => {
-              const artUrl = currentTrack?.artworkUrl
-                ? currentTrack.artworkUrl.replace('{w}', '64').replace('{h}', '64')
-                : '';
-              const hasArt = !!currentTrack && !!artUrl;
+        {/* Toggle row — only rendered in chat mode (showHistory) as the
+            "back to feed" affordance, or on mobile when a playlist is
+            available (the playlist button lives here). In feed mode it's
+            empty and not needed: the pill itself is the entry point. */}
+        <div className={`max-w-xl mx-auto flex items-center transition-all duration-200 ${showHistory || hasPlaylist ? 'mb-2 h-8 opacity-100' : 'h-0 mb-0 opacity-0 pointer-events-none overflow-hidden'}`}>
+          {showHistory && (
+            <button
+              onClick={toggleHistory}
+              className="relative w-8 h-8 rounded-full flex items-center justify-center"
+              title="Back to feed"
+              aria-label="Back to feed"
+            >
+              {(() => {
+                const artUrl = currentTrack?.artworkUrl
+                  ? currentTrack.artworkUrl.replace('{w}', '64').replace('{h}', '64')
+                  : '';
+                const hasArt = !!currentTrack && !!artUrl;
 
-              if (hasArt && showHistory) {
+                if (hasArt) {
+                  // Track artwork doubles as a "what's playing" indicator
+                  // while transcript is up. Tap collapses back to feed.
+                  return (
+                    <div className="w-8 h-8 rounded-full overflow-hidden ring-2 ring-rule relative group">
+                      <img src={artUrl} alt="" className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                        <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                      </div>
+                    </div>
+                  );
+                }
+
                 return (
-                  <div className="w-8 h-8 rounded-full overflow-hidden ring-2 ring-rule">
-                    <img src={artUrl} alt="" className="w-full h-full object-cover" />
+                  <div className="w-8 h-8 rounded-full hairline bg-ink text-page border-ink flex items-center justify-center">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
                   </div>
                 );
-              }
-
-              return (
-                <div className={`w-8 h-8 rounded-full hairline flex items-center justify-center transition-colors duration-200 ${
-                  showHistory
-                    ? 'bg-ink text-page border-ink'
-                    : 'bg-chip text-ink-3 hover:text-ink hover:bg-chip-2'
-                }`}>
-                  {showHistory ? (
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19V6l12-3v13M9 10l12-3" />
-                    </svg>
-                  ) : (
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                  )}
-                </div>
-              );
-            })()}
-          </button>
+              })()}
+            </button>
+          )}
 
           {/* Playlist button — mobile only, right-aligned, shown when a playlist exists */}
           {hasPlaylist && (
@@ -480,7 +502,9 @@ export const ChatInterface = ({
           )}
         </div>
 
-        {/* Input Bar */}
+        {/* Input Bar — pill in feed mode (default), expanded composer once
+            the user activates chat. iOS pattern: tap pill → enters chat
+            (showHistory true); explicit toggle button or ESC → back to feed. */}
         <ChatInput
           input={input}
           isLoading={isLoading}
@@ -491,6 +515,8 @@ export const ChatInterface = ({
           onAttach={handleAttach}
           attachments={attachments.map((a) => a.file)}
           onRemoveAttachment={handleRemoveAttachment}
+          collapsed={!showHistory}
+          onActivate={toggleHistory}
         />
 
       </div>
