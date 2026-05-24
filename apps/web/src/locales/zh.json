@@ -75,7 +75,12 @@
     "playNow": "立即播放",
     "addToQueue": "加入队列",
     "playAll": "全部播放",
-    "addAll": "全部加入"
+    "addAll": "全部加入",
+    "tracksCount_one": "{{count}} 首",
+    "tracksCount_other": "{{count}} 首",
+    "emptyTracks": "还没有歌曲 — 聊一聊你喜欢的风格，让它慢慢长起来。",
+    "chatAbout": "聊聊这个歌单",
+    "chatCreating": "正在开聊…"
   },
   "lyrics": {
     "tapToView": "有歌词 · 点击查看",

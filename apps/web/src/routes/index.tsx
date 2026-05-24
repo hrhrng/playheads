@@ -8,6 +8,7 @@ import { AppLayout } from '../components/AppLayout';
 import { ChatInterface } from '../components/ChatInterface';
 import { DiscoveryPage } from '../components/DiscoveryPage';
 import { PlaylistSidebar } from '../components/PlaylistSidebar';
+import { PlaylistView } from '../components/PlaylistView';
 import { useSidebarState } from '../hooks/useSidebarState';
 import { API_BASE } from '../config/api';
 import type { PlaybackTime } from '../types';
@@ -174,6 +175,13 @@ export function ChatRoute({
 
   const sessionId = id === 'pending' ? null : (id ?? null);
 
+  // Active conversation — used to dispatch playlist routes (type==='playlist')
+  // to the PlaylistView instead of the chat-shaped ChatInterface.
+  const activeConversation = sessionId
+    ? conversations.find((c) => c.id === sessionId)
+    : undefined;
+  const isPlaylistRoute = activeConversation?.type === 'playlist';
+
   const handleSessionCreated = (
     newSessionId: string,
     initialMessage: string
@@ -249,29 +257,41 @@ export function ChatRoute({
         />
       }
     >
-      <ChatInterface
-        isDJSpeaking={isDJSpeaking}
-        currentTrack={currentTrack}
-        isPlaying={isPlaying}
-        isTransitioning={isTransitioning}
-        isAppleMusicAuthorized={isAppleMusicAuthorized}
-        togglePlay={togglePlay}
-        playbackTime={playbackTime}
-        onSeek={seekTo}
-        sessionId={sessionId}
-        userId={session?.user.id || null}
-        musicActions={musicActions}
-        queueOps={queue}
-        onMessageSent={fetchConversations}
-        onSessionCreated={handleSessionCreated}
-        onLinkApple={onLinkApple}
-        queue={queue.queue}
-        history={queue.history}
-        jumpToIndex={(i) => queue.jumpToIndex(i)}
-        playTrackById={playTrackById}
-        conversations={conversations}
-        onConversationsRefetch={fetchConversations}
-      />
+      {isPlaylistRoute && activeConversation ? (
+        <PlaylistView
+          conversation={activeConversation}
+          userId={session?.user.id || null}
+          currentTrack={currentTrack}
+          isPlaying={isPlaying}
+          onPlayTracks={(tracks) => queue.playTracks(tracks)}
+          onAddTracks={(tracks) => queue.addTracks(tracks)}
+          onSessionCreated={fetchConversations}
+        />
+      ) : (
+        <ChatInterface
+          isDJSpeaking={isDJSpeaking}
+          currentTrack={currentTrack}
+          isPlaying={isPlaying}
+          isTransitioning={isTransitioning}
+          isAppleMusicAuthorized={isAppleMusicAuthorized}
+          togglePlay={togglePlay}
+          playbackTime={playbackTime}
+          onSeek={seekTo}
+          sessionId={sessionId}
+          userId={session?.user.id || null}
+          musicActions={musicActions}
+          queueOps={queue}
+          onMessageSent={fetchConversations}
+          onSessionCreated={handleSessionCreated}
+          onLinkApple={onLinkApple}
+          queue={queue.queue}
+          history={queue.history}
+          jumpToIndex={(i) => queue.jumpToIndex(i)}
+          playTrackById={playTrackById}
+          conversations={conversations}
+          onConversationsRefetch={fetchConversations}
+        />
+      )}
     </AppLayout>
   );
 }

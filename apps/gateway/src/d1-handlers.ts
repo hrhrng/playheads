@@ -486,15 +486,41 @@ export async function handleGetConversation(
 }
 
 // ---------------------------------------------------------------------------
-// POST /api/session/create  { user_id }
+// POST /api/session/create  { user_id, seed_playlist_id? }
+//
+// seed_playlist_id forks a chat from an existing playlist: the source
+// playlist's tracks are copied into the new conversation's playlist JSON
+// so the AI's get_playlist tool sees them as the topic on turn 1.
 // ---------------------------------------------------------------------------
 export async function handleCreateSession(
   request: Request,
   DB: D1,
 ): Promise<Response> {
-  const body = (await request.json()) as { user_id: string };
+  const body = (await request.json()) as {
+    user_id: string;
+    seed_playlist_id?: string;
+  };
   if (!body.user_id) {
     return Response.json({ error: "user_id is required" }, { status: 400 });
+  }
+
+  // If a seed playlist was supplied, fetch its tracks (and verify the user owns
+  // it). On failure we proceed without a seed — forking should degrade to a
+  // plain new chat, not error out.
+  let seededPlaylistJson = "[]";
+  if (body.seed_playlist_id) {
+    try {
+      const db = drizzle(DB);
+      const t = schema.conversation;
+      const [src] = await db
+        .select({ playlist: t.playlist })
+        .from(t)
+        .where(and(eq(t.id, body.seed_playlist_id), eq(t.userId, body.user_id)))
+        .limit(1);
+      if (src?.playlist) seededPlaylistJson = src.playlist;
+    } catch (e) {
+      console.warn("[session/create] seed_playlist_id fetch failed:", e);
+    }
   }
 
   const now = Date.now();
@@ -504,8 +530,8 @@ export async function handleCreateSession(
   try {
     await DB.batch([
       DB.prepare(
-        'INSERT OR IGNORE INTO "conversation" ("id","userId","messageCount","isPinned","isArchived","createdAt","updatedAt") VALUES (?,?,0,0,0,?,?)',
-      ).bind(sessionId, body.user_id, now, now),
+        'INSERT OR IGNORE INTO "conversation" ("id","userId","messageCount","isPinned","isArchived","playlist","createdAt","updatedAt") VALUES (?,?,0,0,0,?,?,?)',
+      ).bind(sessionId, body.user_id, seededPlaylistJson, now, now),
       DB.prepare(
         'INSERT OR IGNORE INTO "conversationState" ("id","conversationId","messages","context","createdAt","updatedAt") VALUES (?,?,\'[]\',\'{}\',?,?)',
       ).bind(stateId, sessionId, now, now),

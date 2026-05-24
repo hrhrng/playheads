@@ -75,7 +75,12 @@
     "playNow": "Play now",
     "addToQueue": "Add to queue",
     "playAll": "Play all",
-    "addAll": "Add all"
+    "addAll": "Add all",
+    "tracksCount_one": "{{count}} track",
+    "tracksCount_other": "{{count}} tracks",
+    "emptyTracks": "No tracks yet — chat about a vibe to fill this playlist.",
+    "chatAbout": "Chat about this",
+    "chatCreating": "Starting chat…"
   },
   "lyrics": {
     "tapToView": "Lyrics available · tap to view",
