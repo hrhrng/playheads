@@ -27,8 +27,8 @@ interface AppLayoutProps {
   rightPanel?: React.ReactNode;
   /** Callback to create new chat */
   onNewChat?: () => void;
-  /** Callback to create a new playlist (opens inline create flow) */
-  onCreatePlaylist?: () => void;
+  /** Create a playlist with the given title (called after inline input commits). */
+  onCreatePlaylist?: (title: string) => void;
   /** Callback when conversation is selected */
   onSelectConversation?: (conversationId: string) => void;
   /** Callback when conversation is deleted */
@@ -99,6 +99,10 @@ export const AppLayout = ({
   const [conversationToDelete, setConversationToDelete] = useState<Conversation | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  // Inline "new playlist" input — triggered by the + in the Playlists
+  // section header. value=null means hidden; value='' or any string
+  // means the row is showing and editable. Replaces the native prompt.
+  const [newPlaylistDraft, setNewPlaylistDraft] = useState<string | null>(null);
   const [mobilePlaylistOpen, setMobilePlaylistOpen] = useState(false);
 
   // Resize state
@@ -228,15 +232,15 @@ export const AppLayout = ({
         return (
           <div className="flex flex-col gap-0.5 overflow-hidden overflow-y-auto max-h-[calc(100vh-180px)] pt-1">
             {/* Playlists section */}
-            {(sortedPlaylists.length > 0 || onCreatePlaylist) && (
+            {(sortedPlaylists.length > 0 || onCreatePlaylist || newPlaylistDraft !== null) && (
               <>
                 <div className="flex items-center justify-between mx-4 mt-2 mb-1">
                   <span className="text-[11px] font-medium text-ink-3 uppercase tracking-wider">
                     {t('nav.playlists')}
                   </span>
-                  {onCreatePlaylist && (
+                  {onCreatePlaylist && newPlaylistDraft === null && (
                     <button
-                      onClick={onCreatePlaylist}
+                      onClick={() => setNewPlaylistDraft('')}
                       className="text-ink-3 hover:text-ink p-0.5 rounded transition-colors"
                       title={t('nav.newPlaylist')}
                       aria-label={t('nav.newPlaylist')}
@@ -247,6 +251,44 @@ export const AppLayout = ({
                     </button>
                   )}
                 </div>
+                {/* Inline new-playlist input row — replaces window.prompt.
+                    Mirrors ConversationItem's mx-3 + p-3 + ml-1 + w-6 icon
+                    layout so the input's left edge sits flush with the
+                    titles below. */}
+                {newPlaylistDraft !== null && onCreatePlaylist && (
+                  <div className="mx-3 p-3 rounded-2xl bg-chip-2 hairline flex items-center overflow-hidden">
+                    <div className="w-6 flex justify-center shrink-0 ml-1 text-ink-2">
+                      <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                        <path d="M9 18V5l12-2v13" />
+                        <circle cx="6" cy="18" r="2.5" fill="currentColor" stroke="none" />
+                        <circle cx="18" cy="16" r="2.5" fill="currentColor" stroke="none" />
+                      </svg>
+                    </div>
+                    <input
+                      ref={(el) => { if (el && document.activeElement !== el) el.focus(); }}
+                      type="text"
+                      value={newPlaylistDraft}
+                      placeholder={t('nav.newPlaylist')}
+                      onChange={(e) => setNewPlaylistDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        e.stopPropagation();
+                        if (e.key === 'Enter') {
+                          const v = newPlaylistDraft.trim();
+                          if (v) onCreatePlaylist(v);
+                          setNewPlaylistDraft(null);
+                        } else if (e.key === 'Escape') {
+                          setNewPlaylistDraft(null);
+                        }
+                      }}
+                      onBlur={() => {
+                        const v = newPlaylistDraft.trim();
+                        if (v) onCreatePlaylist(v);
+                        setNewPlaylistDraft(null);
+                      }}
+                      className="ml-3 flex-1 bg-transparent border-none outline-none text-[14px] font-medium text-ink p-0 min-w-0 placeholder-ink-3"
+                    />
+                  </div>
+                )}
                 <ConversationList
                   conversations={sortedPlaylists}
                   expanded={isMobile || expanded}

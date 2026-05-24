@@ -87,23 +87,22 @@ export function HomeRoute({
     }
   };
 
-  const handleCreatePlaylist = async () => {
+  const handleCreatePlaylist = async (title: string) => {
     const userId = session?.user.id;
-    if (!userId) return;
-    const title = window.prompt('Playlist name', 'New Playlist');
-    if (!title || !title.trim()) return;
+    const trimmed = title.trim();
+    if (!userId || !trimmed) return;
     try {
       const res = await fetch(`${API_BASE}/playlists/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, title: title.trim() }),
+        body: JSON.stringify({ user_id: userId, title: trimmed }),
       });
       if (!res.ok) throw new Error(`playlists/create ${res.status}`);
       const { id } = (await res.json()) as { id: string };
       fetchConversations();
       navigate(`/chat/${id}`, { replace: true });
     } catch (e) {
-      console.error('[HomeRoute] create playlist failed:', e);
+      console.error('[Route] create playlist failed:', e);
     }
   };
 
@@ -189,16 +188,15 @@ export function ChatRoute({
     fetchConversations();
   };
 
-  const handleCreatePlaylist = async () => {
+  const handleCreatePlaylist = async (title: string) => {
     const userId = session?.user.id;
-    if (!userId) return;
-    const title = window.prompt('Playlist name', 'New Playlist');
-    if (!title || !title.trim()) return;
+    const trimmed = title.trim();
+    if (!userId || !trimmed) return;
     try {
       const res = await fetch(`${API_BASE}/playlists/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, title: title.trim() }),
+        body: JSON.stringify({ user_id: userId, title: trimmed }),
       });
       if (!res.ok) throw new Error(`playlists/create ${res.status}`);
       const { id: pid } = (await res.json()) as { id: string };
