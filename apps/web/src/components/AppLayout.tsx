@@ -27,6 +27,8 @@ interface AppLayoutProps {
   rightPanel?: React.ReactNode;
   /** Callback to create new chat */
   onNewChat?: () => void;
+  /** Callback to create a new playlist (opens inline create flow) */
+  onCreatePlaylist?: () => void;
   /** Callback when conversation is selected */
   onSelectConversation?: (conversationId: string) => void;
   /** Callback when conversation is deleted */
@@ -71,6 +73,7 @@ export const AppLayout = ({
   children,
   rightPanel,
   onNewChat,
+  onCreatePlaylist,
   onSelectConversation,
   onDeleteConversation,
   onPinConversation,
@@ -210,26 +213,73 @@ export const AppLayout = ({
         </button>
       </div>
 
-      {/* Scrollable conversation list — plain rows, no enclosing card.
-         iOS-style: only the active row carries a chip; the list itself
-         just scrolls. */}
-      {(isMobile || expanded) && (
-        <div className="flex flex-col gap-0.5 overflow-hidden overflow-y-auto max-h-[calc(100vh-180px)] pt-1">
-          {/* Conversation List */}
-          <ConversationList
-            conversations={conversations}
-            expanded={isMobile || expanded}
-            activeConversationId={activeConversationId}
-            onSelectConversation={handleSelectConversation}
-            onPinConversation={onPinConversation}
-            onRenameConversation={onRenameConversation}
-            onDeleteConversation={handleDeleteRequest}
-            onLoadMore={onLoadMoreConversations}
-            hasMore={hasMoreConversations}
-            isLoadingMore={isLoadingMoreConversations}
-          />
-        </div>
-      )}
+      {/* Scrollable list — Playlists section on top, Chats below.
+         iOS-style: section headers as uppercase labels; only the active
+         row carries a chip; everything just scrolls together. */}
+      {(isMobile || expanded) && (() => {
+        const playlists = conversations.filter((c) => c.type === 'playlist');
+        const chats = conversations.filter((c) => c.type !== 'playlist');
+        // Sort playlists so Liked sits on top, then by updatedAt desc.
+        const sortedPlaylists = [...playlists].sort((a, b) => {
+          if (a.is_liked && !b.is_liked) return -1;
+          if (!a.is_liked && b.is_liked) return 1;
+          return Number(b.updated_at ?? 0) - Number(a.updated_at ?? 0);
+        });
+        return (
+          <div className="flex flex-col gap-0.5 overflow-hidden overflow-y-auto max-h-[calc(100vh-180px)] pt-1">
+            {/* Playlists section */}
+            {(sortedPlaylists.length > 0 || onCreatePlaylist) && (
+              <>
+                <div className="flex items-center justify-between mx-4 mt-2 mb-1">
+                  <span className="text-[11px] font-medium text-ink-3 uppercase tracking-wider">
+                    {t('nav.playlists')}
+                  </span>
+                  {onCreatePlaylist && (
+                    <button
+                      onClick={onCreatePlaylist}
+                      className="text-ink-3 hover:text-ink p-0.5 rounded transition-colors"
+                      title={t('nav.newPlaylist')}
+                      aria-label={t('nav.newPlaylist')}
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 5v14m-7-7h14" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+                <ConversationList
+                  conversations={sortedPlaylists}
+                  expanded={isMobile || expanded}
+                  activeConversationId={activeConversationId}
+                  onSelectConversation={handleSelectConversation}
+                  onPinConversation={onPinConversation}
+                  onRenameConversation={onRenameConversation}
+                  onDeleteConversation={handleDeleteRequest}
+                />
+              </>
+            )}
+
+            {/* Chats section */}
+            <div className="flex items-center justify-between mx-4 mt-3 mb-1">
+              <span className="text-[11px] font-medium text-ink-3 uppercase tracking-wider">
+                {t('nav.chats')}
+              </span>
+            </div>
+            <ConversationList
+              conversations={chats}
+              expanded={isMobile || expanded}
+              activeConversationId={activeConversationId}
+              onSelectConversation={handleSelectConversation}
+              onPinConversation={onPinConversation}
+              onRenameConversation={onRenameConversation}
+              onDeleteConversation={handleDeleteRequest}
+              onLoadMore={onLoadMoreConversations}
+              hasMore={hasMoreConversations}
+              isLoadingMore={isLoadingMoreConversations}
+            />
+          </div>
+        );
+      })()}
 
       {/* Bottom section: User info with settings popover */}
       <div className="mt-auto nav-item">

@@ -104,6 +104,13 @@ export const conversation = sqliteTable('conversation', {
   lastMessageAt: integer('lastMessageAt', { mode: 'number' }),
   isPinned: integer('isPinned', { mode: 'boolean' }).notNull().default(false),
   isArchived: integer('isArchived', { mode: 'boolean' }).notNull().default(false),
+  // 'chat' (default) — LLM topic; 'playlist' — user-curated list. Both
+  // store tracks in the `playlist` JSON column below; difference is
+  // origin and how the sidebar groups them.
+  type: text('type').notNull().default('chat'),
+  // True for the per-user "Liked" playlist (auto-created, undeleteable).
+  // Exactly zero or one row with isLiked=true per user.
+  isLiked: integer('isLiked', { mode: 'boolean' }).notNull().default(false),
   // JSON array of UnifiedTrack snapshots — every track the LLM added to
   // this conversation's queue. Becomes the topic's playlist; restored
   // when the user re-opens this conversation.

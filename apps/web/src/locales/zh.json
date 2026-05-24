@@ -26,7 +26,10 @@
   "nav": {
     "newChat": "New Chat",
     "playheads": "Playheads",
-    "openMenu": "打开菜单"
+    "openMenu": "打开菜单",
+    "playlists": "歌单",
+    "chats": "对话",
+    "newPlaylist": "新建歌单"
   },
   "discovery": {
     "title": "听点啥？",
@@ -54,7 +57,9 @@
     "uploadImage": "上传图片",
     "send": "发送",
     "voice": "语音",
-    "voiceTip": "短按口述 · 长按语音对话"
+    "voiceTip": "短按口述 · 长按语音对话",
+    "like": "加入喜欢",
+    "unlike": "移出喜欢"
   },
   "playlist": {
     "title": "PLAYLIST",

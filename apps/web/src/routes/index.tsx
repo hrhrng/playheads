@@ -87,9 +87,30 @@ export function HomeRoute({
     }
   };
 
+  const handleCreatePlaylist = async () => {
+    const userId = session?.user.id;
+    if (!userId) return;
+    const title = window.prompt('Playlist name', 'New Playlist');
+    if (!title || !title.trim()) return;
+    try {
+      const res = await fetch(`${API_BASE}/playlists/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, title: title.trim() }),
+      });
+      if (!res.ok) throw new Error(`playlists/create ${res.status}`);
+      const { id } = (await res.json()) as { id: string };
+      fetchConversations();
+      navigate(`/chat/${id}`, { replace: true });
+    } catch (e) {
+      console.error('[HomeRoute] create playlist failed:', e);
+    }
+  };
+
   return (
     <AppLayout
       onNewChat={handleNewChat}
+      onCreatePlaylist={handleCreatePlaylist}
       onSelectConversation={(id) => navigate(`/chat/${id}`)}
       onDeleteConversation={onDeleteConversation}
       onPinConversation={onPinConversation}
@@ -168,9 +189,30 @@ export function ChatRoute({
     fetchConversations();
   };
 
+  const handleCreatePlaylist = async () => {
+    const userId = session?.user.id;
+    if (!userId) return;
+    const title = window.prompt('Playlist name', 'New Playlist');
+    if (!title || !title.trim()) return;
+    try {
+      const res = await fetch(`${API_BASE}/playlists/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, title: title.trim() }),
+      });
+      if (!res.ok) throw new Error(`playlists/create ${res.status}`);
+      const { id: pid } = (await res.json()) as { id: string };
+      fetchConversations();
+      navigate(`/chat/${pid}`, { replace: true });
+    } catch (e) {
+      console.error('[ChatRoute] create playlist failed:', e);
+    }
+  };
+
   return (
     <AppLayout
       onNewChat={() => navigate('/')}
+      onCreatePlaylist={handleCreatePlaylist}
       onSelectConversation={(convId) => navigate(`/chat/${convId}`)}
       onDeleteConversation={onDeleteConversation}
       onPinConversation={onPinConversation}
@@ -229,6 +271,8 @@ export function ChatRoute({
         history={queue.history}
         jumpToIndex={(i) => queue.jumpToIndex(i)}
         playTrackById={playTrackById}
+        conversations={conversations}
+        onConversationsRefetch={fetchConversations}
       />
     </AppLayout>
   );

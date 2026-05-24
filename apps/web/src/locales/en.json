@@ -26,7 +26,10 @@
   "nav": {
     "newChat": "New Chat",
     "playheads": "Playheads",
-    "openMenu": "Open menu"
+    "openMenu": "Open menu",
+    "playlists": "Playlists",
+    "chats": "Chats",
+    "newPlaylist": "New playlist"
   },
   "discovery": {
     "title": "What's the vibe?",
@@ -54,7 +57,9 @@
     "uploadImage": "Upload image",
     "send": "Send",
     "voice": "Voice",
-    "voiceTip": "Tap to dictate · Hold for voice mode"
+    "voiceTip": "Tap to dictate · Hold for voice mode",
+    "like": "Add to Liked",
+    "unlike": "Remove from Liked"
   },
   "playlist": {
     "title": "PLAYLIST",

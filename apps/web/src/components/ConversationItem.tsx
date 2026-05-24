@@ -85,15 +85,30 @@ export const ConversationItem = ({
           ${isActive ? 'bg-chip-2 text-ink font-medium hairline' : 'text-ink-2 hover:bg-chip hover:text-ink'}
         `}
       >
-        {/* Icon — vinyl disc. Filled body + page-bg label disc + ink
-            spindle. Mirrors the New Chat button's `ml-1 + w-6` container
-            so all sidebar icons sit on the same vertical centerline. */}
+        {/* Icon varies by row type:
+              - Chat (default): vinyl disc (filled body + page-bg label + spindle)
+              - Playlist (user-created): outline music note
+              - Liked (special playlist): filled heart
+            All mirror the New Chat button's `ml-1 + w-6` container so they
+            sit on the same vertical centerline. */}
         <div className="w-6 flex justify-center shrink-0 ml-1">
-          <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="12" cy="12" r="9" fill="currentColor" />
-            <circle cx="12" cy="12" r="3.5" fill="rgb(var(--page))" />
-            <circle cx="12" cy="12" r="1" fill="currentColor" />
-          </svg>
+          {conv.is_liked ? (
+            <svg className="w-5 h-5 shrink-0 text-rose-500" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M12 21s-7-4.35-9.5-8.5C.5 9 2.5 5 6.5 5c2.5 0 3.99 1.5 5.5 3 1.51-1.5 3-3 5.5-3 4 0 6 4 4 7.5C19 16.65 12 21 12 21z" />
+            </svg>
+          ) : conv.type === 'playlist' ? (
+            <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M9 18V5l12-2v13" />
+              <circle cx="6" cy="18" r="2.5" fill="currentColor" stroke="none" />
+              <circle cx="18" cy="16" r="2.5" fill="currentColor" stroke="none" />
+            </svg>
+          ) : (
+            <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" fill="currentColor" />
+              <circle cx="12" cy="12" r="3.5" fill="rgb(var(--page))" />
+              <circle cx="12" cy="12" r="1" fill="currentColor" />
+            </svg>
+          )}
         </div>
 
         {/* Title or inline edit */}

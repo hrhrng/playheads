@@ -20,6 +20,7 @@ import { MiniLyrics } from './lyrics/MiniLyrics';
 import { FullLyrics } from './lyrics/FullLyrics';
 import { useChat } from '../hooks/useChat';
 import { useLyrics } from '../hooks/useLyrics';
+import { useLikedTrack } from '../hooks/useLikedTrack';
 import { useInitialMessage } from '../hooks/useChatHelpers';
 import { usePlaylistSheet } from '../contexts/PlaylistSheetContext';
 import type { PlaybackTime } from '../types';
@@ -64,6 +65,11 @@ interface ChatInterfaceProps {
   /** Jump to an absolute index in the full track list (history + current + upcoming). */
   jumpToIndex?: (absoluteIndex: number) => Promise<void>;
   playTrackById?: (trackId: string) => Promise<void>;
+  /** Conversations list (incl. playlists) — used by the Like tool to
+   *  know whether the current track is already in the Liked playlist. */
+  conversations?: Array<{ id: string; is_liked?: boolean; playlist?: unknown }>;
+  /** Called after a like-toggle so the parent can refetch the list. */
+  onConversationsRefetch?: () => void;
 }
 
 /**
@@ -95,6 +101,8 @@ export const ChatInterface = ({
   history: historyTracks = [],
   jumpToIndex,
   playTrackById,
+  conversations: conversationsForLike = [],
+  onConversationsRefetch,
 }: ChatInterfaceProps) => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -108,6 +116,12 @@ export const ChatInterface = ({
   const seekDisplayValue = seekDragging ? seekDragValue : (playbackTime?.current || 0);
   const [showLyrics, setShowLyrics] = useState(false);
   const lyrics = useLyrics(currentTrack, playbackTime?.current || 0);
+  const { isLiked, toggle: toggleLiked } = useLikedTrack({
+    userId,
+    currentTrack,
+    conversations: conversationsForLike,
+    onMutated: onConversationsRefetch,
+  });
 
   // Image attachments — uploaded to R2 as user selects files.
   type Attachment = {
@@ -545,6 +559,30 @@ export const ChatInterface = ({
             </button>
           )}
         </div>
+
+        {/* Tools row — sits just above the ChatInput. Per-track actions
+            like Like / Save go here so they're always reachable in feed
+            mode without having to open chat. Extend by adding more buttons. */}
+        {currentTrack && (
+          <div className="max-w-xl mx-auto mb-2 flex items-center gap-2 px-1">
+            <button
+              onClick={toggleLiked}
+              disabled={!userId}
+              title={isLiked ? t('chatInput.unlike') : t('chatInput.like')}
+              aria-label={isLiked ? t('chatInput.unlike') : t('chatInput.like')}
+              aria-pressed={isLiked}
+              className={`w-9 h-9 rounded-full flex items-center justify-center transition-all hairline ${
+                isLiked
+                  ? 'bg-rose-500/15 text-rose-500 border-rose-500/40'
+                  : 'bg-chip text-ink-2 hover:text-ink hover:bg-chip-2'
+              } disabled:opacity-40`}
+            >
+              <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill={isLiked ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 21s-7-4.35-9.5-8.5C.5 9 2.5 5 6.5 5c2.5 0 3.99 1.5 5.5 3 1.51-1.5 3-3 5.5-3 4 0 6 4 4 7.5C19 16.65 12 21 12 21z" />
+              </svg>
+            </button>
+          </div>
+        )}
 
         {/* Input Bar — pill in feed mode (default), expanded composer once
             the user activates chat. iOS pattern: tap pill → enters chat

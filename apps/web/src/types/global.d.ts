@@ -28,6 +28,11 @@ export interface Conversation {
   playlist_cover?: string | null;
   /** Number of tracks in this conversation's saved playlist. */
   playlist_count?: number;
+  /** 'chat' (default) or 'playlist'. Playlists piggyback on the same
+   *  table but are grouped separately in the sidebar. */
+  type?: 'chat' | 'playlist';
+  /** True only for the per-user auto-created "Liked" playlist. */
+  is_liked?: boolean;
   [key: string]: unknown;
 }
 

@@ -15,6 +15,8 @@ import {
   handleSyncState,
   handleGetQueue,
   handleSyncQueue,
+  handleCreatePlaylist,
+  handleToggleLikeTrack,
 } from "./d1-handlers";
 import { handleUploadImage, handleGetUpload } from "./uploads";
 
@@ -143,6 +145,16 @@ export default {
     // /api/session/create → D1 native
     if (url.pathname === "/api/session/create" && request.method === "POST") {
       return handleCreateSession(request, env.DB);
+    }
+
+    // /api/playlists/* — playlists piggyback on the conversation table
+    // (type='playlist'); these endpoints are wrappers for the
+    // playlist-specific operations.
+    if (url.pathname === "/api/playlists/create" && request.method === "POST") {
+      return handleCreatePlaylist(request, env.DB);
+    }
+    if (url.pathname === "/api/playlists/liked/toggle-track" && request.method === "POST") {
+      return handleToggleLikeTrack(request, env.DB);
     }
 
     // /api/state → D1 native

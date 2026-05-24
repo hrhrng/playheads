@@ -49,6 +49,8 @@ export async function handleListConversations(
           isPinned: t.isPinned,
           updatedAt: t.updatedAt,
           playlist: t.playlist,
+          type: t.type,
+          isLiked: t.isLiked,
         })
         .from(t)
         .where(
@@ -74,6 +76,8 @@ export async function handleListConversations(
           isPinned: t.isPinned,
           updatedAt: t.updatedAt,
           playlist: t.playlist,
+          type: t.type,
+          isLiked: t.isLiked,
         })
         .from(t)
         .where(and(eq(t.userId, userId), eq(t.isArchived, false)))
@@ -109,6 +113,8 @@ export async function handleListConversations(
           playlist,
           playlist_count: playlist.length,
           playlist_cover: first?.artworkUrl ?? null,
+          type: c.type ?? "chat",
+          is_liked: Boolean(c.isLiked),
         };
       }),
       has_more: hasMore,
@@ -161,6 +167,121 @@ export async function handleCreateConversation(
       { status: 500 },
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/playlists/create  { user_id, title }
+// Creates a conversation row with type='playlist'. Reuses the conversation
+// table so the existing list/delete/rename machinery just works.
+// ---------------------------------------------------------------------------
+export async function handleCreatePlaylist(
+  request: Request,
+  DB: D1,
+): Promise<Response> {
+  const body = (await request.json()) as { user_id?: string; title?: string };
+  if (!body.user_id) {
+    return Response.json({ error: "user_id required" }, { status: 400 });
+  }
+  const title = (body.title ?? "").trim() || "New Playlist";
+
+  const now = Date.now();
+  const id = crypto.randomUUID();
+  const stateId = crypto.randomUUID();
+
+  try {
+    await DB.batch([
+      DB.prepare(
+        'INSERT INTO "conversation" ("id","userId","title","messageCount","isPinned","isArchived","type","isLiked","playlist","createdAt","updatedAt") VALUES (?,?,?,0,0,0,\'playlist\',0,\'[]\',?,?)',
+      ).bind(id, body.user_id, title, now, now),
+      DB.prepare(
+        'INSERT INTO "conversationState" ("id","conversationId","messages","context","createdAt","updatedAt") VALUES (?,?,\'[]\',\'{}\',?,?)',
+      ).bind(stateId, id, now, now),
+    ]);
+
+    return Response.json({
+      id,
+      title,
+      type: "playlist",
+      is_liked: false,
+      created_at: new Date(now).toISOString(),
+    });
+  } catch (e) {
+    console.error("Failed to create playlist:", e);
+    return Response.json({ error: "Failed to create playlist" }, { status: 500 });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/playlists/liked/toggle-track  { user_id, track }
+// Find-or-create the user's Liked playlist, then add or remove the track
+// from its `playlist` JSON column. Idempotent — if the track is already
+// present we remove it (toggle semantics).
+//
+// Returns { liked: boolean, playlistId: string } so the client can flip
+// the heart icon optimistically with the authoritative state.
+// ---------------------------------------------------------------------------
+export async function handleToggleLikeTrack(
+  request: Request,
+  DB: D1,
+): Promise<Response> {
+  const body = (await request.json()) as {
+    user_id?: string;
+    track?: Record<string, unknown> & { id?: string };
+  };
+  if (!body.user_id || !body.track?.id) {
+    return Response.json({ error: "user_id and track.id required" }, { status: 400 });
+  }
+
+  const db = drizzle(DB);
+  const t = schema.conversation;
+  const now = Date.now();
+
+  // Find existing Liked playlist for this user.
+  let [liked] = await db
+    .select({ id: t.id, playlist: t.playlist })
+    .from(t)
+    .where(and(eq(t.userId, body.user_id), eq(t.isLiked, true)))
+    .limit(1);
+
+  // Auto-create on first like — no migration needed for existing users.
+  if (!liked) {
+    const id = crypto.randomUUID();
+    const stateId = crypto.randomUUID();
+    await DB.batch([
+      DB.prepare(
+        'INSERT INTO "conversation" ("id","userId","title","messageCount","isPinned","isArchived","type","isLiked","playlist","createdAt","updatedAt") VALUES (?,?,\'Liked\',0,1,0,\'playlist\',1,\'[]\',?,?)',
+      ).bind(id, body.user_id, now, now),
+      DB.prepare(
+        'INSERT INTO "conversationState" ("id","conversationId","messages","context","createdAt","updatedAt") VALUES (?,?,\'[]\',\'{}\',?,?)',
+      ).bind(stateId, id, now, now),
+    ]);
+    liked = { id, playlist: "[]" };
+  }
+
+  let tracks: Array<Record<string, unknown> & { id?: string }> = [];
+  try { tracks = JSON.parse(liked.playlist || "[]"); } catch { tracks = []; }
+
+  const trackId = body.track.id;
+  const idx = tracks.findIndex((tr) => tr?.id === trackId);
+  let isNowLiked: boolean;
+  if (idx >= 0) {
+    tracks.splice(idx, 1);
+    isNowLiked = false;
+  } else {
+    tracks.push(body.track);
+    isNowLiked = true;
+  }
+
+  await db
+    .update(t)
+    .set({ playlist: JSON.stringify(tracks), updatedAt: now })
+    .where(eq(t.id, liked.id));
+
+  return Response.json({
+    liked: isNowLiked,
+    playlistId: liked.id,
+    count: tracks.length,
+  });
 }
 
 // ---------------------------------------------------------------------------
