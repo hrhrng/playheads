@@ -356,6 +356,70 @@ export async function handleAddTrackToPlaylist(
 }
 
 // ---------------------------------------------------------------------------
+// POST /api/playlists/:id/remove-track  { user_id, track_id }
+//
+// Remove the track with the given id from a user-owned custom playlist.
+// Idempotent — if the track isn't there, returns { removed: false }.
+// Refuses Liked playlists (use the dedicated toggle endpoint).
+// ---------------------------------------------------------------------------
+export async function handleRemoveTrackFromPlaylist(
+  playlistId: string,
+  request: Request,
+  DB: D1,
+): Promise<Response> {
+  const body = (await request.json()) as {
+    user_id?: string;
+    track_id?: string;
+  };
+  if (!body.user_id || !body.track_id) {
+    return Response.json({ error: "user_id and track_id required" }, { status: 400 });
+  }
+
+  const db = drizzle(DB);
+  const t = schema.conversation;
+
+  const [row] = await db
+    .select({ id: t.id, playlist: t.playlist, isLiked: t.isLiked, type: t.type })
+    .from(t)
+    .where(and(eq(t.id, playlistId), eq(t.userId, body.user_id)))
+    .limit(1);
+
+  if (!row) {
+    return Response.json({ error: "Playlist not found" }, { status: 404 });
+  }
+  if (row.type !== "playlist") {
+    return Response.json({ error: "Not a playlist" }, { status: 400 });
+  }
+  if (row.isLiked) {
+    return Response.json(
+      { error: "Use /api/playlists/liked/toggle-track for the Liked playlist" },
+      { status: 400 },
+    );
+  }
+
+  let tracks: Array<Record<string, unknown> & { id?: string }> = [];
+  try { tracks = JSON.parse(row.playlist || "[]"); } catch { tracks = []; }
+
+  const before = tracks.length;
+  tracks = tracks.filter((tr) => tr?.id !== body.track_id);
+  const removed = tracks.length !== before;
+
+  if (removed) {
+    const now = Date.now();
+    await db
+      .update(t)
+      .set({ playlist: JSON.stringify(tracks), updatedAt: now })
+      .where(eq(t.id, row.id));
+  }
+
+  return Response.json({
+    removed,
+    playlistId: row.id,
+    count: tracks.length,
+  });
+}
+
+// ---------------------------------------------------------------------------
 // DELETE /api/conversations/:id?user_id=...
 // ---------------------------------------------------------------------------
 export async function handleDeleteConversation(

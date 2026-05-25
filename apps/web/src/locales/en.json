@@ -80,7 +80,15 @@
     "tracksCount_other": "{{count}} tracks",
     "emptyTracks": "No tracks yet — chat about a vibe to fill this playlist.",
     "chatAbout": "Chat about this",
-    "chatCreating": "Starting chat…"
+    "chatCreating": "Starting chat…",
+    "chatPlaceholder": "Chat about {{title}}…",
+    "chatSend": "Start chat"
+  },
+  "trackMenu": {
+    "more": "More",
+    "removeFromPlaylist": "Remove from this playlist",
+    "removeFromQueue": "Remove from queue",
+    "openInAppleMusic": "Open in Apple Music"
   },
   "addToPlaylist": {
     "button": "Add to playlist",

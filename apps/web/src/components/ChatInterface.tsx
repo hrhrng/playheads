@@ -15,6 +15,8 @@ import { RecordPlayer } from './RecordPlayer';
 import { NewChatView } from './NewChatView';
 import { SkeletonLoader } from './SkeletonLoader';
 import { AddToPlaylistButton } from './AddToPlaylistButton';
+import { TrackMenu } from './TrackMenu';
+import type { TrackMenuItem } from './TrackMenu';
 import { ChatInput } from './chat/ChatInput';
 import { TranscriptOverlay } from './chat/TranscriptOverlay';
 import { MiniLyrics } from './lyrics/MiniLyrics';
@@ -214,6 +216,52 @@ export const ChatInterface = ({
   // MusicKit's absolute position. feedTracks[currentTrackIndex] is the
   // playing card.
   const currentTrackIndex = historyTracks.length;
+
+  // Build the now-playing "more" menu. Items live in the three-dot rather
+  // than the inline tools row so the row stays tight: Like + Add-to-Playlist
+  // are one-tap; less-common actions hide behind the overflow.
+  const trackMenuItems = useMemo<TrackMenuItem[]>(() => {
+    if (!currentTrack) return [];
+    const items: TrackMenuItem[] = [];
+    // Remove from queue: removes the currently playing card. Only meaningful
+    // when there's something to fall back to (the queue length check).
+    if (queueOps && queueTracks.length > 1) {
+      items.push({
+        key: 'remove-from-queue',
+        label: t('trackMenu.removeFromQueue'),
+        icon: (
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+        ),
+        onSelect: (close) => {
+          queueOps.removeTrack(currentTrackIndex);
+          close();
+        },
+      });
+    }
+    // Open in Apple Music. The catalog URL works without an explicit
+    // storefront — Apple redirects based on the user's account region.
+    if (currentTrack.provider === 'apple-music') {
+      items.push({
+        key: 'open-apple-music',
+        label: t('trackMenu.openInAppleMusic'),
+        icon: (
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+            <polyline points="15 3 21 3 21 9" />
+            <line x1="10" y1="14" x2="21" y2="3" />
+          </svg>
+        ),
+        onSelect: (close) => {
+          const url = `https://music.apple.com/song/${encodeURIComponent(currentTrack.id)}`;
+          window.open(url, '_blank', 'noopener,noreferrer');
+          close();
+        },
+      });
+    }
+    return items;
+  }, [currentTrack, queueOps, queueTracks.length, currentTrackIndex, t]);
 
   const swiperRef = useRef<SwiperClass | null>(null);
   // True during a programmatic slideTo() we initiated for auto-center —
@@ -589,6 +637,13 @@ export const ChatInterface = ({
               conversations={conversationsForLike}
               onMutated={onConversationsRefetch}
             />
+            {trackMenuItems.length > 0 && (
+              <TrackMenu
+                items={trackMenuItems}
+                className="w-9 h-9 rounded-full flex items-center justify-center transition-all hairline bg-chip text-ink-2 hover:text-ink hover:bg-chip-2"
+                iconClassName="w-[18px] h-[18px]"
+              />
+            )}
           </div>
         )}
 

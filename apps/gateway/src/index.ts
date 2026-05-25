@@ -18,6 +18,7 @@ import {
   handleCreatePlaylist,
   handleToggleLikeTrack,
   handleAddTrackToPlaylist,
+  handleRemoveTrackFromPlaylist,
 } from "./d1-handlers";
 import { handleUploadImage, handleGetUpload } from "./uploads";
 
@@ -164,6 +165,10 @@ export default {
       const addTrackMatch = url.pathname.match(/^\/api\/playlists\/([^/]+)\/add-track$/);
       if (addTrackMatch && request.method === "POST") {
         return handleAddTrackToPlaylist(addTrackMatch[1], request, env.DB);
+      }
+      const removeTrackMatch = url.pathname.match(/^\/api\/playlists\/([^/]+)\/remove-track$/);
+      if (removeTrackMatch && request.method === "POST") {
+        return handleRemoveTrackFromPlaylist(removeTrackMatch[1], request, env.DB);
       }
     }
 

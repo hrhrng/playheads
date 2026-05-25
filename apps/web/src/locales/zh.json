@@ -80,7 +80,15 @@
     "tracksCount_other": "{{count}} 首",
     "emptyTracks": "还没有歌曲 — 聊一聊你喜欢的风格，让它慢慢长起来。",
     "chatAbout": "聊聊这个歌单",
-    "chatCreating": "正在开聊…"
+    "chatCreating": "正在开聊…",
+    "chatPlaceholder": "聊聊「{{title}}」…",
+    "chatSend": "开聊"
+  },
+  "trackMenu": {
+    "more": "更多",
+    "removeFromPlaylist": "从这个歌单移除",
+    "removeFromQueue": "从队列移除",
+    "openInAppleMusic": "在 Apple Music 打开"
   },
   "addToPlaylist": {
     "button": "加入歌单",
