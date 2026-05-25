@@ -254,18 +254,22 @@ export function ChatRoute({
           toggleCollapse={toggleCollapse}
           width={width}
           onWidthChange={setWidth}
+          conversations={conversations}
+          onConversationsRefetch={fetchConversations}
         />
       }
     >
       {isPlaylistRoute && activeConversation ? (
         <PlaylistView
           conversation={activeConversation}
+          conversations={conversations}
           userId={session?.user.id || null}
           currentTrack={currentTrack}
           isPlaying={isPlaying}
           onPlayTracks={(tracks) => queue.playTracks(tracks)}
           onAddTracks={(tracks) => queue.addTracks(tracks)}
           onSessionCreated={fetchConversations}
+          onConversationsRefetch={fetchConversations}
         />
       ) : (
         <ChatInterface

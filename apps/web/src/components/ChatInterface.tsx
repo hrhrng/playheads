@@ -14,6 +14,7 @@ import { useTranslation } from 'react-i18next';
 import { RecordPlayer } from './RecordPlayer';
 import { NewChatView } from './NewChatView';
 import { SkeletonLoader } from './SkeletonLoader';
+import { AddToPlaylistButton } from './AddToPlaylistButton';
 import { ChatInput } from './chat/ChatInput';
 import { TranscriptOverlay } from './chat/TranscriptOverlay';
 import { MiniLyrics } from './lyrics/MiniLyrics';
@@ -23,7 +24,7 @@ import { useLyrics } from '../hooks/useLyrics';
 import { useLikedTrack } from '../hooks/useLikedTrack';
 import { useInitialMessage } from '../hooks/useChatHelpers';
 import { usePlaylistSheet } from '../contexts/PlaylistSheetContext';
-import type { PlaybackTime } from '../types';
+import type { PlaybackTime, Conversation } from '../types';
 import type { UnifiedTrack } from '../providers/types';
 import type { MusicActions, QueueOperations } from '../hooks/useAgentChatAdapter';
 
@@ -66,9 +67,10 @@ interface ChatInterfaceProps {
   jumpToIndex?: (absoluteIndex: number) => Promise<void>;
   playTrackById?: (trackId: string) => Promise<void>;
   /** Conversations list (incl. playlists) — used by the Like tool to
-   *  know whether the current track is already in the Liked playlist. */
-  conversations?: Array<{ id: string; is_liked?: boolean; playlist?: unknown }>;
-  /** Called after a like-toggle so the parent can refetch the list. */
+   *  know whether the current track is already in the Liked playlist,
+   *  and by the Add-to-Playlist popover to list custom playlists. */
+  conversations?: Conversation[];
+  /** Called after a like-toggle / add so the parent can refetch the list. */
   onConversationsRefetch?: () => void;
 }
 
@@ -581,6 +583,12 @@ export const ChatInterface = ({
                 <path d="M12 21s-7-4.35-9.5-8.5C.5 9 2.5 5 6.5 5c2.5 0 3.99 1.5 5.5 3 1.51-1.5 3-3 5.5-3 4 0 6 4 4 7.5C19 16.65 12 21 12 21z" />
               </svg>
             </button>
+            <AddToPlaylistButton
+              track={currentTrack}
+              userId={userId}
+              conversations={conversationsForLike}
+              onMutated={onConversationsRefetch}
+            />
           </div>
         )}
 

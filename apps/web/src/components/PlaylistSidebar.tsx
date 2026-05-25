@@ -8,7 +8,9 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { UnifiedTrack } from '../providers/types';
+import type { Conversation } from '../types';
 import { usePlaylistSheet } from '../contexts/PlaylistSheetContext';
+import { AddToPlaylistButton } from './AddToPlaylistButton';
 
 interface PlaylistSidebarProps {
   /** Currently playing track */
@@ -46,6 +48,10 @@ interface PlaylistSidebarProps {
   width: number;
   /** Callback when width changes */
   onWidthChange?: (width: number) => void;
+  /** Conversations list — needed by the Add-to-Playlist popover. */
+  conversations?: Conversation[];
+  /** Refetch trigger after a track is added to a custom playlist. */
+  onConversationsRefetch?: () => void;
 }
 
 interface FormattedSidebarTrack {
@@ -76,6 +82,8 @@ export const PlaylistSidebar = ({
   showQueue = true,
   width,
   onWidthChange,
+  conversations = [],
+  onConversationsRefetch,
 }: PlaylistSidebarProps): React.JSX.Element => {
   const { t } = useTranslation();
   const [historyExpanded, setHistoryExpanded] = useState(false);
@@ -335,7 +343,10 @@ export const PlaylistSidebar = ({
                       <div className="text-[13px] font-medium font-display text-ink truncate leading-snug text-left">{track.name || 'Unknown'}</div>
                       <div className="text-[11px] text-ink-3 truncate text-left">{track.artist || 'Unknown Artist'}</div>
                     </div>
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                    <div
+                      className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); onPlayTopicTrack?.(track); }}
@@ -359,6 +370,14 @@ export const PlaylistSidebar = ({
                           <line x1="5" y1="12" x2="19" y2="12" />
                         </svg>
                       </button>
+                      <AddToPlaylistButton
+                        track={track}
+                        userId={userId ?? null}
+                        conversations={conversations}
+                        onMutated={onConversationsRefetch}
+                        className="w-7 h-7 rounded-full flex items-center justify-center text-ink-2 hover:text-ink hover:bg-chip-2 transition-colors"
+                        iconClassName="w-3.5 h-3.5"
+                      />
                     </div>
                   </div>
                 ))}

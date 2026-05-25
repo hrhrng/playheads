@@ -17,6 +17,7 @@ import {
   handleSyncQueue,
   handleCreatePlaylist,
   handleToggleLikeTrack,
+  handleAddTrackToPlaylist,
 } from "./d1-handlers";
 import { handleUploadImage, handleGetUpload } from "./uploads";
 
@@ -155,6 +156,15 @@ export default {
     }
     if (url.pathname === "/api/playlists/liked/toggle-track" && request.method === "POST") {
       return handleToggleLikeTrack(request, env.DB);
+    }
+    // /api/playlists/{id}/add-track — append a track to a user-owned custom
+    // playlist (idempotent). Liked is intentionally excluded — its toggle
+    // semantics live on the dedicated route above.
+    {
+      const addTrackMatch = url.pathname.match(/^\/api\/playlists\/([^/]+)\/add-track$/);
+      if (addTrackMatch && request.method === "POST") {
+        return handleAddTrackToPlaylist(addTrackMatch[1], request, env.DB);
+      }
     }
 
     // /api/state → D1 native

@@ -82,6 +82,14 @@
     "chatAbout": "Chat about this",
     "chatCreating": "Starting chat…"
   },
+  "addToPlaylist": {
+    "button": "Add to playlist",
+    "header": "Add to playlist",
+    "empty": "No custom playlists yet — create one from the sidebar.",
+    "untitled": "Untitled",
+    "already": "Already in",
+    "failed": "Failed"
+  },
   "lyrics": {
     "tapToView": "Lyrics available · tap to view",
     "notAvailable": "No lyrics available"

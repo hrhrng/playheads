@@ -82,6 +82,14 @@
     "chatAbout": "聊聊这个歌单",
     "chatCreating": "正在开聊…"
   },
+  "addToPlaylist": {
+    "button": "加入歌单",
+    "header": "加入到歌单",
+    "empty": "还没有自建歌单——去侧边栏建一个。",
+    "untitled": "未命名",
+    "already": "已在其中",
+    "failed": "失败"
+  },
   "lyrics": {
     "tapToView": "有歌词 · 点击查看",
     "notAvailable": "暂无歌词"

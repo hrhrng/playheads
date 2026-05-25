@@ -15,27 +15,34 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { API_BASE } from '../config/api';
+import { AddToPlaylistButton } from './AddToPlaylistButton';
 import type { UnifiedTrack } from '../providers/types';
 import type { Conversation } from '../types';
 
 interface PlaylistViewProps {
   conversation: Conversation;
+  /** Full conversations list — passed through to the per-row Add-to-Playlist
+   *  popover so the user can copy a track from this playlist into another. */
+  conversations?: Conversation[];
   userId: string | null;
   currentTrack: UnifiedTrack | null;
   isPlaying: boolean;
   onPlayTracks: (tracks: UnifiedTrack[]) => void;
   onAddTracks: (tracks: UnifiedTrack[]) => void;
   onSessionCreated?: () => void;
+  onConversationsRefetch?: () => void;
 }
 
 export const PlaylistView = ({
   conversation,
+  conversations = [],
   userId,
   currentTrack,
   isPlaying,
   onPlayTracks,
   onAddTracks,
   onSessionCreated,
+  onConversationsRefetch,
 }: PlaylistViewProps): React.JSX.Element => {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -212,17 +219,27 @@ export const PlaylistView = ({
                     <div className="text-[12px] text-ink-3 truncate">{track.artist || 'Unknown Artist'}</div>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => onAddTracks([track])}
-                    className="w-8 h-8 rounded-full flex items-center justify-center text-ink-3 opacity-0 group-hover:opacity-100 hover:text-ink hover:bg-chip-2 transition-all shrink-0"
-                    aria-label={t('playlist.addToQueue')}
-                    title={t('playlist.addToQueue')}
-                  >
-                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                      <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-                    </svg>
-                  </button>
+                  <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      type="button"
+                      onClick={() => onAddTracks([track])}
+                      className="w-8 h-8 rounded-full flex items-center justify-center text-ink-3 hover:text-ink hover:bg-chip-2 transition-colors"
+                      aria-label={t('playlist.addToQueue')}
+                      title={t('playlist.addToQueue')}
+                    >
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                      </svg>
+                    </button>
+                    <AddToPlaylistButton
+                      track={track}
+                      userId={userId}
+                      conversations={conversations}
+                      onMutated={onConversationsRefetch}
+                      className="w-8 h-8 rounded-full flex items-center justify-center text-ink-3 hover:text-ink hover:bg-chip-2 transition-colors"
+                      iconClassName="w-4 h-4"
+                    />
+                  </div>
                 </li>
               );
             })}
