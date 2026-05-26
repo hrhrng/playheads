@@ -132,7 +132,57 @@ export function DiscoveryPage({ conversations, userId, onSessionCreated }: Disco
     startNewTopic(trimmed || t('discovery.imagePlaceholderMessage'));
   }, [input, attachments, startNewTopic, t]);
 
-  const recent = useMemo(() => conversations.slice(0, 8), [conversations]);
+  // Split the conversation feed into two parallel sections so the user can
+  // visually distinguish "places I curated" (playlists) from "places I
+  // chatted" (chats). The same row layout is reused; only the section
+  // header differs. Liked (an isLiked playlist) is pinned to the top of
+  // the playlists group, matching the left-sidebar ordering.
+  const { playlists, recentChats } = useMemo(() => {
+    const pls: Conversation[] = [];
+    const chs: Conversation[] = [];
+    for (const c of conversations) {
+      if (c.type === 'playlist') pls.push(c);
+      else chs.push(c);
+    }
+    pls.sort((a, b) => {
+      if (a.is_liked && !b.is_liked) return -1;
+      if (!a.is_liked && b.is_liked) return 1;
+      // Already sorted by updated_at desc upstream — preserve order.
+      return 0;
+    });
+    return { playlists: pls.slice(0, 8), recentChats: chs.slice(0, 8) };
+  }, [conversations]);
+
+  const renderRow = (c: Conversation) => {
+    const cover = formatArtwork(c.playlist_cover, 80);
+    const title = displayTitle(c, t('discovery.title'));
+    return (
+      <button
+        key={c.id}
+        onClick={() => navigate(`/chat/${c.id}`)}
+        className="group flex items-center gap-3 px-1.5 py-2 rounded-xl text-left hover:bg-chip transition-colors"
+      >
+        <div className="w-9 h-9 rounded-card overflow-hidden bg-chip-2 shrink-0 flex items-center justify-center">
+          {cover ? (
+            <img src={cover} alt={title} className="w-full h-full object-cover" loading="lazy" draggable={false} />
+          ) : c.is_liked ? (
+            <svg className="w-4 h-4 text-rose-500" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M12 21s-7-4.35-9.5-8.5C.5 9 2.5 5 6.5 5c2.5 0 3.99 1.5 5.5 3 1.51-1.5 3-3 5.5-3 4 0 6 4 4 7.5C19 16.65 12 21 12 21z" />
+            </svg>
+          ) : null}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-ink text-[14px] truncate leading-tight">{title}</div>
+          {(c.playlist_count ?? 0) > 0 && (
+            <div className="text-ink-4 text-[11px] mt-0.5">{t('discovery.trackCount', { count: c.playlist_count ?? 0 })}</div>
+          )}
+        </div>
+        <svg className="w-4 h-4 text-ink-4 group-hover:text-ink-3 transition-colors shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+        </svg>
+      </button>
+    );
+  };
 
   return (
     <div className="flex flex-col h-full">
@@ -160,39 +210,28 @@ export function DiscoveryPage({ conversations, userId, onSessionCreated }: Disco
             ))}
           </div>
 
-          {/* Recent — compact text-led list, not album tiles */}
-          {recent.length > 0 && (
-            <section>
+          {/* Playlists — curated track collections. Rendered before chats
+              because they're the user's persistent, intentional artifacts;
+              chats are ephemeral exploration. */}
+          {playlists.length > 0 && (
+            <section className="mb-8">
               <h2 className="text-ink-3 text-[11px] font-medium uppercase tracking-[0.18em] mb-2 px-1">
-                {t('discovery.recent')}
+                {t('discovery.playlists')}
               </h2>
               <div className="flex flex-col">
-                {recent.map((c) => {
-                  const cover = formatArtwork(c.playlist_cover, 80);
-                  const title = displayTitle(c, t('discovery.title'));
-                  return (
-                    <button
-                      key={c.id}
-                      onClick={() => navigate(`/chat/${c.id}`)}
-                      className="group flex items-center gap-3 px-1.5 py-2 rounded-xl text-left hover:bg-chip transition-colors"
-                    >
-                      <div className="w-9 h-9 rounded-card overflow-hidden bg-chip-2 shrink-0">
-                        {cover ? (
-                          <img src={cover} alt={title} className="w-full h-full object-cover" loading="lazy" draggable={false} />
-                        ) : null}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-ink text-[14px] truncate leading-tight">{title}</div>
-                        {(c.playlist_count ?? 0) > 0 && (
-                          <div className="text-ink-4 text-[11px] mt-0.5">{t('discovery.trackCount', { count: c.playlist_count ?? 0 })}</div>
-                        )}
-                      </div>
-                      <svg className="w-4 h-4 text-ink-4 group-hover:text-ink-3 transition-colors shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                      </svg>
-                    </button>
-                  );
-                })}
+                {playlists.map(renderRow)}
+              </div>
+            </section>
+          )}
+
+          {/* Recent chats — type !== 'playlist'. */}
+          {recentChats.length > 0 && (
+            <section>
+              <h2 className="text-ink-3 text-[11px] font-medium uppercase tracking-[0.18em] mb-2 px-1">
+                {t('discovery.recentChats')}
+              </h2>
+              <div className="flex flex-col">
+                {recentChats.map(renderRow)}
               </div>
             </section>
           )}

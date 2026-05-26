@@ -35,6 +35,8 @@
     "title": "What's the vibe?",
     "subtitle": "Tell me what you want to hear, or pick something below.",
     "recent": "Recent",
+    "playlists": "Playlists",
+    "recentChats": "Recent Chats",
     "trySomething": "Try something",
     "failedToStart": "Failed to start",
     "imagePlaceholderMessage": "What's in this image?",

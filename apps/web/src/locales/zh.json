@@ -35,6 +35,8 @@
     "title": "听点啥？",
     "subtitle": "说一句你想听的，或者从下面选个开始。",
     "recent": "Recent",
+    "playlists": "歌单",
+    "recentChats": "最近对话",
     "trySomething": "试试这些",
     "failedToStart": "无法开启对话",
     "imagePlaceholderMessage": "看下这张图",
