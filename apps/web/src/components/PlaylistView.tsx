@@ -16,13 +16,14 @@
  * @module components/PlaylistView
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { API_BASE } from '../config/api';
 import { TrackMenu } from './TrackMenu';
 import type { TrackMenuItem } from './TrackMenu';
 import { AddToPlaylistButton } from './AddToPlaylistButton';
+import { ChatInput } from './chat/ChatInput';
 import type { UnifiedTrack } from '../providers/types';
 import type { Conversation } from '../types';
 
@@ -57,7 +58,6 @@ export const PlaylistView = ({
   const [loading, setLoading] = useState(true);
   const [forking, setForking] = useState(false);
   const [composerInput, setComposerInput] = useState('');
-  const composerRef = useRef<HTMLTextAreaElement>(null);
 
   // Fetch the playlist's tracks. `conversations` in props only carries
   // metadata (title, playlist_count, playlist_cover); the actual tracks
@@ -123,14 +123,6 @@ export const PlaylistView = ({
     handleFork(text || undefined);
   }, [composerInput, forking, handleFork]);
 
-  // Auto-resize textarea (matches NewChatView's pattern).
-  useEffect(() => {
-    const ta = composerRef.current;
-    if (!ta) return;
-    ta.style.height = 'auto';
-    ta.style.height = `${ta.scrollHeight}px`;
-  }, [composerInput]);
-
   const handleRemoveFromPlaylist = useCallback(async (track: UnifiedTrack) => {
     if (!userId) return;
     // Optimistic remove — drop the row immediately, restore on error.
@@ -182,6 +174,23 @@ export const PlaylistView = ({
 
   return (
     <div className="relative h-full overflow-hidden">
+      {/* Back-to-feed affordance — playlists are a side-trip; the "home"
+          for an active listening session is the new-chat feed. Pinned to
+          the top-left of the scroll container so it stays reachable as
+          the track list grows. */}
+      <button
+        type="button"
+        onClick={() => navigate('/')}
+        title={t('playlist.backToFeed')}
+        aria-label={t('playlist.backToFeed')}
+        className="absolute top-4 left-4 z-20 w-9 h-9 rounded-full flex items-center justify-center hairline bg-chip/80 backdrop-blur text-ink-2 hover:text-ink hover:bg-chip-2 transition-colors"
+      >
+        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <line x1="19" y1="12" x2="5" y2="12" />
+          <polyline points="12 19 5 12 12 5" />
+        </svg>
+      </button>
+
       <div className="h-full overflow-y-auto">
         <div className="max-w-3xl mx-auto px-6 pt-8 pb-40">
           {/* Hero */}
@@ -332,58 +341,22 @@ export const PlaylistView = ({
         </div>
       </div>
 
-      {/* Bottom-pinned chat composer — mirrors the new-chat page's capsule.
-          Sits over the scrollable content; the pb-40 inside compensates so
-          the last track row isn't hidden under it. */}
+      {/* Bottom-pinned chat composer — reuse ChatInput so the playlist
+          page's input is visually identical to the one on the new-chat
+          page and inside an active chat (same pill, send button, voice
+          long-press, attachments). Submitting forks a chat with
+          seed_playlist_id; if the user typed text it's handed off via
+          route state so the new chat auto-sends it. */}
       <div className="absolute bottom-0 left-0 right-0 px-6 pb-5 pt-10 z-30 pointer-events-none">
-        <div className="max-w-xl mx-auto pointer-events-auto">
-          <div className="relative glass rounded-3xl flex items-end p-2 pl-5 pr-2 focus-within:bg-ink/10 transition-all shadow-glass">
-            <textarea
-              ref={composerRef}
-              rows={1}
-              value={composerInput}
-              onChange={(e) => setComposerInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSendComposer();
-                }
-              }}
-              placeholder={t('playlist.chatPlaceholder', { title })}
-              className="flex-1 bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-ink placeholder-ink-3 text-[15px] resize-none py-3 max-h-32 no-scrollbar font-sans"
-              disabled={forking || !userId}
-            />
-            <button
-              type="button"
-              onClick={handleSendComposer}
-              disabled={forking || !userId}
-              className={`w-10 h-10 flex items-center justify-center rounded-full transition-all flex-shrink-0 self-end ${
-                forking
-                  ? 'bg-ink/30 text-page animate-pulse'
-                  : composerInput.trim()
-                  ? 'bg-accent text-page hover:bg-accent-2'
-                  : 'bg-chip text-ink-4 hover:text-ink-2'
-              } disabled:opacity-40`}
-              title={composerInput.trim() ? t('playlist.chatSend') : t('playlist.chatAbout')}
-              aria-label={composerInput.trim() ? t('playlist.chatSend') : t('playlist.chatAbout')}
-            >
-              {forking ? (
-                <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              ) : composerInput.trim() ? (
-                // Up-arrow = send
-                <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.2">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 19V5m0 0l-6 6m6-6l6 6" />
-                </svg>
-              ) : (
-                // Chat bubble = open chat (no message yet)
-                <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                </svg>
-              )}
-            </button>
-          </div>
+        <div className="pointer-events-auto">
+          <ChatInput
+            input={composerInput}
+            isLoading={forking}
+            isDJSpeaking={false}
+            isPlaying={isPlaying}
+            onInputChange={setComposerInput}
+            onSend={handleSendComposer}
+          />
         </div>
       </div>
     </div>

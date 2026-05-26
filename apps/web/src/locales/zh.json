@@ -83,8 +83,7 @@
     "emptyTracks": "还没有歌曲 — 聊一聊你喜欢的风格，让它慢慢长起来。",
     "chatAbout": "聊聊这个歌单",
     "chatCreating": "正在开聊…",
-    "chatPlaceholder": "聊聊「{{title}}」…",
-    "chatSend": "开聊"
+    "backToFeed": "返回 Feed"
   },
   "trackMenu": {
     "more": "更多",
