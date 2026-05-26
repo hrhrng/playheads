@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import type { Conversation } from '../types/global.d.ts';
+import { displayConversationTitle } from '../utils/conversationTitle';
 
 interface ConversationItemProps {
   conversation: Conversation;
@@ -132,7 +133,7 @@ export const ConversationItem = ({
               startRename();
             }}
           >
-            {conv.title || t('common.newConversation')}
+            {displayConversationTitle(conv, t('common.newConversation'))}
           </span>
         )}
       </button>

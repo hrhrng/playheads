@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { ChatInput } from './chat/ChatInput';
 import { API_BASE } from '../config/api';
+import { displayConversationTitle } from '../utils/conversationTitle';
 import type { Conversation } from '../types';
 
 type Attachment = {
@@ -33,12 +34,6 @@ const MOOD_KEYS = ['focus', 'sad', 'high_energy', 'chill', 'surprise', 'workout'
 function formatArtwork(url: string | null | undefined, size = 80): string | null {
   if (!url) return null;
   return url.replace('{w}', String(size)).replace('{h}', String(size));
-}
-
-function displayTitle(c: Conversation, fallback: string): string {
-  if (c.title) return c.title;
-  if (c.last_message_preview) return c.last_message_preview;
-  return fallback;
 }
 
 export function DiscoveryPage({ conversations, userId, onSessionCreated }: DiscoveryPageProps) {
@@ -155,7 +150,7 @@ export function DiscoveryPage({ conversations, userId, onSessionCreated }: Disco
 
   const renderRow = (c: Conversation) => {
     const cover = formatArtwork(c.playlist_cover, 80);
-    const title = displayTitle(c, t('discovery.title'));
+    const title = displayConversationTitle(c, t('discovery.title'));
     return (
       <button
         key={c.id}
