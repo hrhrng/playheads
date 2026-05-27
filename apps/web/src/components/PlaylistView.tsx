@@ -26,7 +26,7 @@ import { AddToPlaylistButton } from './AddToPlaylistButton';
 import { ChatInput } from './chat/ChatInput';
 import { MiniPlayer } from './MiniPlayer';
 import type { UnifiedTrack } from '../providers/types';
-import type { Conversation } from '../types';
+import type { Conversation, PlaybackTime } from '../types';
 
 interface PlaylistViewProps {
   conversation: Conversation;
@@ -41,6 +41,8 @@ interface PlaylistViewProps {
    *  always-on player keeps controls within reach. */
   togglePlay: () => void;
   onSkipNext?: () => void;
+  playbackTime: PlaybackTime;
+  onSeek: (seconds: number) => void;
   onPlayTracks: (tracks: UnifiedTrack[]) => void;
   onAddTracks: (tracks: UnifiedTrack[]) => void;
   onSessionCreated?: () => void;
@@ -55,6 +57,8 @@ export const PlaylistView = ({
   isPlaying,
   togglePlay,
   onSkipNext,
+  playbackTime,
+  onSeek,
   onPlayTracks,
   onAddTracks,
   onSessionCreated,
@@ -197,6 +201,32 @@ export const PlaylistView = ({
     if (!text && !initialFiles) return;
     handleFork(text || undefined, initialFiles);
   }, [composerInput, forking, attachments, handleFork]);
+
+  // MiniPlayer "expand to feed" — jump to the most-recent chat-type
+  // conversation. Symmetric to DiscoveryPage's behaviour; if there's
+  // no chat yet, spawn one (rare from a playlist page, but possible
+  // for users who haven't started any chats).
+  const handleExpandFeed = useCallback(async () => {
+    const recentChat = conversations.find((c) => c.type !== 'playlist');
+    if (recentChat) {
+      navigate(`/chat/${recentChat.id}`);
+      return;
+    }
+    if (!userId) return;
+    try {
+      const res = await fetch(`${API_BASE}/session/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId }),
+      });
+      if (!res.ok) throw new Error(`session/create ${res.status}`);
+      const { session_id } = (await res.json()) as { session_id: string };
+      onSessionCreated?.();
+      navigate(`/chat/${session_id}`);
+    } catch (e) {
+      console.error('[PlaylistView] expand-to-feed failed:', e);
+    }
+  }, [conversations, userId, navigate, onSessionCreated]);
 
   const handleRemoveFromPlaylist = useCallback(async (track: UnifiedTrack) => {
     if (!userId) return;
@@ -412,6 +442,9 @@ export const PlaylistView = ({
             isPlaying={isPlaying}
             togglePlay={togglePlay}
             onSkipNext={onSkipNext}
+            onExpand={handleExpandFeed}
+            playbackTime={playbackTime}
+            onSeek={onSeek}
           />
           <ChatInput
             input={composerInput}

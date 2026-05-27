@@ -94,6 +94,8 @@
     "play": "Play",
     "pause": "Pause",
     "skipNext": "Skip to next",
+    "openFeed": "Open in feed",
+    "seek": "Seek",
     "unknownTrack": "Unknown",
     "unknownArtist": "Unknown Artist"
   },

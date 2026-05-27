@@ -65,6 +65,8 @@ export function HomeRoute({
   currentTrack,
   isPlaying,
   togglePlay,
+  playbackTime,
+  seekTo,
   queue,
 }: RouteComponentProps) {
   const navigate = useNavigate();
@@ -141,6 +143,8 @@ export function HomeRoute({
         isPlaying={isPlaying}
         togglePlay={togglePlay}
         onSkipNext={() => queue.skipNext()}
+        playbackTime={playbackTime}
+        onSeek={seekTo}
       />
     </AppLayout>
   );
@@ -276,6 +280,8 @@ export function ChatRoute({
           isPlaying={isPlaying}
           togglePlay={togglePlay}
           onSkipNext={() => queue.skipNext()}
+          playbackTime={playbackTime}
+          onSeek={seekTo}
           onPlayTracks={(tracks) => queue.playTracks(tracks)}
           onAddTracks={(tracks) => queue.addTracks(tracks)}
           onSessionCreated={fetchConversations}

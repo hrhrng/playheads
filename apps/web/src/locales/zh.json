@@ -94,6 +94,8 @@
     "play": "播放",
     "pause": "暂停",
     "skipNext": "下一首",
+    "openFeed": "在 Feed 中打开",
+    "seek": "拖动进度",
     "unknownTrack": "未知曲目",
     "unknownArtist": "未知艺人"
   },

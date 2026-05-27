@@ -13,7 +13,7 @@ import { ChatInput } from './chat/ChatInput';
 import { MiniPlayer } from './MiniPlayer';
 import { API_BASE } from '../config/api';
 import { displayConversationTitle } from '../utils/conversationTitle';
-import type { Conversation } from '../types';
+import type { Conversation, PlaybackTime } from '../types';
 import type { UnifiedTrack } from '../providers/types';
 
 type Attachment = {
@@ -34,6 +34,8 @@ interface DiscoveryPageProps {
   isPlaying: boolean;
   togglePlay: () => void;
   onSkipNext?: () => void;
+  playbackTime: PlaybackTime;
+  onSeek: (seconds: number) => void;
 }
 
 // Mood chip keys — labels and prompts come from i18n (moods.<key>.label,
@@ -53,6 +55,8 @@ export function DiscoveryPage({
   isPlaying,
   togglePlay,
   onSkipNext,
+  playbackTime,
+  onSeek,
 }: DiscoveryPageProps) {
   const navigate = useNavigate();
   const { t } = useTranslation();
@@ -143,6 +147,32 @@ export function DiscoveryPage({
     if (!trimmed && !hasAttachments) return;
     startNewTopic(trimmed || t('discovery.imagePlaceholderMessage'));
   }, [input, attachments, startNewTopic, t]);
+
+  // MiniPlayer "expand to feed" — jump to the most-recently-updated chat
+  // (the feed lives on /chat/:id for chat-type conversations). If the user
+  // has no chats yet (only playlists, or fresh account), spawn one so
+  // they always land somewhere with a RecordPlayer.
+  const handleExpandFeed = useCallback(async () => {
+    const recentChat = conversations.find((c) => c.type !== 'playlist');
+    if (recentChat) {
+      navigate(`/chat/${recentChat.id}`);
+      return;
+    }
+    if (!userId) return;
+    try {
+      const res = await fetch(`${API_BASE}/session/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId }),
+      });
+      if (!res.ok) throw new Error(`session/create ${res.status}`);
+      const { session_id } = (await res.json()) as { session_id: string };
+      onSessionCreated?.();
+      navigate(`/chat/${session_id}`);
+    } catch (e) {
+      console.error('[DiscoveryPage] expand-to-feed failed:', e);
+    }
+  }, [conversations, userId, navigate, onSessionCreated]);
 
   // Split the conversation feed into two parallel sections so the user can
   // visually distinguish "places I curated" (playlists) from "places I
@@ -260,6 +290,9 @@ export function DiscoveryPage({
           isPlaying={isPlaying}
           togglePlay={togglePlay}
           onSkipNext={onSkipNext}
+          onExpand={handleExpandFeed}
+          playbackTime={playbackTime}
+          onSeek={onSeek}
         />
         <ChatInput
           input={input}
