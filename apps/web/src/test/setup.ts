@@ -1,8 +1,10 @@
 /**
  * Vitest global setup — extends matchers with DOM-specific assertions
- * (toBeInTheDocument, toHaveTextContent, etc.)
+ * (toBeInTheDocument, toHaveTextContent, etc.) and boots i18next so
+ * components using `t()` render English strings instead of bare keys.
  */
 import '@testing-library/jest-dom';
+import '../i18n';
 
 // Mock IntersectionObserver for components that use it (e.g. infinite scroll)
 globalThis.IntersectionObserver = class IntersectionObserver {

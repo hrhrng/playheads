@@ -36,11 +36,11 @@ describe('ConversationList', () => {
     const { container } = render(
       <ConversationList conversations={convs} expanded activeConversationId="2" />
     );
-    // The active item should have bg-white + font-medium
+    // The active item should have bg-chip-2 + font-medium (iOS visual language)
     const buttons = container.querySelectorAll('button');
     // Second conversation button (index 1) should have active styling
     const activeBtn = Array.from(buttons).find(b => b.textContent?.includes('Beta'));
-    expect(activeBtn?.className).toContain('bg-white');
+    expect(activeBtn?.className).toContain('bg-chip-2');
   });
 
   it('delegates onSelect to parent', async () => {

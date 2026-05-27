@@ -28,13 +28,13 @@ describe('TextBlock', () => {
   it('applies caption style class', () => {
     const { container } = render(<TextBlock type="text" content="Note" style="caption" />);
     const wrapper = container.firstChild as HTMLElement;
-    expect(wrapper.className).toContain('text-gray-500');
+    expect(wrapper.className).toContain('text-ink-3');
   });
 
   it('defaults to body style', () => {
     const { container } = render(<TextBlock type="text" content="Body text" />);
     const wrapper = container.firstChild as HTMLElement;
-    expect(wrapper.className).toContain('text-gray-700');
+    expect(wrapper.className).toContain('text-ink-2');
   });
 });
 
@@ -97,7 +97,7 @@ describe('BadgeGroup', () => {
       />
     );
     const badge = container.querySelector('span');
-    expect(badge?.className).toContain('bg-blue-50');
+    expect(badge?.className).toContain('bg-chip');
   });
 
   it('renders empty when no badges', () => {
@@ -116,7 +116,7 @@ describe('Divider', () => {
   it('renders a horizontal line', () => {
     const { container } = render(<Divider />);
     const div = container.firstChild as HTMLElement;
-    expect(div.className).toContain('border-t');
+    expect(div.className).toContain('hairline-t');
   });
 });
 

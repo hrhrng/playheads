@@ -30,7 +30,7 @@ describe('ConversationItem', () => {
       <ConversationItem conversation={makeConv()} expanded isActive />
     );
     const button = container.querySelector('button');
-    expect(button?.className).toContain('bg-white');
+    expect(button?.className).toContain('bg-chip-2');
   });
 
   // ── Selection ──────────────────────────────────────────────────────
