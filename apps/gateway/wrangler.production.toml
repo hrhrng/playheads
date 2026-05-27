@@ -47,3 +47,5 @@ head_sampling_rate = 1
 [vars]
 APP_HOSTNAME = ""
 ADMIN_HOSTNAME = ""
+CLOUDFLARE_ACCOUNT_ID = "44af79e51582ca20c9003eb926540242"
+AI_GATEWAY_ID = "clash"

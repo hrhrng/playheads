@@ -21,6 +21,7 @@ import {
   handleRemoveTrackFromPlaylist,
 } from "./d1-handlers";
 import { handleUploadImage, handleGetUpload } from "./uploads";
+import { handleTranscribe } from "./transcribe";
 
 interface Env {
   WEB: Fetcher;
@@ -51,6 +52,15 @@ interface Env {
   /** Workers KV for app-level config (waitlist:bypass, etc). Flip live
    *  via `wrangler kv key put --binding=CONFIG_KV waitlist:bypass true`. */
   CONFIG_KV: KVNamespace;
+
+  /** ASR provider secrets — used by /api/transcribe. Chinese routes to
+   *  Fish Audio (sync HTTP); other languages route to ElevenLabs Scribe
+   *  via Cloudflare AI Gateway. */
+  FISH_AUDIO_API_KEY?: string;
+  ELEVENLABS_API_KEY?: string;
+  CF_AIG_TOKEN?: string;
+  CLOUDFLARE_ACCOUNT_ID?: string;
+  AI_GATEWAY_ID?: string;
 }
 
 function laneProxy(
@@ -213,6 +223,10 @@ export default {
     // /api/uploads/image → POST image to R2
     if (url.pathname === "/api/uploads/image" && request.method === "POST") {
       return handleUploadImage(request, env.UPLOADS, env.UPLOADS_PUBLIC_URL_BASE);
+    }
+    // /api/transcribe → ASR router (Fish for zh*, ElevenLabs via AI Gateway otherwise)
+    if (url.pathname === "/api/transcribe" && request.method === "POST") {
+      return handleTranscribe(request, env);
     }
     // /api/uploads/<key> → GET image from R2 (key includes "uploads/" prefix)
     if (url.pathname.startsWith("/api/uploads/") && request.method === "GET") {

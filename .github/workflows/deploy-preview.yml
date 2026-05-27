@@ -191,6 +191,9 @@ jobs:
             [GOOGLE_CLIENT_ID]="${{ secrets.GOOGLE_CLIENT_ID }}"
             [GOOGLE_CLIENT_SECRET]="${{ secrets.GOOGLE_CLIENT_SECRET }}"
             [RESEND_API_KEY]="${{ secrets.RESEND_API_KEY }}"
+            [CF_AIG_TOKEN]="${{ secrets.CF_AIG_TOKEN }}"
+            [FISH_AUDIO_API_KEY]="${{ secrets.FISH_AUDIO_API_KEY }}"
+            [ELEVENLABS_API_KEY]="${{ secrets.ELEVENLABS_API_KEY }}"
           )
           FAILED=0
           for KEY in "${!SECRETS[@]}"; do

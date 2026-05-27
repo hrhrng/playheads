@@ -25,6 +25,7 @@ import type { TrackMenuItem } from './TrackMenu';
 import { AddToPlaylistButton } from './AddToPlaylistButton';
 import { ChatInput } from './chat/ChatInput';
 import { MiniPlayer } from './MiniPlayer';
+import { useVoiceInput } from '../hooks/useVoiceInput';
 import type { UnifiedTrack } from '../providers/types';
 import type { Conversation, PlaybackTime } from '../types';
 
@@ -64,12 +65,26 @@ export const PlaylistView = ({
   onSessionCreated,
   onConversationsRefetch,
 }: PlaylistViewProps): React.JSX.Element => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const [tracks, setTracks] = useState<UnifiedTrack[]>([]);
   const [loading, setLoading] = useState(true);
   const [forking, setForking] = useState(false);
   const [composerInput, setComposerInput] = useState('');
+
+  // Voice input for the playlist composer (forks into a new chat on send).
+  const {
+    isRecording,
+    isTranscribing,
+    startHold,
+    endHold,
+    cancelHold,
+  } = useVoiceInput({
+    lang: i18n.language,
+    onTranscript: (text) =>
+      setComposerInput((prev) => (prev ? `${prev} ${text}` : text)),
+    onError: (msg) => console.warn('[PlaylistView] voice input error', msg),
+  });
 
   // Attachment pipeline — mirrors DiscoveryPage so the playlist page's
   // composer can carry images into the forked chat the same way the new-
@@ -456,6 +471,11 @@ export const PlaylistView = ({
             onAttach={handleAttach}
             attachments={attachments.map((a) => a.file)}
             onRemoveAttachment={handleRemoveAttachment}
+            onVoiceHoldStart={startHold}
+            onVoiceHoldEnd={endHold}
+            onVoiceHoldCancel={cancelHold}
+            isRecording={isRecording}
+            isTranscribing={isTranscribing}
           />
         </div>
       </div>

@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { ChatInput } from './chat/ChatInput';
 import { MiniPlayer } from './MiniPlayer';
+import { useVoiceInput } from '../hooks/useVoiceInput';
 import { API_BASE } from '../config/api';
 import { displayConversationTitle } from '../utils/conversationTitle';
 import type { Conversation, PlaybackTime } from '../types';
@@ -59,10 +60,25 @@ export function DiscoveryPage({
   onSeek,
 }: DiscoveryPageProps) {
   const navigate = useNavigate();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [input, setInput] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
+
+  // Voice — hold the mic to record; transcripts are appended to whatever
+  // the user has already typed so dictation composes.
+  const {
+    isRecording,
+    isTranscribing,
+    startHold,
+    endHold,
+    cancelHold,
+  } = useVoiceInput({
+    lang: i18n.language,
+    onTranscript: (text) =>
+      setInput((prev) => (prev ? `${prev} ${text}` : text)),
+    onError: (msg) => console.warn('[DiscoveryPage] voice input error', msg),
+  });
 
   // Mirror ChatInterface's upload pipeline so attachments behave the same
   // whether the user attaches from cold start or inside an active chat.
@@ -304,6 +320,11 @@ export function DiscoveryPage({
           onAttach={handleAttach}
           attachments={attachments.map((a) => a.file)}
           onRemoveAttachment={handleRemoveAttachment}
+          onVoiceHoldStart={startHold}
+          onVoiceHoldEnd={endHold}
+          onVoiceHoldCancel={cancelHold}
+          isRecording={isRecording}
+          isTranscribing={isTranscribing}
         />
       </div>
     </div>

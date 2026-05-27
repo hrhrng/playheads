@@ -48,4 +48,13 @@ head_sampling_rate = 1
 APP_HOSTNAME = ""
 ADMIN_HOSTNAME = ""
 UPLOADS_PUBLIC_URL_BASE = "https://pub-943b20bdbf6f4e9fbc62c596787afcb2.r2.dev"
+# AI Gateway config — mirrors agent worker so /api/transcribe can route
+# ElevenLabs (and any future ASR/TTS providers) through the same "clash"
+# gateway used for LLM observability.
+CLOUDFLARE_ACCOUNT_ID = "44af79e51582ca20c9003eb926540242"
+AI_GATEWAY_ID = "clash"
+# Secrets — set via GitHub Actions deploy workflows:
+#   FISH_AUDIO_API_KEY   — Chinese ASR (zh*) via Fish Audio /v1/asr
+#   ELEVENLABS_API_KEY   — non-Chinese ASR via ElevenLabs Scribe v1
+#   CF_AIG_TOKEN         — auth for the AI Gateway proxy
 

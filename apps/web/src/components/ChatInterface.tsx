@@ -25,6 +25,8 @@ import { useChat } from '../hooks/useChat';
 import { useLyrics } from '../hooks/useLyrics';
 import { useLikedTrack } from '../hooks/useLikedTrack';
 import { useInitialMessage } from '../hooks/useChatHelpers';
+import { useVoiceInput } from '../hooks/useVoiceInput';
+import { useChatStore } from '../store/chatStore';
 import { usePlaylistSheet } from '../contexts/PlaylistSheetContext';
 import type { PlaybackTime, Conversation } from '../types';
 import type { UnifiedTrack } from '../providers/types';
@@ -172,7 +174,7 @@ export const ChatInterface = ({
     setAttachments((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   // Use chat hook for state and methods
   const {
@@ -192,6 +194,29 @@ export const ChatInterface = ({
     queueOps,
     onMessageSent,
     onSessionCreated,
+  });
+
+  // Voice input — hold-to-talk on the mic button. Server routes by lang
+  // (zh* → Fish Audio, else → ElevenLabs Scribe via AI Gateway). On a
+  // successful transcript we append to whatever the user has already
+  // typed so dictation works as an additive prompt builder, not a
+  // destructive replace.
+  const {
+    isRecording,
+    isTranscribing,
+    startHold,
+    endHold,
+    cancelHold,
+  } = useVoiceInput({
+    lang: i18n.language,
+    // Read input freshly from zustand store — depending on `input` here
+    // would re-bind the hook (and recreate startHold/endHold) on every
+    // keystroke; depending on nothing would stale-close.
+    onTranscript: (text) => {
+      const current = useChatStore.getState().input;
+      setInput(current ? `${current} ${text}` : text);
+    },
+    onError: (msg) => console.warn('[ChatInterface] voice input error', msg),
   });
 
   const formatTime = (seconds: number): string => {
@@ -662,6 +687,11 @@ export const ChatInterface = ({
           onRemoveAttachment={handleRemoveAttachment}
           collapsed={!showHistory}
           onActivate={toggleHistory}
+          onVoiceHoldStart={startHold}
+          onVoiceHoldEnd={endHold}
+          onVoiceHoldCancel={cancelHold}
+          isRecording={isRecording}
+          isTranscribing={isTranscribing}
         />
 
       </div>

@@ -4,7 +4,7 @@
  * @module components/chat/ChatInput
  */
 
-import { useRef, useState, useCallback, useEffect } from 'react';
+import { useRef, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAutoResizeTextarea } from '../../hooks/useChatHelpers';
 import type { ProviderType } from '../../providers/types';
@@ -24,12 +24,16 @@ interface ChatInputProps {
   onSend: () => void;
   /** Active music provider type */
   activeProvider?: ProviderType;
-  /** Short press voice button — start ASR */
-  onVoiceShortPress?: () => void;
-  /** Long press voice button — start voice conversation mode */
-  onVoiceLongPress?: () => void;
-  /** Whether voice is currently listening */
-  isListening?: boolean;
+  /** Mic: pointerdown — start hold-to-talk recording. */
+  onVoiceHoldStart?: () => void;
+  /** Mic: pointerup — stop recording and trigger upload/transcribe. */
+  onVoiceHoldEnd?: () => void;
+  /** Mic: pointerleave / cancel — drop the in-flight recording, no upload. */
+  onVoiceHoldCancel?: () => void;
+  /** True while the user is actively holding & recording. */
+  isRecording?: boolean;
+  /** True after release while the transcript round-trip is in flight. */
+  isTranscribing?: boolean;
   /** Callback when files are attached. Required — every host of ChatInput
    *  needs to ferry attachments somewhere (either into the current chat or
    *  via route state into a forked chat). Making it required keeps the +
@@ -58,9 +62,11 @@ export const ChatInput = ({
   onInputChange,
   onSend,
   activeProvider,
-  onVoiceShortPress,
-  onVoiceLongPress,
-  isListening = false,
+  onVoiceHoldStart,
+  onVoiceHoldEnd,
+  onVoiceHoldCancel,
+  isRecording = false,
+  isTranscribing = false,
   onAttach,
   attachments,
   onRemoveAttachment,
@@ -70,8 +76,6 @@ export const ChatInput = ({
   const { t } = useTranslation();
   const textareaRef = useAutoResizeTextarea(input);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [isLongPress, setIsLongPress] = useState(false);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -98,27 +102,28 @@ export const ChatInput = ({
     wasCollapsedRef.current = collapsed;
   }, [collapsed, textareaRef]);
 
-  // Voice button handlers (long press detection).
-  // NOTE: every hook must live before the `if (collapsed)` early return
-  // below, otherwise React errors with #310 (hook count mismatch) when
-  // collapsed flips.
-  const handleVoicePointerDown = useCallback(() => {
-    setIsLongPress(false);
-    longPressTimer.current = setTimeout(() => {
-      setIsLongPress(true);
-      onVoiceLongPress?.();
-    }, 500);
-  }, [onVoiceLongPress]);
+  // Voice button — hold-to-talk. pointerdown starts recording; pointerup
+  // stops and triggers transcribe; pointerleave/cancel discards. The
+  // active flag (touch vs mouse) and capture aren't needed here because
+  // the consuming hook tracks its own recorder state — these handlers
+  // just forward intent. (Long-press voice-mode is unimplemented and
+  // intentionally dropped to keep the mic single-purpose.)
+  const handleVoicePointerDown = useCallback(
+    (e: React.PointerEvent<HTMLButtonElement>) => {
+      // Prevent the synthetic touch→mouse double-fire on iOS Safari.
+      e.preventDefault();
+      onVoiceHoldStart?.();
+    },
+    [onVoiceHoldStart],
+  );
 
   const handleVoicePointerUp = useCallback(() => {
-    if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current);
-      longPressTimer.current = null;
-    }
-    if (!isLongPress) {
-      onVoiceShortPress?.();
-    }
-  }, [isLongPress, onVoiceShortPress]);
+    onVoiceHoldEnd?.();
+  }, [onVoiceHoldEnd]);
+
+  const handleVoicePointerCancel = useCallback(() => {
+    onVoiceHoldCancel?.();
+  }, [onVoiceHoldCancel]);
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -283,28 +288,34 @@ export const ChatInput = ({
             )}
           </button>
         ) : (
-          /* Voice button — chip → accent when listening */
+          /* Voice button — hold-to-talk. Three visual states:
+             idle (chip), recording (accent + pulse), transcribing (spinner). */
           <button
+            type="button"
             onPointerDown={handleVoicePointerDown}
             onPointerUp={handleVoicePointerUp}
-            onPointerLeave={() => {
-              if (longPressTimer.current) {
-                clearTimeout(longPressTimer.current);
-                longPressTimer.current = null;
-              }
-            }}
-            disabled={isLoading}
-            className={`w-11 h-11 flex items-center justify-center rounded-full transition-all shrink-0 self-end ${
-              isListening
-                ? 'bg-accent text-page animate-pulse'
-                : 'bg-chip-2 text-ink-2 hover:bg-chip-hover hover:text-ink'
+            onPointerLeave={handleVoicePointerCancel}
+            onPointerCancel={handleVoicePointerCancel}
+            disabled={isLoading || isTranscribing}
+            className={`w-11 h-11 flex items-center justify-center rounded-full transition-all shrink-0 self-end touch-none select-none ${
+              isRecording
+                ? 'bg-accent text-page animate-pulse scale-110'
+                : isTranscribing
+                  ? 'bg-chip-2 text-ink-2'
+                  : 'bg-chip-2 text-ink-2 hover:bg-chip-hover hover:text-ink'
             }`}
             title={t('chatInput.voiceTip')}
             aria-label={t('chatInput.voice')}
           >
-            <svg className="w-[20px] h-[20px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.8">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4M12 15a3 3 0 003-3V5a3 3 0 00-6 0v7a3 3 0 003 3z" />
-            </svg>
+            {isTranscribing ? (
+              <svg className="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            ) : (
+              <svg className="w-[20px] h-[20px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.8">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4M12 15a3 3 0 003-3V5a3 3 0 00-6 0v7a3 3 0 003 3z" />
+              </svg>
+            )}
           </button>
         )}
         </div>

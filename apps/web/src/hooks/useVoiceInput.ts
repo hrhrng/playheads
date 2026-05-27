@@ -1,120 +1,183 @@
 /**
- * useVoiceInput — Web Speech API ASR + audio recording hook.
+ * useVoiceInput — hold-to-talk mic that uploads to `/api/transcribe`.
  *
- * Short press: speech-to-text via webkitSpeechRecognition → fills transcript.
- * Long press: raw audio recording via MediaRecorder → returns Blob on stop.
+ * UX: pointerdown on the mic button → start recording (MediaRecorder).
+ * pointerup → stop, POST the blob + current i18n lang to the gateway,
+ * await the transcript, and hand it back via `onTranscript`. The caller
+ * decides what to do with the text (append to textarea, replace, etc.).
+ *
+ * Provider routing happens server-side: zh* goes to Fish Audio, other
+ * languages go to ElevenLabs Scribe v1 through the AI Gateway. This hook
+ * just passes `lang` along.
+ *
+ * Mime negotiation: MediaRecorder picks the best codec the browser
+ * supports — Chrome → audio/webm;codecs=opus, Safari → audio/mp4 (AAC),
+ * Firefox → audio/ogg;codecs=opus. Both Fish and ElevenLabs accept all
+ * three formats, so we don't transcode.
  */
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 
-export interface UseVoiceInputReturn {
-  isListening: boolean;
-  transcript: string;
-  startListening: () => void;
-  stopListening: () => void;
-  startRecording: () => void;
-  stopRecording: () => Blob | null;
-  isRecording: boolean;
+export interface UseVoiceInputOptions {
+  /** BCP-47 tag from i18n (e.g. "zh", "en", "ja"). Server routes on this. */
+  lang: string;
+  /** Called with the final transcript string after upload succeeds. */
+  onTranscript: (text: string) => void;
+  /** Called when transcription fails — surface to the user as a toast/inline error. */
+  onError?: (message: string) => void;
 }
 
-export function useVoiceInput(): UseVoiceInputReturn {
-  const [isListening, setIsListening] = useState(false);
-  const [transcript, setTranscript] = useState('');
+export interface UseVoiceInputReturn {
+  /** True between pointerdown and pointerup — mic capsule pulses. */
+  isRecording: boolean;
+  /** True while the upload/transcribe round-trip is in flight. */
+  isTranscribing: boolean;
+  /** Wire to the mic button's onPointerDown. */
+  startHold: () => Promise<void>;
+  /** Wire to the mic button's onPointerUp / onPointerLeave / onPointerCancel. */
+  endHold: () => void;
+  /** Abort a hold without transcribing (e.g. user drags off the button). */
+  cancelHold: () => void;
+}
+
+// Picks the first MIME the browser will actually record. Order is biased
+// toward opus (better quality/size at speech bitrates) then falls back to
+// whatever the browser will give us. The empty string passes through to
+// MediaRecorder defaults.
+function pickMime(): string {
+  if (typeof MediaRecorder === 'undefined') return '';
+  const candidates = [
+    'audio/webm;codecs=opus',
+    'audio/ogg;codecs=opus',
+    'audio/webm',
+    'audio/mp4',
+    'audio/mpeg',
+  ];
+  for (const m of candidates) {
+    if (MediaRecorder.isTypeSupported(m)) return m;
+  }
+  return '';
+}
+
+function extFor(mime: string): string {
+  if (mime.includes('webm')) return 'webm';
+  if (mime.includes('ogg')) return 'ogg';
+  if (mime.includes('mp4')) return 'm4a';
+  if (mime.includes('mpeg')) return 'mp3';
+  return 'webm';
+}
+
+export function useVoiceInput({
+  lang,
+  onTranscript,
+  onError,
+}: UseVoiceInputOptions): UseVoiceInputReturn {
   const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
 
-  const recognitionRef = useRef<any>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
-  const resultBlobRef = useRef<Blob | null>(null);
+  // Flag flipped by cancelHold so the onstop handler knows to discard
+  // instead of upload. Holds across the async stop → ondataavailable →
+  // onstop chain that we can't await directly.
+  const cancelledRef = useRef(false);
 
-  // ── ASR (short press) ─────────────────────────────────────────
-  const startListening = useCallback(() => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      console.warn('[VoiceInput] Speech recognition not supported');
-      return;
-    }
-
-    const recognition = new SpeechRecognition();
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    recognition.lang = 'en-US';
-
-    recognition.onresult = (event: any) => {
-      let finalTranscript = '';
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        if (event.results[i].isFinal) {
-          finalTranscript += event.results[i][0].transcript;
-        }
-      }
-      if (finalTranscript) {
-        setTranscript(finalTranscript);
-      }
+  // Clean up if the component unmounts mid-recording — don't leave the
+  // browser's mic indicator on.
+  useEffect(() => {
+    return () => {
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+      recorderRef.current = null;
     };
-
-    recognition.onend = () => {
-      setIsListening(false);
-    };
-
-    recognition.onerror = (event: any) => {
-      console.error('[VoiceInput] Recognition error:', event.error);
-      setIsListening(false);
-    };
-
-    recognitionRef.current = recognition;
-    recognition.start();
-    setIsListening(true);
-    setTranscript('');
   }, []);
 
-  const stopListening = useCallback(() => {
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-      recognitionRef.current = null;
-    }
-    setIsListening(false);
-  }, []);
+  const startHold = useCallback(async () => {
+    if (recorderRef.current) return; // already recording, ignore re-entry
+    cancelledRef.current = false;
+    chunksRef.current = [];
 
-  // ── Raw recording (long press) ────────────────────────────────
-  const startRecording = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
-      chunksRef.current = [];
-      resultBlobRef.current = null;
+      streamRef.current = stream;
+
+      const mime = pickMime();
+      const recorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+      recorderRef.current = recorder;
 
       recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
+        if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
       };
 
-      recorder.onstop = () => {
-        resultBlobRef.current = new Blob(chunksRef.current, { type: 'audio/webm' });
-        stream.getTracks().forEach(t => t.stop());
-        setIsRecording(false);
+      recorder.onstop = async () => {
+        const recordedMime = recorder.mimeType || mime || 'audio/webm';
+        const blob = new Blob(chunksRef.current, { type: recordedMime });
+        // Always release the mic before the network call — otherwise the
+        // OS indicator stays red while we wait for the transcript.
+        streamRef.current?.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+        recorderRef.current = null;
+        chunksRef.current = [];
+
+        if (cancelledRef.current || blob.size === 0) return;
+
+        setIsTranscribing(true);
+        try {
+          const fd = new FormData();
+          fd.set('audio', blob, `recording.${extFor(recordedMime)}`);
+          fd.set('lang', lang);
+
+          const res = await fetch('/api/transcribe', { method: 'POST', body: fd });
+          if (!res.ok) {
+            const detail = await res.text().catch(() => '');
+            throw new Error(`transcribe ${res.status}: ${detail.slice(0, 200)}`);
+          }
+          const json = (await res.json()) as { text?: string; error?: string };
+          if (json.error) throw new Error(json.error);
+          const text = (json.text || '').trim();
+          if (text) onTranscript(text);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error('[useVoiceInput] transcribe failed', msg);
+          onError?.(msg);
+        } finally {
+          setIsTranscribing(false);
+        }
       };
 
-      mediaRecorderRef.current = recorder;
       recorder.start();
       setIsRecording(true);
-    } catch (e) {
-      console.error('[VoiceInput] Recording error:', e);
+    } catch (err) {
+      // getUserMedia rejection (denied permission, no device, http-not-localhost, etc.)
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[useVoiceInput] start failed', msg);
+      onError?.(msg);
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+      recorderRef.current = null;
+      setIsRecording(false);
+    }
+  }, [lang, onTranscript, onError]);
+
+  const endHold = useCallback(() => {
+    const rec = recorderRef.current;
+    if (!rec) return;
+    setIsRecording(false);
+    if (rec.state === 'recording') {
+      rec.stop(); // triggers onstop → upload
     }
   }, []);
 
-  const stopRecording = useCallback((): Blob | null => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-      mediaRecorderRef.current.stop();
+  const cancelHold = useCallback(() => {
+    const rec = recorderRef.current;
+    if (!rec) return;
+    cancelledRef.current = true;
+    setIsRecording(false);
+    if (rec.state === 'recording') {
+      rec.stop(); // onstop will see cancelledRef and discard
     }
-    return resultBlobRef.current;
   }, []);
 
-  return {
-    isListening,
-    transcript,
-    startListening,
-    stopListening,
-    startRecording,
-    stopRecording,
-    isRecording,
-  };
+  return { isRecording, isTranscribing, startHold, endHold, cancelHold };
 }
