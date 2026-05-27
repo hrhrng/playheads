@@ -30,12 +30,15 @@ interface ChatInputProps {
   onVoiceLongPress?: () => void;
   /** Whether voice is currently listening */
   isListening?: boolean;
-  /** Callback when files are attached */
-  onAttach?: (files: File[]) => void;
-  /** Currently attached files */
-  attachments?: File[];
-  /** Remove an attachment by index */
-  onRemoveAttachment?: (index: number) => void;
+  /** Callback when files are attached. Required — every host of ChatInput
+   *  needs to ferry attachments somewhere (either into the current chat or
+   *  via route state into a forked chat). Making it required keeps the +
+   *  button from disappearing when a caller forgets to wire it up. */
+  onAttach: (files: File[]) => void;
+  /** Currently attached files. */
+  attachments: File[];
+  /** Remove an attachment by index. */
+  onRemoveAttachment: (index: number) => void;
   /** Collapsed "pill" mode — shows only placeholder hint, whole capsule is
    *  a tap target firing `onActivate`. Used in feed mode; in chat/transcript
    *  mode pass collapsed=false to expose the full composer. */
@@ -59,7 +62,7 @@ export const ChatInput = ({
   onVoiceLongPress,
   isListening = false,
   onAttach,
-  attachments = [],
+  attachments,
   onRemoveAttachment,
   collapsed = false,
   onActivate,
@@ -119,10 +122,8 @@ export const ChatInput = ({
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
-    if (files.length > 0 && onAttach) {
-      onAttach(files);
-    }
-    // Reset input so same file can be selected again
+    if (files.length > 0) onAttach(files);
+    // Reset input so the same file can be selected again
     e.target.value = '';
   }, [onAttach]);
 
@@ -190,14 +191,12 @@ export const ChatInput = ({
                     <span className="text-[8px] text-ink-3 truncate w-full text-center mt-1">{file.name}</span>
                   </div>
                 )}
-                {onRemoveAttachment && (
-                  <button
-                    onClick={() => onRemoveAttachment(index)}
-                    className="absolute -top-1 -right-1 w-4 h-4 bg-ink text-page rounded-full text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    ×
-                  </button>
-                )}
+                <button
+                  onClick={() => onRemoveAttachment(index)}
+                  className="absolute -top-1 -right-1 w-4 h-4 bg-ink text-page rounded-full text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  ×
+                </button>
               </div>
             ))}
           </div>
@@ -205,29 +204,27 @@ export const ChatInput = ({
 
       <div className="flex items-center gap-2">
         {/* Attachment Button — plus icon, image upload. Naked (no chip
-            fill) — only the right-side action button carries fill. */}
-        {onAttach && (
-          <>
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="w-11 h-11 flex items-center justify-center rounded-full text-ink-2 hover:text-ink hover:bg-chip transition-colors shrink-0 self-end"
-              title={t('chatInput.uploadImage')}
-              aria-label={t('chatInput.uploadImage')}
-            >
-              <svg className="w-[22px] h-[22px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m-7-7h14" />
-              </svg>
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              multiple
-              onChange={handleFileSelect}
-              className="hidden"
-            />
-          </>
-        )}
+            fill) — only the right-side action button carries fill.
+            Always rendered: `onAttach` is required, so the button is
+            present in every host (chat, new-chat, playlist composer). */}
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          className="w-11 h-11 flex items-center justify-center rounded-full text-ink-2 hover:text-ink hover:bg-chip transition-colors shrink-0 self-end"
+          title={t('chatInput.uploadImage')}
+          aria-label={t('chatInput.uploadImage')}
+        >
+          <svg className="w-[22px] h-[22px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m-7-7h14" />
+          </svg>
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={handleFileSelect}
+          className="hidden"
+        />
 
         <textarea
           ref={textareaRef}
