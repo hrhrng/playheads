@@ -82,14 +82,20 @@
     "tracksCount_other": "{{count}} 首",
     "emptyTracks": "还没有歌曲 — 聊一聊你喜欢的风格，让它慢慢长起来。",
     "chatAbout": "聊聊这个歌单",
-    "chatCreating": "正在开聊…",
-    "backToFeed": "返回 Feed"
+    "chatCreating": "正在开聊…"
   },
   "trackMenu": {
     "more": "更多",
     "removeFromPlaylist": "从这个歌单移除",
     "removeFromQueue": "从队列移除",
     "openInAppleMusic": "在 Apple Music 打开"
+  },
+  "miniPlayer": {
+    "play": "播放",
+    "pause": "暂停",
+    "skipNext": "下一首",
+    "unknownTrack": "未知曲目",
+    "unknownArtist": "未知艺人"
   },
   "addToPlaylist": {
     "button": "加入歌单",

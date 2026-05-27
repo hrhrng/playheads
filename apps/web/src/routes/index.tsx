@@ -62,6 +62,10 @@ export function HomeRoute({
   onLogout,
   onLinkApple,
   onDisconnectApple,
+  currentTrack,
+  isPlaying,
+  togglePlay,
+  queue,
 }: RouteComponentProps) {
   const navigate = useNavigate();
 
@@ -133,6 +137,10 @@ export function HomeRoute({
         conversations={conversations}
         userId={session?.user.id || null}
         onSessionCreated={() => fetchConversations()}
+        currentTrack={currentTrack}
+        isPlaying={isPlaying}
+        togglePlay={togglePlay}
+        onSkipNext={() => queue.skipNext()}
       />
     </AppLayout>
   );
@@ -266,6 +274,8 @@ export function ChatRoute({
           userId={session?.user.id || null}
           currentTrack={currentTrack}
           isPlaying={isPlaying}
+          togglePlay={togglePlay}
+          onSkipNext={() => queue.skipNext()}
           onPlayTracks={(tracks) => queue.playTracks(tracks)}
           onAddTracks={(tracks) => queue.addTracks(tracks)}
           onSessionCreated={fetchConversations}

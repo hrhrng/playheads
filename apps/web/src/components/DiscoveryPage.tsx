@@ -10,9 +10,11 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { ChatInput } from './chat/ChatInput';
+import { MiniPlayer } from './MiniPlayer';
 import { API_BASE } from '../config/api';
 import { displayConversationTitle } from '../utils/conversationTitle';
 import type { Conversation } from '../types';
+import type { UnifiedTrack } from '../providers/types';
 
 type Attachment = {
   file: File;
@@ -25,6 +27,13 @@ interface DiscoveryPageProps {
   conversations: Conversation[];
   userId: string | null;
   onSessionCreated?: () => void;
+  /** For the MiniPlayer rendered above the composer when something's
+   *  playing. Discovery is a non-feed page so a compact always-on bar
+   *  keeps controls within reach. */
+  currentTrack: UnifiedTrack | null;
+  isPlaying: boolean;
+  togglePlay: () => void;
+  onSkipNext?: () => void;
 }
 
 // Mood chip keys — labels and prompts come from i18n (moods.<key>.label,
@@ -36,7 +45,15 @@ function formatArtwork(url: string | null | undefined, size = 80): string | null
   return url.replace('{w}', String(size)).replace('{h}', String(size));
 }
 
-export function DiscoveryPage({ conversations, userId, onSessionCreated }: DiscoveryPageProps) {
+export function DiscoveryPage({
+  conversations,
+  userId,
+  onSessionCreated,
+  currentTrack,
+  isPlaying,
+  togglePlay,
+  onSkipNext,
+}: DiscoveryPageProps) {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const [input, setInput] = useState('');
@@ -235,8 +252,15 @@ export function DiscoveryPage({ conversations, userId, onSessionCreated }: Disco
 
       {/* ChatInput at the bottom — same wrapper as ChatInterface so the
           composer sits at the identical position visually across cold
-          start and active chat. */}
+          start and active chat. MiniPlayer slots above it when there's
+          a playing track (this is a non-feed page). */}
       <div className="shrink-0 px-6 pb-5 pt-10 z-30">
+        <MiniPlayer
+          currentTrack={currentTrack}
+          isPlaying={isPlaying}
+          togglePlay={togglePlay}
+          onSkipNext={onSkipNext}
+        />
         <ChatInput
           input={input}
           isLoading={isCreating}

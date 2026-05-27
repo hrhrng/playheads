@@ -82,14 +82,20 @@
     "tracksCount_other": "{{count}} tracks",
     "emptyTracks": "No tracks yet — chat about a vibe to fill this playlist.",
     "chatAbout": "Chat about this",
-    "chatCreating": "Starting chat…",
-    "backToFeed": "Back to feed"
+    "chatCreating": "Starting chat…"
   },
   "trackMenu": {
     "more": "More",
     "removeFromPlaylist": "Remove from this playlist",
     "removeFromQueue": "Remove from queue",
     "openInAppleMusic": "Open in Apple Music"
+  },
+  "miniPlayer": {
+    "play": "Play",
+    "pause": "Pause",
+    "skipNext": "Skip to next",
+    "unknownTrack": "Unknown",
+    "unknownArtist": "Unknown Artist"
   },
   "addToPlaylist": {
     "button": "Add to playlist",

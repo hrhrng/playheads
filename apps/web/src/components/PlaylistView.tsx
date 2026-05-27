@@ -24,6 +24,7 @@ import { TrackMenu } from './TrackMenu';
 import type { TrackMenuItem } from './TrackMenu';
 import { AddToPlaylistButton } from './AddToPlaylistButton';
 import { ChatInput } from './chat/ChatInput';
+import { MiniPlayer } from './MiniPlayer';
 import type { UnifiedTrack } from '../providers/types';
 import type { Conversation } from '../types';
 
@@ -35,6 +36,11 @@ interface PlaylistViewProps {
   userId: string | null;
   currentTrack: UnifiedTrack | null;
   isPlaying: boolean;
+  /** For the inline MiniPlayer that sits above the chat composer when
+   *  something is playing — playlists are a non-feed page so a compact
+   *  always-on player keeps controls within reach. */
+  togglePlay: () => void;
+  onSkipNext?: () => void;
   onPlayTracks: (tracks: UnifiedTrack[]) => void;
   onAddTracks: (tracks: UnifiedTrack[]) => void;
   onSessionCreated?: () => void;
@@ -47,6 +53,8 @@ export const PlaylistView = ({
   userId,
   currentTrack,
   isPlaying,
+  togglePlay,
+  onSkipNext,
   onPlayTracks,
   onAddTracks,
   onSessionCreated,
@@ -58,6 +66,52 @@ export const PlaylistView = ({
   const [loading, setLoading] = useState(true);
   const [forking, setForking] = useState(false);
   const [composerInput, setComposerInput] = useState('');
+
+  // Attachment pipeline — mirrors DiscoveryPage so the playlist page's
+  // composer can carry images into the forked chat the same way the new-
+  // chat page can. Uploads happen as the user picks files; the resolved
+  // R2 URLs are passed to the new chat via route state, where
+  // useInitialMessage merges them with the auto-sent first message.
+  type Attachment = {
+    file: File;
+    status: 'uploading' | 'done' | 'error';
+    remoteUrl?: string;
+    error?: string;
+  };
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+
+  const uploadFile = useCallback(async (file: File): Promise<string> => {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetch(`${API_BASE}/uploads/image`, { method: 'POST', body: form });
+    if (!res.ok) throw new Error(`upload failed ${res.status}`);
+    const json = (await res.json()) as { url: string };
+    return json.url;
+  }, []);
+
+  const handleAttach = useCallback((files: File[]) => {
+    const newOnes: Attachment[] = files.map((f) => ({ file: f, status: 'uploading' as const }));
+    setAttachments((prev) => [...prev, ...newOnes]);
+    newOnes.forEach((att) => {
+      uploadFile(att.file).then(
+        (url) => {
+          setAttachments((prev) =>
+            prev.map((a) => (a.file === att.file ? { ...a, status: 'done', remoteUrl: url } : a)),
+          );
+        },
+        (err: Error) => {
+          console.error('[PlaylistView upload]', err);
+          setAttachments((prev) =>
+            prev.map((a) => (a.file === att.file ? { ...a, status: 'error', error: err.message } : a)),
+          );
+        },
+      );
+    });
+  }, [uploadFile]);
+
+  const handleRemoveAttachment = useCallback((index: number) => {
+    setAttachments((prev) => prev.filter((_, i) => i !== index));
+  }, []);
 
   // Fetch the playlist's tracks. `conversations` in props only carries
   // metadata (title, playlist_count, playlist_cover); the actual tracks
@@ -89,11 +143,14 @@ export const PlaylistView = ({
   }, [tracks, conversation.playlist_cover]);
 
   /**
-   * Fork a chat from this playlist. Optional `initialMessage` lets the
-   * bottom composer hand off whatever the user typed, which the new chat's
-   * useInitialMessage hook will auto-send once it mounts.
+   * Fork a chat from this playlist. Optional `initialMessage` /
+   * `initialFiles` are handed to the new chat via route state; the new
+   * chat's useInitialMessage hook will auto-send them on mount.
    */
-  const handleFork = useCallback(async (initialMessage?: string) => {
+  const handleFork = useCallback(async (
+    initialMessage?: string,
+    initialFiles?: Array<{ type: 'file'; mediaType: string; url: string; filename?: string }>,
+  ) => {
     if (!userId || forking) return;
     setForking(true);
     try {
@@ -105,10 +162,16 @@ export const PlaylistView = ({
       if (!res.ok) throw new Error(`session/create ${res.status}`);
       const { session_id } = (await res.json()) as { session_id: string };
       onSessionCreated?.();
+      const hasMessage = !!initialMessage?.trim();
+      const hasFiles = !!initialFiles?.length;
       navigate(`/chat/${session_id}`, {
         replace: false,
-        state: initialMessage?.trim()
-          ? { isNewlyCreated: true, initialMessage: initialMessage.trim() }
+        state: hasMessage || hasFiles
+          ? {
+              isNewlyCreated: true,
+              ...(hasMessage ? { initialMessage: initialMessage!.trim() } : {}),
+              ...(hasFiles ? { initialFiles } : {}),
+            }
           : undefined,
       });
     } catch (e) {
@@ -120,8 +183,20 @@ export const PlaylistView = ({
   const handleSendComposer = useCallback(() => {
     if (forking) return;
     const text = composerInput.trim();
-    handleFork(text || undefined);
-  }, [composerInput, forking, handleFork]);
+    // Resolve attachments to FileUIParts for the new chat to send.
+    const doneAttachments = attachments.filter((a) => a.status === 'done' && a.remoteUrl);
+    const initialFiles = doneAttachments.length > 0
+      ? doneAttachments.map((a) => ({
+          type: 'file' as const,
+          mediaType: a.file.type,
+          url: new URL(a.remoteUrl!, window.location.origin).toString(),
+          filename: a.file.name,
+        }))
+      : undefined;
+    // Don't fork on an empty pill — match the new-chat behaviour.
+    if (!text && !initialFiles) return;
+    handleFork(text || undefined, initialFiles);
+  }, [composerInput, forking, attachments, handleFork]);
 
   const handleRemoveFromPlaylist = useCallback(async (track: UnifiedTrack) => {
     if (!userId) return;
@@ -174,23 +249,6 @@ export const PlaylistView = ({
 
   return (
     <div className="relative h-full overflow-hidden">
-      {/* Back-to-feed affordance — playlists are a side-trip; the "home"
-          for an active listening session is the new-chat feed. Pinned to
-          the top-left of the scroll container so it stays reachable as
-          the track list grows. */}
-      <button
-        type="button"
-        onClick={() => navigate('/')}
-        title={t('playlist.backToFeed')}
-        aria-label={t('playlist.backToFeed')}
-        className="absolute top-4 left-4 z-20 w-9 h-9 rounded-full flex items-center justify-center hairline bg-chip/80 backdrop-blur text-ink-2 hover:text-ink hover:bg-chip-2 transition-colors"
-      >
-        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <line x1="19" y1="12" x2="5" y2="12" />
-          <polyline points="12 19 5 12 12 5" />
-        </svg>
-      </button>
-
       <div className="h-full overflow-y-auto">
         <div className="max-w-3xl mx-auto px-6 pt-8 pb-40">
           {/* Hero */}
@@ -345,10 +403,16 @@ export const PlaylistView = ({
           page's input is visually identical to the one on the new-chat
           page and inside an active chat (same pill, send button, voice
           long-press, attachments). Submitting forks a chat with
-          seed_playlist_id; if the user typed text it's handed off via
-          route state so the new chat auto-sends it. */}
+          seed_playlist_id; typed text / attachments are handed off via
+          route state so the new chat auto-sends them. */}
       <div className="absolute bottom-0 left-0 right-0 px-6 pb-5 pt-10 z-30 pointer-events-none">
         <div className="pointer-events-auto">
+          <MiniPlayer
+            currentTrack={currentTrack}
+            isPlaying={isPlaying}
+            togglePlay={togglePlay}
+            onSkipNext={onSkipNext}
+          />
           <ChatInput
             input={composerInput}
             isLoading={forking}
@@ -356,6 +420,9 @@ export const PlaylistView = ({
             isPlaying={isPlaying}
             onInputChange={setComposerInput}
             onSend={handleSendComposer}
+            onAttach={handleAttach}
+            attachments={attachments.map((a) => a.file)}
+            onRemoveAttachment={handleRemoveAttachment}
           />
         </div>
       </div>
