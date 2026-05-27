@@ -51,28 +51,28 @@ export function LyricsCard({ lines, trackName, artist, trackId, query }: LyricsC
   }, [trackId, query, sf, artworkUrl]);
 
   return (
-    <div data-capture className="relative rounded-2xl overflow-hidden animate-genui-card-in w-full">
+    <div data-capture className="relative rounded-sheet overflow-hidden animate-genui-card-in w-full shadow-cover">
       {/* Album art — fills entire card */}
       {artworkUrl ? (
         <img src={artworkUrl} alt="" className="w-full aspect-square object-cover" />
       ) : (
-        <div className="w-full aspect-square bg-gradient-to-br from-gray-700 to-gray-900" />
+        <div className="w-full aspect-square bg-chip-2" />
       )}
       {/* Gradient overlay — only bottom 60% for lyrics readability, top stays clear */}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 via-40% to-transparent" />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/35 via-40% to-transparent" />
 
       {/* Lyrics floating at bottom */}
       <div className="absolute bottom-0 left-0 right-0 p-5 space-y-3" style={{ textShadow: '0 1px 6px rgba(0,0,0,0.7)' }}>
         <div className="space-y-1">
           {lines.slice(0, 6).map((line, i) => (
-            <p key={i} className="text-[17px] font-semibold text-white leading-snug">{line}</p>
+            <p key={i} className="text-[17px] font-display font-semibold text-white leading-snug">{line}</p>
           ))}
         </div>
         <div className="flex items-center gap-2 pt-1">
-          <div className="w-[3px] h-7 bg-white/30 rounded-full" />
+          <div className="w-[3px] h-7 bg-white/40 rounded-full" />
           <div>
-            <p className="text-[13px] font-medium text-white/90">{trackName}</p>
-            <p className="text-[11px] text-white/50">{artist}</p>
+            <p className="text-[13px] font-display font-medium text-white/90">{trackName}</p>
+            <p className="text-[11px] text-white/60">{artist}</p>
           </div>
         </div>
       </div>

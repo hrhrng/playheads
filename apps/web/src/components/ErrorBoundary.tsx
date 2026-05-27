@@ -55,26 +55,26 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   render(): ReactNode {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen w-full bg-air-50 flex items-center justify-center p-4">
-          <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8 text-center">
-            <div className="w-20 h-20 mx-auto mb-6 rounded-full overflow-hidden grayscale">
+        <div className="min-h-screen w-full flex items-center justify-center p-4">
+          <div className="max-w-md w-full glass-strong rounded-sheet shadow-glass p-8 text-center">
+            <div className="w-20 h-20 mx-auto mb-6 rounded-full overflow-hidden shadow-cover">
               <img src="/logo.jpg" alt="Playhead" className="w-full h-full object-cover" />
             </div>
 
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">
+            <h1 className="text-2xl font-display font-semibold text-ink mb-2">
               Something went wrong
             </h1>
 
-            <p className="text-gray-600 mb-6">
+            <p className="text-ink-2 mb-6">
               We're sorry, but something unexpected happened. Please try reloading the page.
             </p>
 
             {this.state.error && (
-              <details className="text-left mb-6 p-4 bg-gray-50 rounded-lg">
-                <summary className="cursor-pointer text-sm font-medium text-gray-700 mb-2">
+              <details className="text-left mb-6 p-4 bg-chip rounded-2xl hairline">
+                <summary className="cursor-pointer text-sm font-medium text-ink-2 mb-2">
                   Error details
                 </summary>
-                <pre className="text-xs text-gray-600 overflow-auto max-h-32">
+                <pre className="text-xs text-ink-3 overflow-auto max-h-32">
                   {this.state.error.toString()}
                 </pre>
               </details>
@@ -83,13 +83,13 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
             <div className="flex gap-3 justify-center">
               <button
                 onClick={this.handleReset}
-                className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 transition-colors"
+                className="px-4 py-2 bg-chip-2 text-ink rounded-full hover:bg-chip-hover transition-colors"
               >
                 Try again
               </button>
               <button
                 onClick={this.handleReload}
-                className="px-4 py-2 bg-gemini-text text-white rounded-lg hover:bg-black transition-colors"
+                className="px-4 py-2 bg-ink text-page rounded-full hover:bg-ink/85 transition-colors"
               >
                 Reload page
               </button>

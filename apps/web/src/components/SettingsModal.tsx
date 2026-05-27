@@ -1,19 +1,23 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useSubscription, startCheckout, openCustomerPortal, type Tier } from '../hooks/useSubscription';
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
+  userId?: string | null;
+  userEmail?: string;
   isAppleMusicAuthorized?: boolean;
   onConnectAppleMusic?: () => void;
   onDisconnectAppleMusic?: () => void;
 }
 
-type Tab = 'general' | 'integrations';
+type Tab = 'general' | 'integrations' | 'billing';
 
-const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
+const tabs: { id: Tab; labelKey: string; icon: React.ReactNode }[] = [
   {
     id: 'general',
-    label: 'General',
+    labelKey: 'settings.general',
     icon: (
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="12" r="3" />
@@ -23,7 +27,7 @@ const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
   },
   {
     id: 'integrations',
-    label: 'Integrations',
+    labelKey: 'settings.integrations',
     icon: (
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 2L2 7l10 5 10-5-10-5z" />
@@ -32,30 +36,188 @@ const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
       </svg>
     ),
   },
+  {
+    id: 'billing',
+    labelKey: 'settings.billing',
+    icon: (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="2" y="5" width="20" height="14" rx="2" />
+        <line x1="2" y1="10" x2="22" y2="10" />
+      </svg>
+    ),
+  },
 ];
 
-function GeneralTab() {
+interface PlanCardProps {
+  tier: 'plus' | 'pro';
+  priceLabel: string;
+  currentTier: Tier;
+  perks: string[];
+  onUpgrade: (tier: 'plus' | 'pro') => void;
+  busy: boolean;
+}
+
+function PlanCard({ tier, priceLabel, currentTier, perks, onUpgrade, busy }: PlanCardProps) {
+  const { t } = useTranslation();
+  const isCurrent = currentTier === tier;
+  const isDowngradeFromHigher = currentTier === 'pro' && tier === 'plus';
+
+  return (
+    <div className={`relative rounded-2xl p-4 hairline flex flex-col ${isCurrent ? 'bg-chip-2' : 'bg-chip/40'}`}>
+      <div className="flex items-baseline justify-between mb-3">
+        <h3 className="text-base font-medium text-ink capitalize">{t(`billing.tier.${tier}`)}</h3>
+        <span className="text-sm text-ink-2">{priceLabel}</span>
+      </div>
+      <ul className="space-y-1.5 mb-4 flex-1">
+        {perks.map((p, i) => (
+          <li key={i} className="text-xs text-ink-2 flex items-start gap-1.5">
+            <svg className="w-3.5 h-3.5 mt-0.5 shrink-0 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+            <span>{p}</span>
+          </li>
+        ))}
+      </ul>
+      {isCurrent ? (
+        <div className="text-xs text-ink-3 text-center py-1.5">{t('billing.currentPlan')}</div>
+      ) : isDowngradeFromHigher ? (
+        <div className="text-xs text-ink-3 text-center py-1.5">{t('billing.manageToDowngrade')}</div>
+      ) : (
+        <button
+          onClick={() => onUpgrade(tier)}
+          disabled={busy}
+          className="w-full text-sm py-1.5 rounded-full border border-accent text-accent hover:bg-accent hover:text-page transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {busy ? t('common.loading') : t('billing.upgrade')}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function BillingTab({ userId, userEmail }: { userId: string | null; userEmail: string }) {
+  const { t } = useTranslation();
+  const { summary, loading } = useSubscription(userId);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const currentTier: Tier = summary?.tier ?? 'free';
+
+  const handleUpgrade = async (tier: 'plus' | 'pro') => {
+    if (!userId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const url = await startCheckout(userId, tier, userEmail || undefined);
+      window.location.href = url;
+    } catch (e) {
+      setError((e as Error).message);
+      setBusy(false);
+    }
+  };
+
+  const handleManage = async () => {
+    if (!userId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const url = await openCustomerPortal(userId);
+      window.location.href = url;
+    } catch (e) {
+      setError((e as Error).message);
+      setBusy(false);
+    }
+  };
+
+  const renewLabel = summary?.current_period_end
+    ? new Date(summary.current_period_end).toLocaleDateString()
+    : null;
+
   return (
     <div>
-      <h2 className="text-lg font-semibold text-gemini-text mb-6">General</h2>
-      <div className="space-y-0 divide-y divide-gemini-border">
+      <h2 className="text-lg font-display font-medium text-ink mb-6">{t('settings.billing')}</h2>
+
+      {/* Current plan banner */}
+      <div className="mb-6 rounded-2xl p-4 bg-chip-2">
+        <p className="text-xs text-ink-3 uppercase tracking-wide mb-1">{t('billing.currentPlan')}</p>
+        <p className="text-lg font-medium text-ink capitalize">{t(`billing.tier.${currentTier}`)}</p>
+        {currentTier !== 'free' && summary && (
+          <p className="text-xs text-ink-3 mt-1">
+            {summary.cancel_at_period_end
+              ? t('billing.cancelsOn', { date: renewLabel })
+              : renewLabel
+                ? t('billing.renewsOn', { date: renewLabel })
+                : null}
+          </p>
+        )}
+        {currentTier !== 'free' && summary?.has_customer && (
+          <button
+            onClick={handleManage}
+            disabled={busy}
+            className="mt-3 text-xs text-accent hover:underline disabled:opacity-40"
+          >
+            {t('billing.manage')} →
+          </button>
+        )}
+      </div>
+
+      {/* Plans */}
+      <div className="grid grid-cols-2 gap-3">
+        <PlanCard
+          tier="plus"
+          priceLabel="$9.99/mo"
+          currentTier={currentTier}
+          perks={[t('billing.perks.unlimited'), t('billing.perks.priorityModel')]}
+          onUpgrade={handleUpgrade}
+          busy={busy}
+        />
+        <PlanCard
+          tier="pro"
+          priceLabel="$19.99/mo"
+          currentTier={currentTier}
+          perks={[
+            t('billing.perks.unlimited'),
+            t('billing.perks.advancedModel'),
+            t('billing.perks.earlyAccess'),
+          ]}
+          onUpgrade={handleUpgrade}
+          busy={busy}
+        />
+      </div>
+
+      {loading && <p className="text-xs text-ink-3 mt-4">{t('common.loading')}</p>}
+      {error && <p className="text-xs text-red-500 mt-4">{error}</p>}
+    </div>
+  );
+}
+
+function GeneralTab() {
+  const { t, i18n } = useTranslation();
+  const currentLang = i18n.resolvedLanguage === 'zh' ? 'zh' : 'en';
+  return (
+    <div>
+      <h2 className="text-lg font-display font-medium text-ink mb-6">{t('settings.general')}</h2>
+      <div className="space-y-0 divide-y divide-rule">
         {/* Appearance */}
         <div className="flex items-center justify-between py-4">
-          <span className="text-sm text-gemini-text">Appearance</span>
-          <select className="text-sm text-gemini-subtext bg-transparent border border-gemini-border rounded-lg px-3 py-1.5 cursor-pointer hover:border-gemini-text transition-colors outline-none">
-            <option>System</option>
-            <option>Light</option>
-            <option>Dark</option>
+          <span className="text-sm text-ink">{t('settings.appearance')}</span>
+          <select className="text-sm text-ink-2 bg-transparent hairline rounded-full px-3 py-1.5 cursor-pointer hover:text-ink transition-colors outline-none">
+            <option>{t('settings.appearanceSystem')}</option>
+            <option>{t('settings.appearanceLight')}</option>
+            <option>{t('settings.appearanceDark')}</option>
           </select>
         </div>
 
         {/* Language */}
         <div className="flex items-center justify-between py-4">
-          <span className="text-sm text-gemini-text">Language</span>
-          <select className="text-sm text-gemini-subtext bg-transparent border border-gemini-border rounded-lg px-3 py-1.5 cursor-pointer hover:border-gemini-text transition-colors outline-none">
-            <option>Auto-detect</option>
-            <option>English</option>
-            <option>中文</option>
+          <span className="text-sm text-ink">{t('settings.language')}</span>
+          <select
+            className="text-sm text-ink-2 bg-transparent hairline rounded-full px-3 py-1.5 cursor-pointer hover:text-ink transition-colors outline-none"
+            value={currentLang}
+            onChange={(e) => i18n.changeLanguage(e.target.value)}
+          >
+            <option value="en">{t('settings.languageEn')}</option>
+            <option value="zh">{t('settings.languageZh')}</option>
           </select>
         </div>
       </div>
@@ -72,40 +234,46 @@ function IntegrationsTab({
   onConnect?: () => void;
   onDisconnect?: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div>
-      <h2 className="text-lg font-semibold text-gemini-text mb-6">Integrations</h2>
-      <div className="space-y-0 divide-y divide-gemini-border">
+      <h2 className="text-lg font-display font-medium text-ink mb-6">{t('settings.integrations')}</h2>
+      <div className="space-y-0 divide-y divide-rule">
         {/* Apple Music */}
         <div className="flex items-center justify-between py-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-pink-500 to-red-500 flex items-center justify-center shrink-0">
-              <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M9 18V5l12-2v13" />
-                <circle cx="6" cy="18" r="3" />
-                <circle cx="18" cy="16" r="3" />
-              </svg>
-            </div>
+            {/* Official Apple Music app icon (from Apple mzstatic CDN — App Store
+                id 1108187390). PNG lives in apps/web/public/.
+                The PNG is RGB-no-alpha (square red corners), so we mask the
+                iOS squircle with border-radius. iOS uses ~22.37% of side for
+                its app-icon corner — using `rounded-[22%]` so it scales right
+                regardless of w/h. (rounded-card = 10px gave ~28% on w-9 and
+                looked too bubbly next to the real squircle.) */}
+            <img
+              src="/apple-music-icon.png"
+              alt="Apple Music"
+              className="w-9 h-9 rounded-[22%] shrink-0 shadow-sm"
+            />
             <div>
-              <p className="text-sm font-medium text-gemini-text">Apple Music</p>
-              <p className="text-xs text-gemini-subtext">
-                {isAppleMusicAuthorized ? 'Connected' : 'Enable full playback and recommendations'}
+              <p className="text-sm font-medium text-ink">{t('settings.appleMusic')}</p>
+              <p className="text-xs text-ink-3">
+                {isAppleMusicAuthorized ? t('settings.connected') : t('settings.appleMusicHint')}
               </p>
             </div>
           </div>
           {isAppleMusicAuthorized ? (
             <button
               onClick={onDisconnect}
-              className="text-sm px-4 py-1.5 rounded-lg border border-gemini-border text-gemini-subtext hover:border-red-300 hover:text-red-600 transition-colors"
+              className="text-sm px-4 py-1.5 rounded-full hairline text-ink-2 hover:text-red-500 hover:border-red-500/40 transition-colors"
             >
-              Disconnect
+              {t('settings.disconnect')}
             </button>
           ) : (
             <button
               onClick={onConnect}
-              className="text-sm px-4 py-1.5 rounded-lg border border-gemini-primary text-gemini-primary hover:bg-gemini-primary hover:text-white transition-colors"
+              className="text-sm px-4 py-1.5 rounded-full border border-accent text-accent hover:bg-accent hover:text-page transition-colors"
             >
-              Connect
+              {t('settings.connect')}
             </button>
           )}
         </div>
@@ -117,10 +285,13 @@ function IntegrationsTab({
 export function SettingsModal({
   isOpen,
   onClose,
+  userId = null,
+  userEmail = '',
   isAppleMusicAuthorized,
   onConnectAppleMusic,
   onDisconnectAppleMusic,
 }: SettingsModalProps) {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<Tab>('general');
 
   // Escape key
@@ -148,14 +319,22 @@ export function SettingsModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in">
       {/* Backdrop */}
-      <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/35 backdrop-blur-sm" onClick={onClose} />
 
-      {/* Dialog */}
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl h-[480px] flex overflow-hidden animate-scale-in">
+      {/* Dialog. Pin neutral palette so mood-shifted --ink / --accent on the
+          root don't tint Settings text. */}
+      <div
+        className="relative glass-strong rounded-sheet shadow-glass w-full max-w-2xl h-[480px] flex overflow-hidden animate-scale-in"
+        style={{
+          ['--ink' as string]: '216 207 191',
+          ['--accent' as string]: '216 207 191',
+          ['--accent-2' as string]: '180 170 152',
+        }}
+      >
         {/* Close button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 p-1.5 rounded-lg text-gemini-subtext hover:text-gemini-text hover:bg-gemini-hover transition-colors z-10"
+          className="absolute top-4 right-4 p-1.5 rounded-full text-ink-2 hover:text-ink hover:bg-chip transition-colors z-10"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
@@ -163,19 +342,19 @@ export function SettingsModal({
         </button>
 
         {/* Left sidebar */}
-        <nav className="w-48 shrink-0 border-r border-gemini-border py-4 px-3 flex flex-col gap-1">
+        <nav className="w-48 shrink-0 hairline-r py-4 px-3 flex flex-col gap-1">
           {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`w-full px-3 py-2 rounded-lg text-sm text-left flex items-center gap-2.5 transition-colors ${
+              className={`w-full px-3 py-2 rounded-2xl text-sm text-left flex items-center gap-2.5 transition-colors ${
                 activeTab === tab.id
-                  ? 'bg-gemini-hover font-medium text-gemini-text'
-                  : 'text-gemini-subtext hover:bg-gemini-hover hover:text-gemini-text'
+                  ? 'bg-chip-2 font-medium text-ink'
+                  : 'text-ink-2 hover:bg-chip hover:text-ink'
               }`}
             >
               {tab.icon}
-              {tab.label}
+              {t(tab.labelKey)}
             </button>
           ))}
         </nav>
@@ -189,6 +368,9 @@ export function SettingsModal({
               onConnect={onConnectAppleMusic}
               onDisconnect={onDisconnectAppleMusic}
             />
+          )}
+          {activeTab === 'billing' && (
+            <BillingTab userId={userId} userEmail={userEmail} />
           )}
         </div>
       </div>

@@ -1,0 +1,179 @@
+{
+  "common": {
+    "appName": "Playheads",
+    "loading": "Loading…",
+    "retry": "Retry",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "delete": "Delete",
+    "rename": "Rename",
+    "pin": "Pin",
+    "unpin": "Unpin",
+    "pinChat": "Pin chat",
+    "unpinChat": "Unpin chat",
+    "newConversation": "New Conversation",
+    "settings": "Settings",
+    "logout": "Sign out"
+  },
+  "deleteDialog": {
+    "title": "Delete Conversation?",
+    "descriptionNamedPrefix": "Are you sure you want to delete",
+    "descriptionNamedSuffix": "? This action cannot be undone.",
+    "descriptionUnnamed": "Are you sure you want to delete this conversation? This action cannot be undone.",
+    "hintCancel": "Cancel",
+    "hintDelete": "Delete"
+  },
+  "nav": {
+    "newChat": "New Chat",
+    "playheads": "Playheads",
+    "openMenu": "Open menu",
+    "playlists": "Playlists",
+    "chats": "Chats",
+    "newPlaylist": "New playlist"
+  },
+  "discovery": {
+    "title": "What's the vibe?",
+    "subtitle": "Tell me what you want to hear, or pick something below.",
+    "recent": "Recent",
+    "playlists": "Playlists",
+    "recentChats": "Recent Chats",
+    "trySomething": "Try something",
+    "failedToStart": "Failed to start",
+    "imagePlaceholderMessage": "What's in this image?",
+    "trackCount_one": "{{count}} track",
+    "trackCount_other": "{{count}} tracks"
+  },
+  "moods": {
+    "focus":       { "label": "Focus",       "prompt": "Give me music for focused work." },
+    "sad":         { "label": "Melancholy",  "prompt": "I'm in a sad mood, play something sad." },
+    "high_energy": { "label": "High energy", "prompt": "Play something high energy." },
+    "chill":       { "label": "Chill",       "prompt": "Something chill to zone out to." },
+    "surprise":    { "label": "Surprise me", "prompt": "Recommend something off the beaten path I might not have heard." },
+    "workout":     { "label": "Workout",     "prompt": "Workout music." },
+    "sleep":       { "label": "Sleep",       "prompt": "Music to help me fall asleep." }
+  },
+  "chatInput": {
+    "startVibe": "Start a vibe...",
+    "askDJ": "Ask the DJ...",
+    "pushToInterrupt": "Push to Interrupt...",
+    "uploadImage": "Upload image",
+    "send": "Send",
+    "voice": "Voice",
+    "voiceTip": "Tap to dictate · Hold for voice mode",
+    "like": "Add to Liked",
+    "unlike": "Remove from Liked"
+  },
+  "playlist": {
+    "title": "PLAYLIST",
+    "nowPlaying": "Now Playing",
+    "upNext": "Up Next",
+    "history": "History",
+    "expand": "Expand playlist",
+    "collapse": "Collapse playlist",
+    "resize": "Drag to resize",
+    "tabQueue": "Queue",
+    "tabTopic": "Topic",
+    "topicEmpty": "This conversation hasn't built up a playlist yet — chat about a vibe you like.",
+    "playNow": "Play now",
+    "addToQueue": "Add to queue",
+    "playAll": "Play all",
+    "addAll": "Add all",
+    "tracksCount_one": "{{count}} track",
+    "tracksCount_other": "{{count}} tracks",
+    "emptyTracks": "No tracks yet — chat about a vibe to fill this playlist.",
+    "chatAbout": "Chat about this",
+    "chatCreating": "Starting chat…"
+  },
+  "trackMenu": {
+    "more": "More",
+    "removeFromPlaylist": "Remove from this playlist",
+    "removeFromQueue": "Remove from queue",
+    "openInAppleMusic": "Open in Apple Music"
+  },
+  "miniPlayer": {
+    "play": "Play",
+    "pause": "Pause",
+    "skipNext": "Skip to next",
+    "openFeed": "Open in feed",
+    "seek": "Seek",
+    "unknownTrack": "Unknown",
+    "unknownArtist": "Unknown Artist"
+  },
+  "addToPlaylist": {
+    "button": "Add to playlist",
+    "header": "Add to playlist",
+    "empty": "No custom playlists yet — create one from the sidebar.",
+    "untitled": "Untitled",
+    "already": "Already in",
+    "failed": "Failed"
+  },
+  "lyrics": {
+    "tapToView": "Lyrics available · tap to view",
+    "notAvailable": "No lyrics available"
+  },
+  "chat": {
+    "connectAppleMusic": "Connect Apple Music for full playback",
+    "viewTranscript": "View transcript",
+    "backToPlayer": "Back to player",
+    "chatFailed": "Chat failed",
+    "uploadFailed": "Upload failed"
+  },
+  "settings": {
+    "title": "Settings",
+    "general": "General",
+    "integrations": "Integrations",
+    "billing": "Billing",
+    "appearance": "Appearance",
+    "appearanceSystem": "System",
+    "appearanceLight": "Light",
+    "appearanceDark": "Dark",
+    "language": "Language",
+    "languageAuto": "Auto-detect",
+    "languageZh": "中文",
+    "languageEn": "English",
+    "appleMusic": "Apple Music",
+    "appleMusicHint": "Enable full playback and recommendations",
+    "connect": "Connect",
+    "disconnect": "Disconnect",
+    "connected": "Connected",
+    "account": "Account"
+  },
+  "auth": {
+    "signIn": "Sign in",
+    "signUp": "Sign up",
+    "email": "Email",
+    "password": "Password",
+    "continueWith": "Continue with {{provider}}",
+    "or": "or",
+    "welcome": "Welcome back",
+    "createAccount": "Create an account",
+    "tagline": "Return to Music",
+    "emailPlaceholder": "Your email",
+    "signInWithEmail": "Sign In with Email",
+    "sendingMagicLink": "Sending Magic Link...",
+    "continueWithApple": "Continue with Apple",
+    "continueWithGoogle": "Continue with Google"
+  },
+  "billing": {
+    "tier": { "free": "Free", "plus": "Plus", "pro": "Pro" },
+    "currentPlan": "Current plan",
+    "upgrade": "Upgrade",
+    "manage": "Manage subscription",
+    "manageToDowngrade": "Manage to switch",
+    "renewsOn": "Renews on {{date}}",
+    "cancelsOn": "Cancels on {{date}}",
+    "perks": {
+      "unlimited": "Unlimited chats",
+      "priorityModel": "Priority model access",
+      "advancedModel": "Advanced models + voice",
+      "earlyAccess": "Early access to new features"
+    }
+  },
+  "waitlist": {
+    "title": "You're on the list",
+    "subtitlePrefix": "We're letting people in gradually. You'll get an email at",
+    "subtitleSuffix": "when it's your turn.",
+    "checkAgain": "Check again",
+    "approved": "You're in! Welcome."
+  }
+}

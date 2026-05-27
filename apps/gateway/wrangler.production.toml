@@ -19,10 +19,22 @@ service = "playheads-admin"
 binding = "AGENT"
 service = "playheads-agent"
 
+[[services]]
+binding = "BILLING"
+service = "playheads-billing"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "playheads-db"
 database_id = "31cba35f-8e23-46eb-880f-19d667c0946b"
+
+[[r2_buckets]]
+binding = "UPLOADS"
+bucket_name = "playheads-uploads"
+
+[[kv_namespaces]]
+binding = "CONFIG_KV"
+id = "1d947fda21c9442aaa6c3877b0b32a0e"
 
 [observability]
 enabled = true

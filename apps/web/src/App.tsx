@@ -8,6 +8,7 @@ import { Routes, Route, useLocation } from 'react-router-dom';
 import { HomeRoute, ChatRoute } from './routes';
 import { useMusicProvider } from './hooks/useMusicProvider';
 import useAppleMusicLink from './hooks/useAppleMusicLink';
+import { useAlbumPalette } from './hooks/useAlbumPalette';
 import { useDevTools } from './utils/devTools';
 import { useAuth } from './hooks/useAuth';
 import { useConversations } from './hooks/useConversations';
@@ -79,6 +80,10 @@ function App() {
     isTokenChecked,
   });
 
+  // Album-driven palette: extract colours from the current track's artwork
+  // and pipe them into CSS vars on <html>. Empty state stays neutral.
+  useAlbumPalette(playback.currentTrack?.artworkUrl);
+
   // Music actions dispatched by agent tool results
   const musicActions: MusicActions = useMemo(() => ({
     playTrack: async (index: number) => {
@@ -114,7 +119,16 @@ function App() {
   // Render
   // ============================================================================
 
-  if (!isDev && (isSessionLoading || (isLoggedIn && isInitializing))) {
+  // Gate the shell until *everything* is settled:
+  //   1. session lookup finishes (avoid flashing login)
+  //   2. MusicKit provider has initialized (isInitializing false)
+  //   3. localStorage queue restore has finished (queue.isRestoring false)
+  //   4. /api/profile bootstrap (covered by isInitializing via provider)
+  // Otherwise the user can click Play before MusicKit has the queue
+  // attached, which leads to "queue cleared", wrong seek position, etc.
+  const stillBooting =
+    isSessionLoading || (isLoggedIn && (isInitializing || queue.isRestoring));
+  if (!isDev && stillBooting) {
     return <LoadingScreen />;
   }
 
@@ -162,8 +176,6 @@ function App() {
             onLogout={logout}
             onLinkApple={linkApple}
             onDisconnectApple={appleMusicLogout}
-            skipNext={() => queue.skipNext()}
-            skipPrev={() => queue.skipPrev()}
             queue={queue}
             playTrackById={(id: string) => provider?.play(id) ?? Promise.resolve()}
           />
@@ -193,8 +205,6 @@ function App() {
             onLogout={logout}
             onLinkApple={linkApple}
             onDisconnectApple={appleMusicLogout}
-            skipNext={() => queue.skipNext()}
-            skipPrev={() => queue.skipPrev()}
             queue={queue}
             playTrackById={(id: string) => provider?.play(id) ?? Promise.resolve()}
           />

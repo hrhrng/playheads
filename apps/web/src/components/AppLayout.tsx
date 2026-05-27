@@ -11,6 +11,7 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ConversationList } from './ConversationList';
 import { DeleteConfirmDialog } from './DeleteConfirmDialog';
 import { UserSettingsPopover } from './UserSettingsPopover';
@@ -26,6 +27,8 @@ interface AppLayoutProps {
   rightPanel?: React.ReactNode;
   /** Callback to create new chat */
   onNewChat?: () => void;
+  /** Create a playlist with the given title (called after inline input commits). */
+  onCreatePlaylist?: (title: string) => void;
   /** Callback when conversation is selected */
   onSelectConversation?: (conversationId: string) => void;
   /** Callback when conversation is deleted */
@@ -48,6 +51,8 @@ interface AppLayoutProps {
   userEmail?: string;
   /** User display name */
   userName?: string;
+  /** User id — required for billing routes */
+  userId?: string | null;
   /** Logout handler */
   onLogout?: () => void;
   /** Apple Music authorization state */
@@ -68,6 +73,7 @@ export const AppLayout = ({
   children,
   rightPanel,
   onNewChat,
+  onCreatePlaylist,
   onSelectConversation,
   onDeleteConversation,
   onPinConversation,
@@ -79,18 +85,24 @@ export const AppLayout = ({
   isLoadingMoreConversations,
   userEmail = '',
   userName = 'User',
+  userId = null,
   onLogout,
   isAppleMusicAuthorized,
   onConnectAppleMusic,
   onDisconnectAppleMusic,
   onOpenPlaylist,
 }: AppLayoutProps): React.JSX.Element => {
+  const { t } = useTranslation();
   // Use persisted state for nav sidebar to survive page navigation
   const { expanded, setExpanded, width, setWidth, COLLAPSED_WIDTH } = useNavSidebarState();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState<boolean>(false);
   const [conversationToDelete, setConversationToDelete] = useState<Conversation | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  // Inline "new playlist" input — triggered by the + in the Playlists
+  // section header. value=null means hidden; value='' or any string
+  // means the row is showing and editable. Replaces the native prompt.
+  const [newPlaylistDraft, setNewPlaylistDraft] = useState<string | null>(null);
   const [mobilePlaylistOpen, setMobilePlaylistOpen] = useState(false);
 
   // Resize state
@@ -178,12 +190,14 @@ export const AppLayout = ({
   // Shared nav content used in both desktop sidebar and mobile drawer
   const navContent = (isMobile = false) => (
     <>
-      {/* Burger Menu / toggle (desktop only) */}
+      {/* Burger Menu / toggle (desktop only). 4px left margin when
+          collapsed lands the icon on the sidebar's centerline (80px wide,
+          icon would otherwise sit at x=36, center is x=40). */}
       {!isMobile && (
         <div className="nav-item">
           <button
             onClick={() => setExpanded(!expanded)}
-            className="nav-btn"
+            className="nav-btn ml-1"
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
           </button>
@@ -194,38 +208,125 @@ export const AppLayout = ({
       <div className="nav-item">
         <button
           onClick={handleNewChat}
-          className="w-full p-3 rounded-xl text-gemini-subtext hover:bg-gemini-hover transition-colors flex items-center overflow-hidden whitespace-nowrap"
+          className="w-full p-3 rounded-2xl text-ink-2 hover:bg-chip hover:text-ink transition-colors flex items-center overflow-hidden whitespace-nowrap"
         >
-          <div className="w-6 flex justify-center shrink-0">
+          <div className="w-6 flex justify-center shrink-0 ml-1">
             <svg className="w-6 h-6 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
           </div>
-          <span className={`ml-3 truncate text-sm font-medium text-left transition-all duration-300 ${isMobile || expanded ? 'opacity-100 flex-1' : 'opacity-0 w-0 ml-0 overflow-hidden'}`}>New Chat</span>
+          <span className={`ml-3 truncate text-[15px] font-medium text-left transition-all duration-300 ${isMobile || expanded ? 'opacity-100 flex-1' : 'opacity-0 w-0 ml-0 overflow-hidden'}`}>{t('nav.newChat')}</span>
         </button>
       </div>
 
-      {/* Scrollable conversation container — only when expanded */}
-      {(isMobile || expanded) && (
-        <div className="bg-gemini-hover/50 rounded-3xl mx-2 py-4 flex flex-col gap-2 overflow-hidden overflow-y-auto max-h-[calc(100vh-200px)]">
-          {/* Conversation List */}
-          <ConversationList
-            conversations={conversations}
-            expanded={isMobile || expanded}
-            activeConversationId={activeConversationId}
-            onSelectConversation={handleSelectConversation}
-            onPinConversation={onPinConversation}
-            onRenameConversation={onRenameConversation}
-            onDeleteConversation={handleDeleteRequest}
-            onLoadMore={onLoadMoreConversations}
-            hasMore={hasMoreConversations}
-            isLoadingMore={isLoadingMoreConversations}
-          />
-        </div>
-      )}
+      {/* Scrollable list — Playlists section on top, Chats below.
+         iOS-style: section headers as uppercase labels; only the active
+         row carries a chip; everything just scrolls together. */}
+      {(isMobile || expanded) && (() => {
+        const playlists = conversations.filter((c) => c.type === 'playlist');
+        const chats = conversations.filter((c) => c.type !== 'playlist');
+        // Sort playlists so Liked sits on top, then by updatedAt desc.
+        const sortedPlaylists = [...playlists].sort((a, b) => {
+          if (a.is_liked && !b.is_liked) return -1;
+          if (!a.is_liked && b.is_liked) return 1;
+          return Number(b.updated_at ?? 0) - Number(a.updated_at ?? 0);
+        });
+        return (
+          <div className="flex flex-col gap-0.5 overflow-hidden overflow-y-auto max-h-[calc(100vh-180px)] pt-1">
+            {/* Playlists section */}
+            {(sortedPlaylists.length > 0 || onCreatePlaylist || newPlaylistDraft !== null) && (
+              <>
+                <div className="flex items-center justify-between mx-4 mt-2 mb-1">
+                  <span className="text-[11px] font-medium text-ink-3 uppercase tracking-wider">
+                    {t('nav.playlists')}
+                  </span>
+                  {onCreatePlaylist && newPlaylistDraft === null && (
+                    <button
+                      onClick={() => setNewPlaylistDraft('')}
+                      className="text-ink-3 hover:text-ink p-0.5 rounded transition-colors"
+                      title={t('nav.newPlaylist')}
+                      aria-label={t('nav.newPlaylist')}
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 5v14m-7-7h14" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+                {/* Inline new-playlist input row — replaces window.prompt.
+                    Mirrors ConversationItem's mx-3 + p-3 + ml-1 + w-6 icon
+                    layout so the input's left edge sits flush with the
+                    titles below. */}
+                {newPlaylistDraft !== null && onCreatePlaylist && (
+                  <div className="mx-3 p-3 rounded-2xl bg-chip-2 hairline flex items-center overflow-hidden">
+                    <div className="w-6 flex justify-center shrink-0 ml-1 text-ink-2">
+                      <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                        <path d="M9 18V5l12-2v13" />
+                        <circle cx="6" cy="18" r="2.5" fill="currentColor" stroke="none" />
+                        <circle cx="18" cy="16" r="2.5" fill="currentColor" stroke="none" />
+                      </svg>
+                    </div>
+                    <input
+                      ref={(el) => { if (el && document.activeElement !== el) el.focus(); }}
+                      type="text"
+                      value={newPlaylistDraft}
+                      placeholder={t('nav.newPlaylist')}
+                      onChange={(e) => setNewPlaylistDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        e.stopPropagation();
+                        if (e.key === 'Enter') {
+                          const v = newPlaylistDraft.trim();
+                          if (v) onCreatePlaylist(v);
+                          setNewPlaylistDraft(null);
+                        } else if (e.key === 'Escape') {
+                          setNewPlaylistDraft(null);
+                        }
+                      }}
+                      onBlur={() => {
+                        const v = newPlaylistDraft.trim();
+                        if (v) onCreatePlaylist(v);
+                        setNewPlaylistDraft(null);
+                      }}
+                      className="ml-3 flex-1 bg-transparent border-none outline-none text-[14px] font-medium text-ink p-0 min-w-0 placeholder-ink-3"
+                    />
+                  </div>
+                )}
+                <ConversationList
+                  conversations={sortedPlaylists}
+                  expanded={isMobile || expanded}
+                  activeConversationId={activeConversationId}
+                  onSelectConversation={handleSelectConversation}
+                  onPinConversation={onPinConversation}
+                  onRenameConversation={onRenameConversation}
+                  onDeleteConversation={handleDeleteRequest}
+                />
+              </>
+            )}
+
+            {/* Chats section */}
+            <div className="flex items-center justify-between mx-4 mt-3 mb-1">
+              <span className="text-[11px] font-medium text-ink-3 uppercase tracking-wider">
+                {t('nav.chats')}
+              </span>
+            </div>
+            <ConversationList
+              conversations={chats}
+              expanded={isMobile || expanded}
+              activeConversationId={activeConversationId}
+              onSelectConversation={handleSelectConversation}
+              onPinConversation={onPinConversation}
+              onRenameConversation={onRenameConversation}
+              onDeleteConversation={handleDeleteRequest}
+              onLoadMore={onLoadMoreConversations}
+              hasMore={hasMoreConversations}
+              isLoadingMore={isLoadingMoreConversations}
+            />
+          </div>
+        );
+      })()}
 
       {/* Bottom section: User info with settings popover */}
       <div className="mt-auto nav-item">
         <div className="p-3 flex items-center overflow-hidden whitespace-nowrap">
-          <div className="w-6 flex justify-center shrink-0">
+          <div className="w-6 flex justify-center shrink-0 ml-1">
             <UserSettingsPopover
               userEmail={userEmail}
               userName={userName}
@@ -234,8 +335,8 @@ export const AppLayout = ({
             />
           </div>
           <div className={`ml-3 flex flex-col text-sm transition-all duration-300 ${isMobile || expanded ? 'opacity-100 flex-1' : 'opacity-0 w-0 ml-0 overflow-hidden'}`}>
-            <span className="font-medium text-gemini-text">{userName}</span>
-            <span className="text-[10px] text-gemini-subtext truncate">{userEmail}</span>
+            <span className="font-medium text-ink">{userName}</span>
+            <span className="text-[10px] text-ink-3 truncate">{userEmail}</span>
           </div>
         </div>
       </div>
@@ -246,22 +347,22 @@ export const AppLayout = ({
 
   return (
     <PlaylistSheetContext.Provider value={{ openPlaylist: () => { onOpenPlaylist?.(); setMobilePlaylistOpen(true); }, hasPlaylist, isMobileSheet: false }}>
-      <div className="flex flex-col h-screen bg-gemini-bg font-sans text-gemini-text overflow-hidden selection:bg-gemini-primary selection:text-white">
+      <div className="flex flex-col h-[100dvh] font-sans text-ink overflow-hidden overscroll-none">
 
         {/* Mobile Top Bar */}
-        <div className="flex md:hidden items-center h-14 px-2 shrink-0 border-b border-gemini-border/50">
+        <div className="flex md:hidden items-center h-14 px-2 shrink-0 hairline-b">
           <button
             onClick={() => setMobileNavOpen(true)}
-            className="p-2.5 rounded-xl text-gemini-subtext hover:bg-gemini-hover transition-colors"
-            aria-label="Open menu"
+            className="p-2.5 rounded-2xl text-ink-2 hover:bg-chip hover:text-ink transition-colors"
+            aria-label={t('nav.openMenu')}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
           </button>
-          <span className="flex-1 text-center text-sm font-medium text-gemini-text">Playheads</span>
+          <span className="flex-1 text-center text-[15px] font-medium text-ink tracking-tight">{t('nav.playheads')}</span>
           <button
             onClick={onNewChat}
-            className="p-2.5 rounded-xl text-gemini-subtext hover:bg-gemini-hover transition-colors"
-            aria-label="New chat"
+            className="p-2.5 rounded-2xl text-ink-2 hover:bg-chip hover:text-ink transition-colors"
+            aria-label={t('nav.newChat')}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
           </button>
@@ -270,28 +371,31 @@ export const AppLayout = ({
         {/* Main row: sidebars + content */}
         <div className="flex flex-1 min-h-0 overflow-hidden">
 
-          {/* 1. Left Sidebar (Navigation) — desktop only */}
+          {/* 1. Left Sidebar (Navigation) — desktop only.
+              Matches main: navContent sits directly inside <nav> with
+              only top padding, no glass-card wrapper. Inner items keep
+              their iOS-style class names. */}
           <nav
             ref={navRef}
             style={{ width: `${width}px` }}
-            className={`relative hidden md:flex flex-col pt-4 shrink-0 z-20 ${isResizing ? '' : 'transition-all duration-300 ease-in-out'}`}
+            className={`relative hidden md:flex flex-col pt-4 shrink-0 z-20 glass ${isResizing ? '' : 'transition-all duration-300 ease-in-out'}`}
           >
             {/* Resize Handle - positioned on the right edge */}
             <div
               onMouseDown={handleResizeStart}
               className={`
                 absolute right-0 top-10 bottom-0 w-0.5 cursor-ew-resize z-30
-                hover:bg-blue-400 transition-colors
-                ${isResizing ? 'bg-blue-500' : 'bg-transparent'}
+                hover:bg-accent/60 transition-colors
+                ${isResizing ? 'bg-accent' : 'bg-transparent'}
               `}
               title="Drag to resize"
             />
             {navContent(false)}
           </nav>
 
-          {/* 2. Main Content Area (Rounded White Card) */}
-          <main className="flex-1 h-full md:pt-4 relative z-10 min-w-0">
-            <div className="bg-white h-full w-full md:rounded-t-3xl shadow-sm overflow-hidden border border-white relative flex flex-col">
+          {/* 2. Main Content Area — transparent so the mood blobs paint through */}
+          <main className="flex-1 h-full relative z-10 min-w-0">
+            <div className="h-full w-full overflow-hidden relative flex flex-col">
               {children}
             </div>
           </main>
@@ -312,9 +416,9 @@ export const AppLayout = ({
               onClick={() => setMobileNavOpen(false)}
             />
             {/* Drawer */}
-            <nav className="fixed inset-y-0 left-0 w-72 z-50 md:hidden bg-gemini-bg flex flex-col shadow-2xl">
+            <nav className="fixed inset-y-0 left-0 w-72 z-50 md:hidden glass-strong flex flex-col shadow-2xl">
               {/* Close button */}
-              <div className="mb-4 px-4">
+              <div className="mb-2 px-4 pt-3">
                 <button
                   onClick={() => setMobileNavOpen(false)}
                   className="nav-btn"
@@ -337,10 +441,10 @@ export const AppLayout = ({
               onClick={() => setMobilePlaylistOpen(false)}
             />
             {/* Sheet */}
-            <div className="fixed inset-x-0 bottom-0 z-50 md:hidden rounded-t-3xl overflow-hidden bg-gemini-bg animate-slide-up" style={{ maxHeight: '70vh' }}>
+            <div className="fixed inset-x-0 bottom-0 z-50 md:hidden rounded-t-sheet overflow-hidden glass-strong animate-slide-up" style={{ maxHeight: '70vh' }}>
               {/* Drag handle */}
               <div className="flex justify-center pt-3 pb-1">
-                <div className="w-10 h-1 bg-gray-300 rounded-full" />
+                <div className="w-10 h-1 bg-ink/30 rounded-full" />
               </div>
               {/* Playlist content — fill remaining height, isMobileSheet=true */}
               <PlaylistSheetContext.Provider value={{ openPlaylist: () => {}, hasPlaylist: true, isMobileSheet: true }}>
@@ -364,6 +468,8 @@ export const AppLayout = ({
         <SettingsModal
           isOpen={settingsOpen}
           onClose={() => setSettingsOpen(false)}
+          userId={userId}
+          userEmail={userEmail}
           isAppleMusicAuthorized={isAppleMusicAuthorized}
           onConnectAppleMusic={onConnectAppleMusic}
           onDisconnectAppleMusic={onDisconnectAppleMusic}

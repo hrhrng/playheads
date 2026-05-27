@@ -48,6 +48,9 @@ export async function handleListConversations(
           lastMessageAt: t.lastMessageAt,
           isPinned: t.isPinned,
           updatedAt: t.updatedAt,
+          playlist: t.playlist,
+          type: t.type,
+          isLiked: t.isLiked,
         })
         .from(t)
         .where(
@@ -72,6 +75,9 @@ export async function handleListConversations(
           lastMessageAt: t.lastMessageAt,
           isPinned: t.isPinned,
           updatedAt: t.updatedAt,
+          playlist: t.playlist,
+          type: t.type,
+          isLiked: t.isLiked,
         })
         .from(t)
         .where(and(eq(t.userId, userId), eq(t.isArchived, false)))
@@ -89,15 +95,28 @@ export async function handleListConversations(
     }
 
     return Response.json({
-      conversations: pageRows.map((c) => ({
-        id: c.id,
-        title: c.title,
-        message_count: c.messageCount ?? 0,
-        last_message_preview: c.lastMessagePreview,
-        last_message_at: c.lastMessageAt != null ? String(c.lastMessageAt) : null,
-        is_pinned: Boolean(c.isPinned),
-        updated_at: String(c.updatedAt ?? ""),
-      })),
+      conversations: pageRows.map((c) => {
+        // Parse playlist JSON; expose track count + first track's artwork
+        // for cover thumb in the sidebar / topics grid. Send the full
+        // array too so the client can restore the topic on load.
+        let playlist: Array<Record<string, unknown>> = [];
+        try { playlist = JSON.parse(c.playlist || '[]'); } catch { /* ignore */ }
+        const first = playlist[0] as { artworkUrl?: string } | undefined;
+        return {
+          id: c.id,
+          title: c.title,
+          message_count: c.messageCount ?? 0,
+          last_message_preview: c.lastMessagePreview,
+          last_message_at: c.lastMessageAt != null ? String(c.lastMessageAt) : null,
+          is_pinned: Boolean(c.isPinned),
+          updated_at: String(c.updatedAt ?? ""),
+          playlist,
+          playlist_count: playlist.length,
+          playlist_cover: first?.artworkUrl ?? null,
+          type: c.type ?? "chat",
+          is_liked: Boolean(c.isLiked),
+        };
+      }),
       has_more: hasMore,
       next_cursor: nextCursor,
     });
@@ -148,6 +167,256 @@ export async function handleCreateConversation(
       { status: 500 },
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/playlists/create  { user_id, title }
+// Creates a conversation row with type='playlist'. Reuses the conversation
+// table so the existing list/delete/rename machinery just works.
+// ---------------------------------------------------------------------------
+export async function handleCreatePlaylist(
+  request: Request,
+  DB: D1,
+): Promise<Response> {
+  const body = (await request.json()) as { user_id?: string; title?: string };
+  if (!body.user_id) {
+    return Response.json({ error: "user_id required" }, { status: 400 });
+  }
+  const title = (body.title ?? "").trim() || "New Playlist";
+
+  const now = Date.now();
+  const id = crypto.randomUUID();
+  const stateId = crypto.randomUUID();
+
+  try {
+    await DB.batch([
+      DB.prepare(
+        'INSERT INTO "conversation" ("id","userId","title","messageCount","isPinned","isArchived","type","isLiked","playlist","createdAt","updatedAt") VALUES (?,?,?,0,0,0,\'playlist\',0,\'[]\',?,?)',
+      ).bind(id, body.user_id, title, now, now),
+      DB.prepare(
+        'INSERT INTO "conversationState" ("id","conversationId","messages","context","createdAt","updatedAt") VALUES (?,?,\'[]\',\'{}\',?,?)',
+      ).bind(stateId, id, now, now),
+    ]);
+
+    return Response.json({
+      id,
+      title,
+      type: "playlist",
+      is_liked: false,
+      created_at: new Date(now).toISOString(),
+    });
+  } catch (e) {
+    console.error("Failed to create playlist:", e);
+    return Response.json({ error: "Failed to create playlist" }, { status: 500 });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/playlists/liked/toggle-track  { user_id, track }
+// Find-or-create the user's Liked playlist, then add or remove the track
+// from its `playlist` JSON column. Idempotent — if the track is already
+// present we remove it (toggle semantics).
+//
+// Returns { liked: boolean, playlistId: string } so the client can flip
+// the heart icon optimistically with the authoritative state.
+// ---------------------------------------------------------------------------
+export async function handleToggleLikeTrack(
+  request: Request,
+  DB: D1,
+): Promise<Response> {
+  const body = (await request.json()) as {
+    user_id?: string;
+    track?: Record<string, unknown> & { id?: string };
+  };
+  if (!body.user_id || !body.track?.id) {
+    return Response.json({ error: "user_id and track.id required" }, { status: 400 });
+  }
+
+  const db = drizzle(DB);
+  const t = schema.conversation;
+  const now = Date.now();
+
+  // Find existing Liked playlist for this user.
+  let [liked] = await db
+    .select({ id: t.id, playlist: t.playlist })
+    .from(t)
+    .where(and(eq(t.userId, body.user_id), eq(t.isLiked, true)))
+    .limit(1);
+
+  // Auto-create on first like — no migration needed for existing users.
+  if (!liked) {
+    const id = crypto.randomUUID();
+    const stateId = crypto.randomUUID();
+    await DB.batch([
+      DB.prepare(
+        'INSERT INTO "conversation" ("id","userId","title","messageCount","isPinned","isArchived","type","isLiked","playlist","createdAt","updatedAt") VALUES (?,?,\'Liked\',0,1,0,\'playlist\',1,\'[]\',?,?)',
+      ).bind(id, body.user_id, now, now),
+      DB.prepare(
+        'INSERT INTO "conversationState" ("id","conversationId","messages","context","createdAt","updatedAt") VALUES (?,?,\'[]\',\'{}\',?,?)',
+      ).bind(stateId, id, now, now),
+    ]);
+    liked = { id, playlist: "[]" };
+  }
+
+  let tracks: Array<Record<string, unknown> & { id?: string }> = [];
+  try { tracks = JSON.parse(liked.playlist || "[]"); } catch { tracks = []; }
+
+  const trackId = body.track.id;
+  const idx = tracks.findIndex((tr) => tr?.id === trackId);
+  let isNowLiked: boolean;
+  if (idx >= 0) {
+    tracks.splice(idx, 1);
+    isNowLiked = false;
+  } else {
+    tracks.push(body.track);
+    isNowLiked = true;
+  }
+
+  await db
+    .update(t)
+    .set({ playlist: JSON.stringify(tracks), updatedAt: now })
+    .where(eq(t.id, liked.id));
+
+  return Response.json({
+    liked: isNowLiked,
+    playlistId: liked.id,
+    count: tracks.length,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/playlists/:id/add-track  { user_id, track }
+//
+// Idempotent add — if the track id is already in the playlist, no-op (returns
+// { added: false, alreadyPresent: true }). The Liked playlist has its own
+// toggle endpoint; this handler intentionally refuses isLiked rows so that
+// the Liked "second tap removes" semantics aren't accidentally broken.
+// ---------------------------------------------------------------------------
+export async function handleAddTrackToPlaylist(
+  playlistId: string,
+  request: Request,
+  DB: D1,
+): Promise<Response> {
+  const body = (await request.json()) as {
+    user_id?: string;
+    track?: Record<string, unknown> & { id?: string };
+  };
+  if (!body.user_id || !body.track?.id) {
+    return Response.json({ error: "user_id and track.id required" }, { status: 400 });
+  }
+
+  const db = drizzle(DB);
+  const t = schema.conversation;
+
+  const [row] = await db
+    .select({ id: t.id, playlist: t.playlist, isLiked: t.isLiked, type: t.type })
+    .from(t)
+    .where(and(eq(t.id, playlistId), eq(t.userId, body.user_id)))
+    .limit(1);
+
+  if (!row) {
+    return Response.json({ error: "Playlist not found" }, { status: 404 });
+  }
+  if (row.type !== "playlist") {
+    return Response.json({ error: "Not a playlist" }, { status: 400 });
+  }
+  if (row.isLiked) {
+    return Response.json(
+      { error: "Use /api/playlists/liked/toggle-track for the Liked playlist" },
+      { status: 400 },
+    );
+  }
+
+  let tracks: Array<Record<string, unknown> & { id?: string }> = [];
+  try { tracks = JSON.parse(row.playlist || "[]"); } catch { tracks = []; }
+
+  const trackId = body.track.id;
+  if (tracks.some((tr) => tr?.id === trackId)) {
+    return Response.json({
+      added: false,
+      alreadyPresent: true,
+      playlistId: row.id,
+      count: tracks.length,
+    });
+  }
+
+  tracks.push(body.track);
+  const now = Date.now();
+  await db
+    .update(t)
+    .set({ playlist: JSON.stringify(tracks), updatedAt: now })
+    .where(eq(t.id, row.id));
+
+  return Response.json({
+    added: true,
+    alreadyPresent: false,
+    playlistId: row.id,
+    count: tracks.length,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/playlists/:id/remove-track  { user_id, track_id }
+//
+// Remove the track with the given id from a user-owned custom playlist.
+// Idempotent — if the track isn't there, returns { removed: false }.
+// Refuses Liked playlists (use the dedicated toggle endpoint).
+// ---------------------------------------------------------------------------
+export async function handleRemoveTrackFromPlaylist(
+  playlistId: string,
+  request: Request,
+  DB: D1,
+): Promise<Response> {
+  const body = (await request.json()) as {
+    user_id?: string;
+    track_id?: string;
+  };
+  if (!body.user_id || !body.track_id) {
+    return Response.json({ error: "user_id and track_id required" }, { status: 400 });
+  }
+
+  const db = drizzle(DB);
+  const t = schema.conversation;
+
+  const [row] = await db
+    .select({ id: t.id, playlist: t.playlist, isLiked: t.isLiked, type: t.type })
+    .from(t)
+    .where(and(eq(t.id, playlistId), eq(t.userId, body.user_id)))
+    .limit(1);
+
+  if (!row) {
+    return Response.json({ error: "Playlist not found" }, { status: 404 });
+  }
+  if (row.type !== "playlist") {
+    return Response.json({ error: "Not a playlist" }, { status: 400 });
+  }
+  if (row.isLiked) {
+    return Response.json(
+      { error: "Use /api/playlists/liked/toggle-track for the Liked playlist" },
+      { status: 400 },
+    );
+  }
+
+  let tracks: Array<Record<string, unknown> & { id?: string }> = [];
+  try { tracks = JSON.parse(row.playlist || "[]"); } catch { tracks = []; }
+
+  const before = tracks.length;
+  tracks = tracks.filter((tr) => tr?.id !== body.track_id);
+  const removed = tracks.length !== before;
+
+  if (removed) {
+    const now = Date.now();
+    await db
+      .update(t)
+      .set({ playlist: JSON.stringify(tracks), updatedAt: now })
+      .where(eq(t.id, row.id));
+  }
+
+  return Response.json({
+    removed,
+    playlistId: row.id,
+    count: tracks.length,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -297,15 +566,96 @@ export async function handleGetConversationTitle(
 }
 
 // ---------------------------------------------------------------------------
-// POST /api/session/create  { user_id }
+// GET /api/conversations/:id?user_id=...
+// Returns the full conversation row (id, title, playlist) so the client can
+// restore the topic on chat load.
+// ---------------------------------------------------------------------------
+export async function handleGetConversation(
+  conversationId: string,
+  request: Request,
+  DB: D1,
+): Promise<Response> {
+  const url = new URL(request.url);
+  const userId = url.searchParams.get("user_id");
+  if (!userId) {
+    return Response.json({ error: "user_id required" }, { status: 400 });
+  }
+
+  const db = drizzle(DB);
+  const t = schema.conversation;
+
+  const [row] = await db
+    .select({
+      id: t.id,
+      title: t.title,
+      messageCount: t.messageCount,
+      lastMessagePreview: t.lastMessagePreview,
+      lastMessageAt: t.lastMessageAt,
+      isPinned: t.isPinned,
+      updatedAt: t.updatedAt,
+      playlist: t.playlist,
+    })
+    .from(t)
+    .where(and(eq(t.id, conversationId), eq(t.userId, userId)));
+
+  if (!row) {
+    return Response.json({ error: "Not found" }, { status: 404 });
+  }
+
+  let playlist: Array<Record<string, unknown>> = [];
+  try { playlist = JSON.parse(row.playlist || '[]'); } catch { /* ignore */ }
+  const first = playlist[0] as { artworkUrl?: string } | undefined;
+
+  return Response.json({
+    id: row.id,
+    title: row.title,
+    message_count: row.messageCount ?? 0,
+    last_message_preview: row.lastMessagePreview,
+    last_message_at: row.lastMessageAt != null ? String(row.lastMessageAt) : null,
+    is_pinned: Boolean(row.isPinned),
+    updated_at: String(row.updatedAt ?? ""),
+    playlist,
+    playlist_count: playlist.length,
+    playlist_cover: first?.artworkUrl ?? null,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/session/create  { user_id, seed_playlist_id? }
+//
+// seed_playlist_id forks a chat from an existing playlist: the source
+// playlist's tracks are copied into the new conversation's playlist JSON
+// so the AI's get_playlist tool sees them as the topic on turn 1.
 // ---------------------------------------------------------------------------
 export async function handleCreateSession(
   request: Request,
   DB: D1,
 ): Promise<Response> {
-  const body = (await request.json()) as { user_id: string };
+  const body = (await request.json()) as {
+    user_id: string;
+    seed_playlist_id?: string;
+  };
   if (!body.user_id) {
     return Response.json({ error: "user_id is required" }, { status: 400 });
+  }
+
+  // If a seed playlist was supplied, fetch its tracks (and verify the user owns
+  // it). On failure we proceed without a seed — forking should degrade to a
+  // plain new chat, not error out.
+  let seededPlaylistJson = "[]";
+  if (body.seed_playlist_id) {
+    try {
+      const db = drizzle(DB);
+      const t = schema.conversation;
+      const [src] = await db
+        .select({ playlist: t.playlist })
+        .from(t)
+        .where(and(eq(t.id, body.seed_playlist_id), eq(t.userId, body.user_id)))
+        .limit(1);
+      if (src?.playlist) seededPlaylistJson = src.playlist;
+    } catch (e) {
+      console.warn("[session/create] seed_playlist_id fetch failed:", e);
+    }
   }
 
   const now = Date.now();
@@ -315,8 +665,8 @@ export async function handleCreateSession(
   try {
     await DB.batch([
       DB.prepare(
-        'INSERT OR IGNORE INTO "conversation" ("id","userId","messageCount","isPinned","isArchived","createdAt","updatedAt") VALUES (?,?,0,0,0,?,?)',
-      ).bind(sessionId, body.user_id, now, now),
+        'INSERT OR IGNORE INTO "conversation" ("id","userId","messageCount","isPinned","isArchived","playlist","createdAt","updatedAt") VALUES (?,?,0,0,0,?,?,?)',
+      ).bind(sessionId, body.user_id, seededPlaylistJson, now, now),
       DB.prepare(
         'INSERT OR IGNORE INTO "conversationState" ("id","conversationId","messages","context","createdAt","updatedAt") VALUES (?,?,\'[]\',\'{}\',?,?)',
       ).bind(stateId, sessionId, now, now),

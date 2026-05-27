@@ -11,7 +11,17 @@ export type MessageRole = 'user' | 'agent' | 'system';
 /**
  * Message part types - union discriminator pattern
  */
-export type MessagePart = TextPart | ThinkingPart | ToolCallPart;
+export type MessagePart = TextPart | ThinkingPart | ToolCallPart | ImagePart;
+
+/**
+ * Image attachment part — usually inside user messages.
+ */
+export interface ImagePart {
+  type: 'image';
+  url: string;
+  mediaType: string;
+  filename?: string;
+}
 
 /**
  * Text content part
@@ -90,6 +100,10 @@ export function isThinkingPart(part: MessagePart): part is ThinkingPart {
 
 export function isToolCallPart(part: MessagePart): part is ToolCallPart {
   return part.type === 'tool_call';
+}
+
+export function isImagePart(part: MessagePart): part is ImagePart {
+  return part.type === 'image';
 }
 
 /**

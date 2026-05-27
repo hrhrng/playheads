@@ -21,6 +21,59 @@ export interface ToolContext {
   env: Env;
   state: PlaybackState;
   storefront: string;
+  /** Conversation id for the active chat. When add_to_queue runs, the
+   *  track is also appended to this conversation's `playlist` column so
+   *  the topic accumulates its private music history. */
+  sessionId?: string;
+}
+
+interface PlaylistEntry {
+  id: string;
+  name: string;
+  artist: string;
+  album: string;
+  artworkUrl: string;
+  durationSeconds: number;
+  provider: 'apple-music';
+}
+
+/**
+ * Append track snapshots to the conversation's `playlist` column. Reads
+ * current playlist, dedupes by id (preserving incoming order for new
+ * entries), writes back in one UPDATE. No-op when sessionId is unset.
+ */
+async function appendToConversationPlaylist(
+  env: Env,
+  sessionId: string | undefined,
+  entries: PlaylistEntry[],
+): Promise<void> {
+  if (!sessionId || entries.length === 0) return;
+  try {
+    const row = await env.DB.prepare(
+      'SELECT "playlist" FROM "conversation" WHERE "id" = ?',
+    )
+      .bind(sessionId)
+      .first<{ playlist: string }>();
+    if (!row) return;
+    let list: PlaylistEntry[] = [];
+    try { list = JSON.parse(row.playlist || '[]'); } catch { list = []; }
+    const seen = new Set(list.map((t) => t.id));
+    let appended = false;
+    for (const e of entries) {
+      if (seen.has(e.id)) continue;
+      seen.add(e.id);
+      list.push(e);
+      appended = true;
+    }
+    if (!appended) return;
+    await env.DB.prepare(
+      'UPDATE "conversation" SET "playlist" = ?, "updatedAt" = ? WHERE "id" = ?',
+    )
+      .bind(JSON.stringify(list), Date.now(), sessionId)
+      .run();
+  } catch (e) {
+    console.warn('[appendToConversationPlaylist] failed:', e);
+  }
 }
 
 /** Action payload embedded in tool results for client-side MusicKit dispatch. */
@@ -42,43 +95,92 @@ export function createMusicTools(ctx: ToolContext) {
 
     add_to_queue: tool({
       description:
-        "Add a track to the queue by its Apple Music ID (from search_music results).",
+        "Add one or more tracks to the queue by their Apple Music IDs (from search_music results). Always batch as many tracks as you want to queue into a single call — don't call this tool multiple times in a row.",
       inputSchema: z.object({
-        track_id: z
-          .string()
-          .describe('Apple Music song ID (e.g. "12345" from search results)'),
+        track_ids: z
+          .array(z.string())
+          .min(1)
+          .describe('Apple Music song IDs in the order they should be queued (e.g. ["12345","67890"]). Returned by search_music.'),
       }),
-      execute: async ({ track_id }) => {
+      execute: async ({ track_ids }) => {
         try {
-          // Fetch full track info from Apple Music catalog
-          const url = `v1/catalog/${ctx.storefront}/songs/${track_id}`;
+          // Fetch all tracks in parallel; preserve input order in the result.
           const apiStart = Date.now();
-          const result = await appleMusicGet(url, ctx.env);
-          const songs = (result.data as Array<Record<string, unknown>>) || [];
-          console.log("[tool:add_to_queue] apple-music-api elapsed=%dms songs=%d", Date.now() - apiStart, songs.length);
-          if (!songs.length) {
-            return `No track found for ID '${track_id}'.`;
+          const results = await Promise.allSettled(
+            track_ids.map((id) =>
+              appleMusicGet(`v1/catalog/${ctx.storefront}/songs/${id}`, ctx.env),
+            ),
+          );
+          console.log("[tool:add_to_queue] batch elapsed=%dms n=%d", Date.now() - apiStart, track_ids.length);
+
+          const tracksData: Array<{
+            track_id: string;
+            name: string;
+            artist: string;
+            album: string;
+            artwork_url: string;
+            duration: number;
+          }> = [];
+          const entries: PlaylistEntry[] = [];
+          const missing: string[] = [];
+
+          for (let i = 0; i < results.length; i++) {
+            const r = results[i];
+            const reqId = track_ids[i];
+            if (r.status !== "fulfilled") {
+              missing.push(reqId);
+              continue;
+            }
+            const songs = (r.value.data as Array<Record<string, unknown>>) || [];
+            if (!songs.length) {
+              missing.push(reqId);
+              continue;
+            }
+            const song = songs[0];
+            const attrs = (song.attributes || {}) as Record<string, unknown>;
+            const artwork = (attrs.artwork || {}) as Record<string, unknown>;
+            const name = (attrs.name as string) || "Unknown";
+            const artist = (attrs.artistName as string) || "Unknown Artist";
+            const album = (attrs.albumName as string) || "";
+            const artworkUrl = (artwork.url as string) || "";
+            const durationSeconds = ((attrs.durationInMillis as number) || 0) / 1000;
+
+            tracksData.push({
+              track_id: song.id as string,
+              name,
+              artist,
+              album,
+              artwork_url: artworkUrl,
+              duration: durationSeconds,
+            });
+            entries.push({
+              id: song.id as string,
+              name,
+              artist,
+              album,
+              artworkUrl,
+              durationSeconds,
+              provider: "apple-music",
+            });
           }
 
-          const song = songs[0];
-          const attrs = (song.attributes || {}) as Record<string, unknown>;
-          const artwork = (attrs.artwork || {}) as Record<string, unknown>;
-          const name = (attrs.name as string) || "Unknown";
-          const artist = (attrs.artistName as string) || "Unknown Artist";
+          if (tracksData.length === 0) {
+            return `No tracks found for IDs: ${track_ids.join(", ")}`;
+          }
 
-          // Return result with embedded action for client-side MusicKit dispatch
+          // Single D1 write for the whole batch — preserves order and is atomic.
+          await appendToConversationPlaylist(ctx.env, ctx.sessionId, entries);
+
+          const summary = tracksData.length === 1
+            ? `Added '${tracksData[0].name}' by ${tracksData[0].artist} to queue.`
+            : `Added ${tracksData.length} tracks to queue.`;
+          const note = missing.length ? ` (skipped ${missing.length} unresolved)` : "";
+
           return JSON.stringify({
-            message: `Added '${name}' by ${artist} to queue.`,
+            message: summary + note,
             _action: {
               type: "add_to_queue",
-              data: {
-                track_id: song.id as string,
-                name,
-                artist,
-                album: (attrs.albumName as string) || "",
-                artwork_url: (artwork.url as string) || "",
-                duration: ((attrs.durationInMillis as number) || 0) / 1000,
-              },
+              data: { tracks: tracksData },
             },
           });
         } catch (e) {

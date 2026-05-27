@@ -5,7 +5,10 @@ compatibility_flags = ["nodejs_compat"]
 
 [[services]]
 binding = "WEB"
-service = "playheads-web"
+# `-preview` is a placeholder; the deploy-preview workflow sed-rewrites
+# this to `playheads-web-${SLUG}` so the gateway binds to the branch's
+# own web worker instead of the production one.
+service = "playheads-web-preview"
 
 [[services]]
 binding = "LANDING"
@@ -19,10 +22,28 @@ service = "playheads-admin"
 binding = "AGENT"
 service = "playheads-agent-preview"
 
+[[services]]
+binding = "BILLING"
+# `-preview` is a placeholder — deploy-preview workflow sed-rewrites to
+# `playheads-billing-${SLUG}`.
+service = "playheads-billing-preview"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "playheads-db"
 database_id = "31cba35f-8e23-46eb-880f-19d667c0946b"
+
+[[r2_buckets]]
+binding = "UPLOADS"
+bucket_name = "playheads-uploads"
+
+[[kv_namespaces]]
+binding = "CONFIG_KV"
+id = "1d947fda21c9442aaa6c3877b0b32a0e"
+
+# Preview: serve uploads via R2 public managed domain so external LLM
+# providers can fetch images (preview gateway is behind Cloudflare Access).
+# Production leaves this empty so uploads stay behind our own gateway.
 
 [observability]
 enabled = true
@@ -34,5 +55,6 @@ head_sampling_rate = 1
 
 [vars]
 APP_HOSTNAME = ""
+UPLOADS_PUBLIC_URL_BASE = "https://pub-943b20bdbf6f4e9fbc62c596787afcb2.r2.dev"
 ADMIN_HOSTNAME = ""
 PREVIEW_DOMAIN = ""

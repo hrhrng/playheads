@@ -54,7 +54,7 @@ export const ConversationList = ({
   if (conversations.length === 0) {
     if (!expanded) return <></>;
     return (
-      <div className="mx-2 p-3 text-gemini-subtext text-sm text-center">
+      <div className="mx-2 p-3 text-ink-3 text-sm text-center">
         No conversations yet
       </div>
     );
@@ -80,7 +80,7 @@ export const ConversationList = ({
 
       {isLoadingMore && (
         <div className="flex justify-center py-2">
-          <div className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+          <div className="w-4 h-4 border-2 border-ink/15 border-t-ink/60 rounded-full animate-spin" />
         </div>
       )}
     </>

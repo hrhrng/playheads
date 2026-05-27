@@ -11,7 +11,7 @@
 import { Renderer, JSONUIProvider, type ComponentRegistry, type Spec } from '@json-render/react';
 import { useJsonRenderMessage, type DataPart } from '@json-render/react';
 import type { UIMessage } from 'ai';
-import { useMemo } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { ToolCall } from './ToolCall';
 import { ThinkingProcess } from './ThinkingProcess';
 import { MarkdownMessage } from './MarkdownMessage';
@@ -95,8 +95,9 @@ function AssistantMessage({
   const spec = useMemo(() => normalizeSpec(rawSpec), [rawSpec]);
 
   // Render all parts (tool calls, thinking) + GenUI spec if present
+  // Agent voice: transparent surface with a 2px ink rule on the left, ink prose.
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 pl-4 border-l-2 border-ink/25">
       {/* Tool calls and thinking — always render from mapped parts */}
       {msg.parts.map((part, pIdx) => {
         if (part.type === 'text') {
@@ -104,7 +105,7 @@ function AssistantMessage({
           // Otherwise use the raw text part
           if (hasSpec) return null; // text rendered separately below
           return (
-            <div key={`text-${pIdx}`} className="text-gray-800 text-[15px] leading-relaxed">
+            <div key={`text-${pIdx}`} className="text-ink text-[15px] leading-relaxed">
               <MarkdownMessage content={part.content} />
             </div>
           );
@@ -131,7 +132,7 @@ function AssistantMessage({
       {hasSpec && spec && (
         <>
           {text && (
-            <div className="text-gray-800 text-[15px] leading-relaxed">
+            <div className="text-ink text-[15px] leading-relaxed">
               <MarkdownMessage content={text} />
             </div>
           )}
@@ -149,6 +150,17 @@ function AssistantMessage({
 }
 
 export const MessageList = ({ messages, rawMessages = [], isLoading, queueOps, storefront = 'us', playTrackById }: MessageListProps): React.JSX.Element => {
+  // Lightbox state for clicking an inline image attachment.
+  const [viewerUrl, setViewerUrl] = useState<string | null>(null);
+
+  // Close on Escape.
+  useEffect(() => {
+    if (!viewerUrl) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setViewerUrl(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [viewerUrl]);
+
   const isModernMessage = (message: Message): message is Message & { parts: MessagePart[] } => {
     return 'parts' in message && Array.isArray(message.parts);
   };
@@ -159,7 +171,7 @@ export const MessageList = ({ messages, rawMessages = [], isLoading, queueOps, s
 
   return (
     <GenUIProvider queueOps={queueOps || null} storefront={storefront} playTrackById={playTrackById}>
-      <div className="space-y-6 pb-12">
+      <div className="space-y-5 pb-12">
         {messages.map((msg, idx) => (
           <div
             key={idx}
@@ -167,22 +179,46 @@ export const MessageList = ({ messages, rawMessages = [], isLoading, queueOps, s
               msg.role === 'user' ? 'items-end' : 'items-start'
             }`}
           >
-            <div className={`max-w-[90%] ${msg.role === 'user' ? 'ml-auto' : ''}`}>
+            <div className={`${msg.role === 'user' ? 'max-w-[76%] ml-auto' : 'w-full'}`}>
               {isModernMessage(msg) ? (
                 msg.role === 'user' ? (
-                  // User message
-                  <div className="space-y-3">
-                    {msg.parts.map((part, pIdx) =>
-                      part.type === 'text' ? (
-                        <div
-                          key={`text-${pIdx}`}
-                          className="inline-block ml-auto bg-gray-100 rounded-2xl rounded-br-md px-4 py-2.5 text-[15px] leading-relaxed text-gray-800"
-                        >
-                          <MarkdownMessage content={part.content} />
-                        </div>
-                      ) : null
-                    )}
-                  </div>
+                  // User message. Image parts use the same 64px thumbnail as
+                  // the ChatInput attachment preview; click to view full-size.
+                  (() => {
+                    const imageParts = msg.parts.filter((p) => p.type === 'image') as Array<{ type: 'image'; url: string; mediaType: string; filename?: string }>;
+                    const textParts = msg.parts.filter((p) => p.type === 'text') as Array<{ type: 'text'; content: string }>;
+                    return (
+                      <div className="space-y-2 flex flex-col items-end">
+                        {imageParts.length > 0 && (
+                          <div className="flex flex-wrap justify-end gap-2">
+                            {imageParts.map((part, pIdx) => (
+                              <button
+                                key={`img-${pIdx}`}
+                                type="button"
+                                onClick={() => setViewerUrl(part.url)}
+                                className="block focus:outline-none focus:ring-2 focus:ring-accent/60 rounded-card"
+                                aria-label={part.filename || 'open image'}
+                              >
+                                <img
+                                  src={part.url}
+                                  alt={part.filename || 'attachment'}
+                                  className="w-16 h-16 object-cover rounded-card hairline"
+                                />
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {textParts.map((part, pIdx) => (
+                          <div
+                            key={`text-${pIdx}`}
+                            className="inline-block bg-chip-2 hairline rounded-3xl rounded-br-lg px-4 py-2.5 text-[15px] leading-relaxed text-ink"
+                          >
+                            <MarkdownMessage content={part.content} />
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()
                 ) : (
                   // Assistant message — may contain json-render spec
                   <AssistantMessage
@@ -195,8 +231,8 @@ export const MessageList = ({ messages, rawMessages = [], isLoading, queueOps, s
                 <div
                   className={`text-[15px] leading-relaxed ${
                     msg.role === 'user'
-                      ? 'inline-block ml-auto bg-gray-100 rounded-2xl rounded-br-md px-4 py-2.5 text-gray-800'
-                      : 'text-gray-800'
+                      ? 'inline-block ml-auto bg-chip-2 hairline rounded-3xl rounded-br-lg px-4 py-2.5 text-ink'
+                      : 'text-ink pl-4 border-l-2 border-ink/25'
                   }`}
                 >
                   {msg.content}
@@ -207,13 +243,38 @@ export const MessageList = ({ messages, rawMessages = [], isLoading, queueOps, s
         ))}
 
         {isLoading && (
-          <div className="flex items-start">
-            <span className="text-sm text-blue-600 font-medium animate-pulse tracking-widest">
+          <div className="flex items-start pl-4 border-l-2 border-ink/25">
+            <span className="text-[13px] text-ink-2 font-semibold animate-pulse tracking-widest">
               ON AIR...
             </span>
           </div>
         )}
       </div>
+
+      {/* Image lightbox — full-screen overlay, click backdrop or press Escape to close */}
+      {viewerUrl && (
+        <div
+          className="fixed inset-0 z-[60] bg-black/85 backdrop-blur-sm flex items-center justify-center p-6 animate-fade-in"
+          onClick={() => setViewerUrl(null)}
+        >
+          <img
+            src={viewerUrl}
+            alt=""
+            className="max-w-full max-h-full object-contain rounded-card shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+          <button
+            type="button"
+            onClick={() => setViewerUrl(null)}
+            className="absolute top-5 right-5 w-9 h-9 rounded-full bg-ink/15 hover:bg-ink/25 text-ink flex items-center justify-center"
+            aria-label="Close"
+          >
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
     </GenUIProvider>
   );
 };

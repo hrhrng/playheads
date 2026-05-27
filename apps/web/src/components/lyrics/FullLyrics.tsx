@@ -96,17 +96,17 @@ export const FullLyrics = ({ lyrics, isOpen, onClose, onSeek }: FullLyricsProps)
       }`}
     >
       {/* Frosted glass background — matches TranscriptOverlay */}
-      <div className="absolute inset-0 bg-white/60 backdrop-blur-xl" />
+      <div className="absolute inset-0 bg-page/60 backdrop-blur-glass" />
 
       {/* Header */}
       <div className="relative z-10 flex items-center justify-between px-6 pt-6 pb-2">
-        <h3 className="text-[10px] font-medium text-gray-400 uppercase tracking-[0.2em]">
+        <h3 className="text-[10px] font-medium text-ink-3 uppercase tracking-[0.2em]">
           Lyrics
         </h3>
         <button
           onClick={onClose}
           aria-label="Close lyrics"
-          className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-200 transition-colors"
+          className="w-7 h-7 rounded-full bg-chip flex items-center justify-center text-ink-3 hover:text-ink hover:bg-chip-2 transition-colors"
         >
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
@@ -121,13 +121,13 @@ export const FullLyrics = ({ lyrics, isOpen, onClose, onSeek }: FullLyricsProps)
         className="relative z-10 flex-1 overflow-y-auto no-scrollbar lyrics-mask"
       >
         {!hasContent && (
-          <p className="text-center text-sm text-gray-400 mt-20">
+          <p className="text-center text-sm text-ink-3 mt-20">
             No lyrics available for this track
           </p>
         )}
 
         {status === 'plain' && plainText && (
-          <div className="whitespace-pre-wrap text-lg text-gray-500 leading-relaxed text-center px-8 py-20">
+          <div className="whitespace-pre-wrap text-lg font-display text-ink-2 leading-relaxed text-center px-8 py-20">
             {plainText}
           </div>
         )}
@@ -146,14 +146,14 @@ export const FullLyrics = ({ lyrics, isOpen, onClose, onSeek }: FullLyricsProps)
                   onClick={() => handleLineTap(i, line.time)}
                   aria-label={line.text ? `Jump to: ${line.text}` : 'Jump to instrumental'}
                   aria-current={isCurrent ? 'true' : undefined}
-                  className={`w-full text-center py-3 px-4 rounded-xl cursor-pointer transition-all duration-500 ease-out active:scale-[0.97] ${
+                  className={`w-full text-center py-3 px-4 rounded-xl cursor-pointer transition-all duration-500 ease-spring active:scale-[0.97] font-display ${
                     isTapped ? 'animate-lyric-tap' : ''
                   } ${
                     isCurrent
-                      ? 'text-2xl md:text-3xl font-bold text-gray-900'
+                      ? 'text-2xl md:text-3xl font-semibold text-ink'
                       : isPast
-                        ? 'text-lg md:text-xl text-gray-900/25'
-                        : 'text-lg md:text-xl text-gray-900/40'
+                        ? 'text-lg md:text-xl text-ink-4'
+                        : 'text-lg md:text-xl text-ink-3'
                   }`}
                 >
                   {line.text || '\u266A'}

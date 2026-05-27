@@ -107,7 +107,7 @@ function SearchMusicResult({ result, args }: { result: string; args: Record<stri
   }, [tracks.length, sf]);
 
   if (tracks.length === 0) {
-    return <p className="text-[11px] text-gray-500 py-1">{result}</p>;
+    return <p className="text-[11px] text-ink-3 py-1">{result}</p>;
   }
 
   const handlePlay = (trackId: string) => {
@@ -125,25 +125,25 @@ function SearchMusicResult({ result, args }: { result: string; args: Record<stri
   return (
     <div className="space-y-1">
       {queryText && (
-        <p className="text-[10px] text-gray-400 mb-1.5">Searched: {queryText}</p>
+        <p className="text-[10px] text-ink-3 mb-1.5">Searched: {queryText}</p>
       )}
       <div className="space-y-0.5 max-h-64 overflow-y-auto overflow-x-hidden">
         {tracks.slice(0, 10).map((track, i) => (
           <div
             key={track.id}
-            className="flex items-center gap-2 py-1.5 px-2 -mx-2 rounded-md hover:bg-gray-50 group/track transition-colors"
+            className="flex items-center gap-2 py-1.5 px-2 -mx-2 rounded-md hover:bg-chip group/track transition-colors"
           >
-            <span className="text-[10px] text-gray-400 w-4 text-right tabular-nums shrink-0">
+            <span className="text-[10px] text-ink-3 w-4 text-right tabular-nums shrink-0">
               {i + 1}
             </span>
 
             {/* Mini artwork — lazy loaded on hover */}
-            <div className="w-8 h-8 rounded overflow-hidden bg-gray-100 shrink-0">
+            <div className="w-8 h-8 rounded-card overflow-hidden bg-chip shrink-0">
               {artworks[track.id] ? (
                 <img src={artworks[track.id]} alt="" className="w-full h-full object-cover" />
               ) : (
                 <div className="w-full h-full flex items-center justify-center">
-                  <svg className="w-3 h-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-3 h-3 text-ink-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 19V6l12-3v13" />
                   </svg>
                 </div>
@@ -151,22 +151,22 @@ function SearchMusicResult({ result, args }: { result: string; args: Record<stri
             </div>
 
             <div className="flex-1 min-w-0">
-              <p className="text-[12px] text-gray-800 truncate">{track.name}</p>
-              <p className="text-[10px] text-gray-500 truncate">{track.artist}</p>
+              <p className="text-[12px] text-ink truncate">{track.name}</p>
+              <p className="text-[10px] text-ink-3 truncate">{track.artist}</p>
             </div>
 
             {/* Play + Queue buttons */}
             <div className="flex items-center gap-0.5 opacity-0 group-hover/track:opacity-100 transition-opacity">
               <button
                 onClick={() => handlePlay(track.id)}
-                className="w-6 h-6 rounded-full bg-gray-900 text-white flex items-center justify-center hover:scale-110 transition-transform"
+                className="w-6 h-6 rounded-full bg-ink text-page flex items-center justify-center hover:scale-110 transition-transform"
                 title="Play"
               >
                 <svg className="w-2.5 h-2.5 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
               </button>
               <button
                 onClick={() => handleQueue(track.id, track.name, track.artist)}
-                className="w-6 h-6 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center hover:scale-110 transition-transform"
+                className="w-6 h-6 rounded-full bg-chip-2 text-ink-2 flex items-center justify-center hover:scale-110 transition-transform"
                 title="Add to queue"
               >
                 <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
@@ -176,7 +176,7 @@ function SearchMusicResult({ result, args }: { result: string; args: Record<stri
         ))}
       </div>
       {tracks.length > 10 && (
-        <p className="text-[10px] text-gray-400 pt-1">+{tracks.length - 10} more results</p>
+        <p className="text-[10px] text-ink-3 pt-1">+{tracks.length - 10} more results</p>
       )}
     </div>
   );
@@ -187,12 +187,12 @@ function AddToQueueResult({ result }: { result: string }) {
   // result is like "Added 'Track Name' by Artist to queue."
   return (
     <div className="flex items-center gap-2 py-1">
-      <div className="w-4 h-4 rounded-full bg-green-100 flex items-center justify-center shrink-0">
-        <svg className="w-2.5 h-2.5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="3">
+      <div className="w-4 h-4 rounded-full bg-accent/15 flex items-center justify-center shrink-0">
+        <svg className="w-2.5 h-2.5 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="3">
           <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
         </svg>
       </div>
-      <span className="text-[12px] text-gray-600">{result}</span>
+      <span className="text-[12px] text-ink-2">{result}</span>
     </div>
   );
 }
@@ -227,10 +227,10 @@ export const ToolCall = ({
 
   const dotClass =
     status === 'pending'
-      ? 'bg-blue-400 animate-pulse'
+      ? 'bg-accent animate-pulse'
       : status === 'error'
         ? 'bg-red-400'
-        : 'bg-green-400';
+        : 'bg-accent';
 
   // Rich rendering for specific tools
   const isSearchMusic = tool_name === 'search_music' && status === 'success' && resultStr;
@@ -246,16 +246,16 @@ export const ToolCall = ({
       {/* Header */}
       <button
         type="button"
-        className="flex items-center gap-2 w-full min-w-0 text-left py-1 text-xs text-gray-500 hover:text-gray-700 transition-colors"
+        className="flex items-center gap-2 w-full min-w-0 text-left py-1 text-[12px] text-ink-3 hover:text-ink transition-colors"
         onClick={() => setIsExpanded(!isExpanded)}
       >
         <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotClass}`} />
         <span className="font-medium">{label}</span>
         {summary && !isExpanded && (
-          <span className="text-gray-400 truncate min-w-0">{summary}</span>
+          <span className="text-ink-4 truncate min-w-0">{summary}</span>
         )}
         <svg
-          className={`w-3 h-3 ml-auto shrink-0 text-gray-300 transition-transform duration-200 ${
+          className={`w-3 h-3 ml-auto shrink-0 text-ink-4 transition-transform duration-200 ${
             isExpanded ? 'rotate-90' : ''
           }`}
           fill="none" stroke="currentColor" viewBox="0 0 24 24"
@@ -266,27 +266,27 @@ export const ToolCall = ({
 
       {/* Expanded content */}
       {isExpanded && (
-        <div className="ml-3.5 pl-3 border-l border-gray-100 pb-2 text-xs">
+        <div className="ml-3.5 pl-3 hairline-l pb-2 text-xs">
           {isSearchMusic ? (
             <SearchMusicResult result={resultStr} args={args} />
           ) : (
             <div className="space-y-2">
               {args && Object.keys(args).length > 0 && (
                 <div>
-                  <div className="text-[10px] uppercase tracking-wider text-gray-400 mb-1">Input</div>
-                  <pre className="bg-gray-50 rounded-md p-2 text-[11px] font-mono text-gray-600 overflow-x-auto whitespace-pre-wrap break-words">
+                  <div className="text-[10px] uppercase tracking-wider text-ink-3 mb-1">Input</div>
+                  <pre className="bg-chip rounded-card p-2 text-[11px] font-mono text-ink-2 overflow-x-auto whitespace-pre-wrap break-words">
                     {JSON.stringify(args, null, 2)}
                   </pre>
                 </div>
               )}
               <div>
-                <div className="text-[10px] uppercase tracking-wider text-gray-400 mb-1">Output</div>
+                <div className="text-[10px] uppercase tracking-wider text-ink-3 mb-1">Output</div>
                 {result ? (
-                  <pre className="bg-gray-50 rounded-md p-2 text-[11px] font-mono text-gray-600 overflow-x-auto whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
+                  <pre className="bg-chip rounded-card p-2 text-[11px] font-mono text-ink-2 overflow-x-auto whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
                     {resultStr}
                   </pre>
                 ) : (
-                  <span className="text-gray-400 italic text-[11px]">
+                  <span className="text-ink-4 italic text-[11px]">
                     {status === 'pending' ? 'Running…' : 'No output'}
                   </span>
                 )}

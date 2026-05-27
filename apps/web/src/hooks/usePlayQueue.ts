@@ -18,6 +18,11 @@ export interface UsePlayQueueReturn {
   queue: UnifiedTrack[];
   /** Previously played tracks */
   history: UnifiedTrack[];
+  /** True while the initial queue restore from localStorage is still in
+   *  flight (set true on mount, flipped false by finishRestore). Used to
+   *  gate the app shell so the user can't click play before MusicKit
+   *  has the queue attached and a saved seek target. */
+  isRestoring: boolean;
   addTrack(track: UnifiedTrack): void;
   addTracks(tracks: UnifiedTrack[]): void;
   /** Insert tracks at head of queue and start playing the first one. */
@@ -25,6 +30,7 @@ export interface UsePlayQueueReturn {
   removeTrack(index: number): void;
   playAtIndex(index: number): Promise<void>;
   playFromHistory(historyIndex: number): Promise<void>;
+  jumpToIndex(absoluteIndex: number): Promise<void>;
   skipNext(): Promise<void>;
   finishQueue(): Promise<void>;
   skipPrev(): Promise<void>;
@@ -189,6 +195,19 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
     await p.changeToIndex(historyIndex);
   }, []);
 
+  /** Jump to an arbitrary absolute index in `items` (= history + currentTrack + upcoming).
+   *  Used by the swipe feed: each rendered card corresponds 1:1 to an
+   *  absolute index, so swiping to card N means changeToIndex(N). */
+  const jumpToIndex = useCallback(async (absoluteIndex: number) => {
+    const p = providerRef.current;
+    if (!p || p.playbackState.isTransitioning) return;
+    const snap = p.getQueueSnapshot();
+    if (absoluteIndex < 0 || absoluteIndex >= snap.items.length) return;
+    if (absoluteIndex === snap.position) return;
+    p.setDisplayTrack(snap.items[absoluteIndex]);
+    await p.changeToIndex(absoluteIndex);
+  }, []);
+
   const skipNext = useCallback(async () => {
     const p = providerRef.current;
     if (!p) return;
@@ -252,12 +271,14 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
   return {
     queue,
     history,
+    isRestoring: isRestoringRef.current,
     addTrack,
     addTracks,
     playTracks,
     removeTrack,
     playAtIndex,
     playFromHistory,
+    jumpToIndex,
     skipNext,
     finishQueue,
     skipPrev,

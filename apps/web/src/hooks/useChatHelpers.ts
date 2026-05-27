@@ -56,7 +56,11 @@ export function useAutoScroll(messages: Message[]): RefObject<HTMLDivElement | n
  */
 export function useInitialMessage(
   locationState: LocationState | null,
-  sendMessage: (message: string, skipAddingUserMessage?: boolean) => Promise<void> | void,
+  sendMessage: (
+    message: string,
+    skipAddingUserMessage?: boolean,
+    files?: InitialFilePart[],
+  ) => Promise<void> | void,
   isLoading: boolean,
   messages: Message[],
   navigate: ((to: string, options?: NavigationOptions) => void) | null,
@@ -67,8 +71,9 @@ export function useInitialMessage(
   useEffect(() => {
     const initialMessage = locationState?.initialMessage;
     const isNewlyCreated = locationState?.isNewlyCreated;
+    const initialFiles = locationState?.initialFiles;
 
-    if (!initialMessage) return;
+    if (!initialMessage && (!initialFiles || initialFiles.length === 0)) return;
 
     // Safety check: If we have more than 1 message, we assume the conversation
     // has progressed beyond the initial message (e.g. response received),
@@ -93,11 +98,12 @@ export function useInitialMessage(
       }
 
       // useAgentChat handles adding the user message, so don't skip
-      sendMessage(initialMessage);
+      sendMessage(initialMessage || '', false, initialFiles);
     }
   }, [
     locationState?.initialMessage,
     locationState?.isNewlyCreated,
+    locationState?.initialFiles,
     sendMessage,
     isLoading,
     messages,
@@ -109,9 +115,17 @@ export function useInitialMessage(
 /**
  * Location state from React Router
  */
+interface InitialFilePart {
+  type: 'file';
+  mediaType: string;
+  url: string;
+  filename?: string;
+}
+
 interface LocationState {
   initialMessage?: string;
   isNewlyCreated?: boolean;
+  initialFiles?: InitialFilePart[];
   [key: string]: unknown;
 }
 

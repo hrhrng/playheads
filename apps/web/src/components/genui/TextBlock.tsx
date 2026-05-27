@@ -10,9 +10,9 @@ interface TextBlockProps {
 }
 
 const STYLE_CLASSES: Record<string, string> = {
-  heading: 'text-base font-semibold text-gray-900',
-  body: 'text-[13px] text-gray-700 leading-relaxed',
-  caption: 'text-[11px] text-gray-500 leading-relaxed',
+  heading: 'text-base font-display font-semibold text-ink',
+  body: 'text-[13px] font-display text-ink-2 leading-relaxed',
+  caption: 'text-[11px] text-ink-3 leading-relaxed',
 };
 
 export function TextBlock({ content, style = 'body' }: TextBlockProps) {

@@ -8,6 +8,8 @@
  * and dispatches queue operations as a side effect.
  */
 import { useMemo, useCallback, useRef } from "react";
+import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import { useAgent } from "agents/react";
 import { useAgentChat } from "@cloudflare/ai-chat/react";
 import type { UIMessage } from "ai";
@@ -56,7 +58,7 @@ interface UseAgentChatAdapterReturn {
   messages: Message[];
   /** Raw UIMessages from AI SDK — needed by json-render's useJsonRenderMessage */
   rawMessages: UIMessage[];
-  sendMessage: (text: string) => void;
+  sendMessage: (text: string, files?: Array<{ type: 'file'; mediaType: string; url: string; filename?: string }>) => void;
   isLoading: boolean;
   clearHistory: () => void;
 }
@@ -82,6 +84,19 @@ function mapUIMessagesToMessages(uiMessages: UIMessage[]): Message[] {
             parts.push({ type: "thinking", content: part.text });
           }
           break;
+        case "file": {
+          // Image / file attachments. AI SDK's FileUIPart shape: { mediaType, url, filename? }.
+          const filePart = part as unknown as { mediaType?: string; url?: string; filename?: string };
+          if (filePart.url && filePart.mediaType?.startsWith("image/")) {
+            parts.push({
+              type: "image",
+              url: filePart.url,
+              mediaType: filePart.mediaType,
+              filename: filePart.filename,
+            });
+          }
+          break;
+        }
         default:
           if (part.type === "dynamic-tool" || part.type.startsWith("tool-")) {
             const toolPart = part as unknown as {
@@ -138,6 +153,7 @@ export function useAgentChatAdapter({
   queueOps,
   onMessageSent,
 }: UseAgentChatAdapterParams): UseAgentChatAdapterReturn {
+  const { t } = useTranslation();
   const agent = useAgent({
     agent: "MusicChatAgent",
     name: sessionId,
@@ -158,6 +174,14 @@ export function useAgentChatAdapter({
   } = useAgentChat({
     agent,
     body: { session_id: sessionId, user_id: userId, storefront: musicActions?.storefront || 'us' },
+    onError(err: Error) {
+      // Surface backend / LLM errors that flow through the UI message stream
+      // so users see what went wrong instead of a frozen loading state.
+      console.error("[Agent] chat error:", err);
+      toast.error(t("chat.chatFailed"), {
+        description: err?.message?.slice(0, 240) || String(err),
+      });
+    },
     onData(part: { type: string; data: unknown }) {
       if (part.type !== "data-music-action") return;
 
@@ -170,17 +194,28 @@ export function useAgentChatAdapter({
 
       const ops = queueOpsRef.current;
 
-      // Update global queue immediately
-      if (payload.type === "add_to_queue" && payload.data?.track_id && ops) {
-        ops.addTrack({
-          id: payload.data.track_id as string,
-          name: (payload.data.name as string) || "Unknown",
-          artist: (payload.data.artist as string) || "Unknown Artist",
-          album: (payload.data.album as string) || "",
-          artworkUrl: (payload.data.artwork_url as string) || "",
-          durationSeconds: (payload.data.duration as number) || 0,
-          provider: 'apple-music',
-        });
+      // Update global queue immediately. `add_to_queue` is now always
+      // batch — payload.data.tracks is an array in the intended play
+      // order. (We still tolerate the legacy single-track shape from
+      // older persisted messages.)
+      if (payload.type === "add_to_queue" && ops) {
+        const rawTracks = Array.isArray(payload.data?.tracks)
+          ? (payload.data.tracks as Array<Record<string, unknown>>)
+          : payload.data?.track_id
+            ? [payload.data as Record<string, unknown>]
+            : [];
+        const tracks = rawTracks.map((t) => ({
+          id: (t.track_id as string) || (t.id as string),
+          name: (t.name as string) || "Unknown",
+          artist: (t.artist as string) || "Unknown Artist",
+          album: (t.album as string) || "",
+          artworkUrl: (t.artwork_url as string) || (t.artworkUrl as string) || "",
+          durationSeconds: (t.duration as number) || (t.durationSeconds as number) || 0,
+          provider: 'apple-music' as const,
+        })).filter((t) => !!t.id);
+        if (tracks.length > 0) {
+          ops.addTracks(tracks);
+        }
       } else if (payload.type === "remove_track" && payload.data?.index != null && ops) {
         ops.removeTrack(payload.data.index as number);
       }
@@ -209,8 +244,12 @@ export function useAgentChatAdapter({
   );
 
   const sendMessage = useCallback(
-    (text: string) => {
-      agentSendMessage({ text });
+    (text: string, files?: Array<{ type: 'file'; mediaType: string; url: string; filename?: string }>) => {
+      if (files && files.length > 0) {
+        agentSendMessage({ text, files });
+      } else {
+        agentSendMessage({ text });
+      }
       onMessageSent?.();
     },
     [agentSendMessage, onMessageSent]

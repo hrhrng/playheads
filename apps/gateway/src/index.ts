@@ -9,19 +9,31 @@ import {
   handleDeleteConversation,
   handleUpdateConversation,
   handleGetConversationTitle,
+  handleGetConversation,
   handleCreateSession,
   handleGetState,
   handleSyncState,
   handleGetQueue,
   handleSyncQueue,
+  handleCreatePlaylist,
+  handleToggleLikeTrack,
+  handleAddTrackToPlaylist,
+  handleRemoveTrackFromPlaylist,
 } from "./d1-handlers";
+import { handleUploadImage, handleGetUpload } from "./uploads";
 
 interface Env {
   WEB: Fetcher;
   LANDING: Fetcher;
   ADMIN: Fetcher;
   AGENT: Fetcher;
+  BILLING: Fetcher;
   DB: D1Database;
+  UPLOADS: R2Bucket;
+  /** Empty in production (uploads stay behind our gateway); set to a public
+   *  r2.dev managed domain in preview so external LLM providers can fetch
+   *  images without going through Cloudflare Access. */
+  UPLOADS_PUBLIC_URL_BASE: string;
   APP_HOSTNAME: string;
   ADMIN_HOSTNAME: string;
   PREVIEW_DOMAIN: string;
@@ -35,6 +47,10 @@ interface Env {
   GOOGLE_CLIENT_ID: string;
   GOOGLE_CLIENT_SECRET: string;
   RESEND_API_KEY: string;
+
+  /** Workers KV for app-level config (waitlist:bypass, etc). Flip live
+   *  via `wrangler kv key put --binding=CONFIG_KV waitlist:bypass true`. */
+  CONFIG_KV: KVNamespace;
 }
 
 function laneProxy(
@@ -81,6 +97,18 @@ export default {
       return auth.handler(request);
     }
 
+    // /api/waitlist/config → global waitlist gate config (frontend reads
+    // this once to know whether the waitlist is currently bypassed).
+    // Value comes from Workers KV so it can be flipped live without a
+    // redeploy. Default closed if the key is missing.
+    if (url.pathname === "/api/waitlist/config" && request.method === "GET") {
+      const raw = await env.CONFIG_KV.get("waitlist:bypass");
+      return Response.json(
+        { bypass: raw === "true" },
+        { headers: { "cache-control": "public, max-age=30" } },
+      );
+    }
+
     // /api/waitlist → landing worker (waitlist API)
     if (url.pathname === "/api/waitlist") {
       if (lane) return laneProxy("landing", lane, env.PREVIEW_DOMAIN, request);
@@ -103,6 +131,10 @@ export default {
       const id = url.pathname.split("/api/conversations/")[1].replace("/title", "");
       return handleGetConversationTitle(id, request, env.DB);
     }
+    if (url.pathname.match(/^\/api\/conversations\/[^/]+$/) && request.method === "GET") {
+      const id = url.pathname.split("/api/conversations/")[1];
+      return handleGetConversation(id, request, env.DB);
+    }
     if (url.pathname.startsWith("/api/conversations/") && request.method === "DELETE") {
       const id = url.pathname.split("/api/conversations/")[1];
       return handleDeleteConversation(id, request, env.DB);
@@ -115,6 +147,29 @@ export default {
     // /api/session/create → D1 native
     if (url.pathname === "/api/session/create" && request.method === "POST") {
       return handleCreateSession(request, env.DB);
+    }
+
+    // /api/playlists/* — playlists piggyback on the conversation table
+    // (type='playlist'); these endpoints are wrappers for the
+    // playlist-specific operations.
+    if (url.pathname === "/api/playlists/create" && request.method === "POST") {
+      return handleCreatePlaylist(request, env.DB);
+    }
+    if (url.pathname === "/api/playlists/liked/toggle-track" && request.method === "POST") {
+      return handleToggleLikeTrack(request, env.DB);
+    }
+    // /api/playlists/{id}/add-track — append a track to a user-owned custom
+    // playlist (idempotent). Liked is intentionally excluded — its toggle
+    // semantics live on the dedicated route above.
+    {
+      const addTrackMatch = url.pathname.match(/^\/api\/playlists\/([^/]+)\/add-track$/);
+      if (addTrackMatch && request.method === "POST") {
+        return handleAddTrackToPlaylist(addTrackMatch[1], request, env.DB);
+      }
+      const removeTrackMatch = url.pathname.match(/^\/api\/playlists\/([^/]+)\/remove-track$/);
+      if (removeTrackMatch && request.method === "POST") {
+        return handleRemoveTrackFromPlaylist(removeTrackMatch[1], request, env.DB);
+      }
     }
 
     // /api/state → D1 native
@@ -133,6 +188,36 @@ export default {
     }
     if (url.pathname === "/api/queue/sync" && request.method === "POST") {
       return handleSyncQueue(request, env.DB);
+    }
+
+    // /api/billing/* and /api/webhooks/polar → billing worker (service binding).
+    // The billing worker is private — only reachable via this binding, never
+    // through a public custom domain. Strip /api so its handlers see
+    // /billing/* and /webhooks/polar.
+    if (
+      url.pathname.startsWith("/api/billing/") ||
+      url.pathname === "/api/webhooks/polar"
+    ) {
+      const billingPath = url.pathname.replace(/^\/api/, "") + url.search;
+      const billingReq = new Request(
+        new URL(billingPath, "http://billing").toString(),
+        {
+          method: request.method,
+          headers: request.headers,
+          body: request.body,
+        },
+      );
+      return env.BILLING.fetch(billingReq);
+    }
+
+    // /api/uploads/image → POST image to R2
+    if (url.pathname === "/api/uploads/image" && request.method === "POST") {
+      return handleUploadImage(request, env.UPLOADS, env.UPLOADS_PUBLIC_URL_BASE);
+    }
+    // /api/uploads/<key> → GET image from R2 (key includes "uploads/" prefix)
+    if (url.pathname.startsWith("/api/uploads/") && request.method === "GET") {
+      const key = url.pathname.replace(/^\/api\/uploads\//, "");
+      return handleGetUpload(request, env.UPLOADS, key);
     }
 
     // /api/* → agent worker

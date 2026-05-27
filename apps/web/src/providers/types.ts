@@ -14,6 +14,8 @@ export interface UnifiedTrack {
   artworkUrl: string;
   durationSeconds: number;
   provider: ProviderType;
+  /** 30s preview MP3 URL — playable without user authorization. */
+  previewUrl?: string;
 }
 
 /** Current playback state from the provider engine. */

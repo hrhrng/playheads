@@ -31,6 +31,11 @@ DerivedData/
 *.P8
 AuthKey_*
 apps/admin/.wrangler/
+apps/gateway/.wrangler/
+apps/billing/.wrangler/
+apps/web/.wrangler/
+apps/landing/.wrangler/
+apps/agent/.wrangler/
 .claude/worktrees/
 
 # iOS (xcodegen-generated)

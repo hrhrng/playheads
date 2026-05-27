@@ -4,7 +4,8 @@
  * @module components/chat/ChatInput
  */
 
-import { useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAutoResizeTextarea } from '../../hooks/useChatHelpers';
 import type { ProviderType } from '../../providers/types';
 
@@ -29,12 +30,21 @@ interface ChatInputProps {
   onVoiceLongPress?: () => void;
   /** Whether voice is currently listening */
   isListening?: boolean;
-  /** Callback when files are attached */
-  onAttach?: (files: File[]) => void;
-  /** Currently attached files */
-  attachments?: File[];
-  /** Remove an attachment by index */
-  onRemoveAttachment?: (index: number) => void;
+  /** Callback when files are attached. Required — every host of ChatInput
+   *  needs to ferry attachments somewhere (either into the current chat or
+   *  via route state into a forked chat). Making it required keeps the +
+   *  button from disappearing when a caller forgets to wire it up. */
+  onAttach: (files: File[]) => void;
+  /** Currently attached files. */
+  attachments: File[];
+  /** Remove an attachment by index. */
+  onRemoveAttachment: (index: number) => void;
+  /** Collapsed "pill" mode — shows only placeholder hint, whole capsule is
+   *  a tap target firing `onActivate`. Used in feed mode; in chat/transcript
+   *  mode pass collapsed=false to expose the full composer. */
+  collapsed?: boolean;
+  /** Fired when the user taps the collapsed pill. */
+  onActivate?: () => void;
 }
 
 /**
@@ -52,9 +62,12 @@ export const ChatInput = ({
   onVoiceLongPress,
   isListening = false,
   onAttach,
-  attachments = [],
+  attachments,
   onRemoveAttachment,
+  collapsed = false,
+  onActivate,
 }: ChatInputProps): React.JSX.Element => {
+  const { t } = useTranslation();
   const textareaRef = useAutoResizeTextarea(input);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -68,14 +81,27 @@ export const ChatInput = ({
   };
 
   const getPlaceholder = (): string => {
-    if (isDJSpeaking) return 'Push to Interrupt...';
-    if (isPlaying) return 'Ask the DJ...';
-    return 'Start a vibe...';
+    if (isDJSpeaking) return t('chatInput.pushToInterrupt');
+    if (isPlaying) return t('chatInput.askDJ');
+    return t('chatInput.startVibe');
   };
 
-  const hasInput = input.trim().length > 0;
+  // Auto-focus the textarea when we transition from pill to composer
+  // (user just tapped the pill — they want to type immediately, like
+  // tapping the search bar on iOS).
+  const wasCollapsedRef = useRef(collapsed);
+  useEffect(() => {
+    if (wasCollapsedRef.current && !collapsed) {
+      // Wait one tick so the textarea is mounted/visible.
+      requestAnimationFrame(() => textareaRef.current?.focus());
+    }
+    wasCollapsedRef.current = collapsed;
+  }, [collapsed, textareaRef]);
 
-  // Voice button handlers (long press detection)
+  // Voice button handlers (long press detection).
+  // NOTE: every hook must live before the `if (collapsed)` early return
+  // below, otherwise React errors with #310 (hook count mismatch) when
+  // collapsed flips.
   const handleVoicePointerDown = useCallback(() => {
     setIsLongPress(false);
     longPressTimer.current = setTimeout(() => {
@@ -96,70 +122,109 @@ export const ChatInput = ({
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
-    if (files.length > 0 && onAttach) {
-      onAttach(files);
-    }
-    // Reset input so same file can be selected again
+    if (files.length > 0) onAttach(files);
+    // Reset input so the same file can be selected again
     e.target.value = '';
   }, [onAttach]);
 
+  if (collapsed) {
+    // Mirror the composer's full layout (+ on left, mic on right, text
+    // in middle) so the capsule looks structurally identical before /
+    // after activation — only the textarea ↔ static hint text swaps.
+    // Same outer padding (py-2.5 px-2) and same button geometry (w-11
+    // h-11) so capsule height/width don't budge on transition.
+    return (
+      <div className="max-w-xl mx-auto">
+        <button
+          type="button"
+          onClick={onActivate}
+          className="w-full glass rounded-full py-2.5 px-2 hover:bg-ink/5 transition-colors text-left font-sans"
+          aria-label={t('chatInput.askDJ')}
+        >
+          <div className="flex items-center gap-2">
+            {/* + (attach) — decorative; mirrors composer position */}
+            <div className="w-11 h-11 flex items-center justify-center rounded-full text-ink-2 shrink-0" aria-hidden>
+              <svg className="w-[22px] h-[22px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m-7-7h14" />
+              </svg>
+            </div>
+
+            {/* hint text */}
+            <span className="flex-1 text-[15px] text-ink-3 truncate py-2">
+              {getPlaceholder()}
+            </span>
+
+            {/* Voice (mic) — decorative; mirrors composer's voice button */}
+            <div className="w-11 h-11 flex items-center justify-center rounded-full bg-chip-2 text-ink-2 shrink-0" aria-hidden>
+              <svg className="w-[20px] h-[20px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.8">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4M12 15a3 3 0 003-3V5a3 3 0 00-6 0v7a3 3 0 003 3z" />
+              </svg>
+            </div>
+          </div>
+        </button>
+      </div>
+    );
+  }
+
+  const hasInput = input.trim().length > 0;
+
   return (
     <div className="max-w-xl mx-auto">
-      {/* Attachment Preview */}
-      {attachments.length > 0 && (
-        <div className="flex gap-2 mb-2 px-2 flex-wrap">
-          {attachments.map((file, index) => (
-            <div key={index} className="relative group">
-              {file.type.startsWith('image/') ? (
-                <img
-                  src={URL.createObjectURL(file)}
-                  alt={file.name}
-                  className="w-16 h-16 object-cover rounded-xl border border-gray-200"
-                />
-              ) : (
-                <div className="w-16 h-16 rounded-xl border border-gray-200 bg-gray-50 flex flex-col items-center justify-center p-1">
-                  <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19V6l12-3v13M9 10l12-3" />
-                  </svg>
-                  <span className="text-[8px] text-gray-400 truncate w-full text-center mt-1">{file.name}</span>
-                </div>
-              )}
-              {onRemoveAttachment && (
+      <div className="glass rounded-full py-2.5 px-2 flex flex-col gap-2 transition-all focus-within:bg-ink/10">
+        {/* Attachment Preview — inside the pill, stacks above the input row
+            so the pill grows to accommodate them. */}
+        {attachments.length > 0 && (
+          <div className="flex gap-2 px-2 pt-1 flex-wrap">
+            {attachments.map((file, index) => (
+              <div key={index} className="relative group">
+                {file.type.startsWith('image/') ? (
+                  <img
+                    src={URL.createObjectURL(file)}
+                    alt={file.name}
+                    className="w-16 h-16 object-cover rounded-card hairline"
+                  />
+                ) : (
+                  <div className="w-16 h-16 rounded-card hairline bg-chip flex flex-col items-center justify-center p-1">
+                    <svg className="w-5 h-5 text-ink-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19V6l12-3v13M9 10l12-3" />
+                    </svg>
+                    <span className="text-[8px] text-ink-3 truncate w-full text-center mt-1">{file.name}</span>
+                  </div>
+                )}
                 <button
                   onClick={() => onRemoveAttachment(index)}
-                  className="absolute -top-1 -right-1 w-4 h-4 bg-gray-800 text-white rounded-full text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="absolute -top-1 -right-1 w-4 h-4 bg-ink text-page rounded-full text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                 >
                   ×
                 </button>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="bg-gemini-bg rounded-2xl p-2 pl-3 pr-2 flex items-center gap-2 group focus-within:bg-white focus-within:shadow-md transition-all border border-transparent focus-within:border-gemini-border">
-        {/* Attachment Button */}
-        {onAttach && (
-          <>
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="p-1.5 rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors shrink-0"
-              title="Attach image or audio"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-              </svg>
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*,audio/*"
-              multiple
-              onChange={handleFileSelect}
-              className="hidden"
-            />
-          </>
+              </div>
+            ))}
+          </div>
         )}
+
+      <div className="flex items-center gap-2">
+        {/* Attachment Button — plus icon, image upload. Naked (no chip
+            fill) — only the right-side action button carries fill.
+            Always rendered: `onAttach` is required, so the button is
+            present in every host (chat, new-chat, playlist composer). */}
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          className="w-11 h-11 flex items-center justify-center rounded-full text-ink-2 hover:text-ink hover:bg-chip transition-colors shrink-0 self-end"
+          title={t('chatInput.uploadImage')}
+          aria-label={t('chatInput.uploadImage')}
+        >
+          <svg className="w-[22px] h-[22px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m-7-7h14" />
+          </svg>
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={handleFileSelect}
+          className="hidden"
+        />
 
         <textarea
           ref={textareaRef}
@@ -168,7 +233,7 @@ export const ChatInput = ({
           onChange={(e) => onInputChange(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={getPlaceholder()}
-          className="flex-1 bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-gemini-text placeholder-gray-400 text-sm resize-none py-2.5 max-h-32 no-scrollbar"
+          className="flex-1 bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-ink placeholder-ink-3 text-[15px] leading-snug resize-none py-2 max-h-32 no-scrollbar font-sans"
           disabled={isLoading}
         />
 
@@ -196,28 +261,29 @@ export const ChatInput = ({
 
         {/* Voice/Send Dual Button */}
         {hasInput ? (
-          /* Send button */
+          /* Send button — filled circle with accent when ready */
           <button
             onClick={onSend}
             disabled={isLoading}
-            className={`p-2 rounded-full transition-all shrink-0 ${
+            className={`w-11 h-11 flex items-center justify-center rounded-full transition-all shrink-0 self-end ${
               isLoading
-                ? 'bg-gray-300 text-white animate-pulse'
-                : 'bg-gray-800 text-white hover:bg-black'
+                ? 'bg-ink/30 text-page animate-pulse'
+                : 'bg-accent text-page hover:bg-accent-2'
             }`}
+            aria-label={t('chatInput.send')}
           >
             {isLoading ? (
-              <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
               </svg>
             ) : (
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 10l7-7m0 0l7 7m-7-7v18" />
+              <svg className="w-[20px] h-[20px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 19V5m0 0l-6 6m6-6l6 6" />
               </svg>
             )}
           </button>
         ) : (
-          /* Voice button */
+          /* Voice button — chip → accent when listening */
           <button
             onPointerDown={handleVoicePointerDown}
             onPointerUp={handleVoicePointerUp}
@@ -228,18 +294,20 @@ export const ChatInput = ({
               }
             }}
             disabled={isLoading}
-            className={`p-2 rounded-full transition-all shrink-0 ${
+            className={`w-11 h-11 flex items-center justify-center rounded-full transition-all shrink-0 self-end ${
               isListening
-                ? 'bg-red-500 text-white animate-pulse'
-                : 'bg-gray-200 text-gray-400 hover:bg-gray-300 hover:text-gray-600'
+                ? 'bg-accent text-page animate-pulse'
+                : 'bg-chip-2 text-ink-2 hover:bg-chip-hover hover:text-ink'
             }`}
-            title="Tap to dictate, hold for voice mode"
+            title={t('chatInput.voiceTip')}
+            aria-label={t('chatInput.voice')}
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4M12 15a3 3 0 003-3V5a3 3 0 00-6 0v7a3 3 0 003 3z" />
+            <svg className="w-[20px] h-[20px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.8">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4M12 15a3 3 0 003-3V5a3 3 0 00-6 0v7a3 3 0 003 3z" />
             </svg>
           </button>
         )}
+        </div>
       </div>
     </div>
   );

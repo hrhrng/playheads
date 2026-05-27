@@ -23,19 +23,19 @@ export function FloatingMiniPlayer({
 
   return (
     <div
-      className="fixed bottom-0 left-0 right-0 md:bottom-6 md:left-auto md:right-6 md:max-w-xs z-50 bg-white border-t border-gemini-border md:border md:rounded-2xl md:shadow-lg p-3 flex items-center gap-3 cursor-pointer hover:bg-gray-50 transition-colors"
+      className="fixed bottom-0 left-0 right-0 md:bottom-6 md:left-auto md:right-6 md:max-w-xs z-50 glass-strong md:rounded-full p-2 pl-2 pr-2 flex items-center gap-3 cursor-pointer hover:bg-chip-2 transition-colors shadow-glass"
       onClick={onNavigateToConversation}
     >
       {artworkUrl && (
         <img
           src={artworkUrl}
           alt=""
-          className="w-10 h-10 rounded-lg shrink-0"
+          className="w-10 h-10 rounded-card shrink-0"
         />
       )}
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-gemini-text truncate">{currentTrack.attributes.name}</p>
-        <p className="text-xs text-gemini-subtext truncate">{conversationTitle}</p>
+        <p className="text-[13px] font-medium font-display text-ink truncate">{currentTrack.attributes.name}</p>
+        <p className="text-[11px] text-ink-3 truncate">{conversationTitle}</p>
       </div>
       <button
         onClick={(e) => {
@@ -43,7 +43,7 @@ export function FloatingMiniPlayer({
           onTogglePlay();
         }}
         disabled={isTransitioning}
-        className="w-10 h-10 md:w-8 md:h-8 rounded-full bg-gemini-text text-white flex items-center justify-center shrink-0 hover:bg-black transition-colors disabled:opacity-50"
+        className="w-9 h-9 rounded-full bg-ink text-page flex items-center justify-center shrink-0 hover:bg-ink/85 transition-colors disabled:opacity-50"
       >
         {isPlaying ? (
           <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" /></svg>

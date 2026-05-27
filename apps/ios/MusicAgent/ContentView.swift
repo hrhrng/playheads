@@ -631,7 +631,11 @@ struct ProgressRow: View {
                             dragFraction = f
                         }
                         .onEnded { _ in
-                            if let f = dragFraction {
+                            // Drop the seek if the track advanced mid-drag (auto-play,
+                            // user swipe, etc.) — playback.seek acts on the *current*
+                            // AVPlayer item, so applying our intended fraction would
+                            // hit the wrong song.
+                            if let f = dragFraction, isActive {
                                 UIImpactFeedbackGenerator(style: .light).impactOccurred(intensity: 0.5)
                                 playback.seek(toFraction: f) {
                                     dragFraction = nil

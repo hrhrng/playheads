@@ -29,7 +29,7 @@ Available Tools:
 - web_search(query) — search the web for music recommendations, playlist ideas, artist info, trending songs, or genre exploration.
 - get_now_playing() — check what's currently playing.
 - get_playlist() — show the current playlist/queue.
-- add_to_queue(track_id) — add a track by Apple Music ID (from search_music results).
+- add_to_queue(track_ids[]) — add one or more tracks by Apple Music IDs (from search_music results). ALWAYS batch — pass all the tracks you want to queue in a single call, never call add_to_queue multiple times in a row.
 - play_track(index) — play a track ALREADY in the playlist (1-indexed position).
 - skip_next() — skip to the next track.
 - remove_from_playlist(index) — remove a track by position (1-indexed).
@@ -37,8 +37,9 @@ Available Tools:
 You can also render rich visual UIs (timelines, album grids, artist spotlights) inline using YAML spec blocks. See the GENUI section below for details.
 
 Workflow:
-- "Play X" → search_music(X) → add_to_queue(id) → play_track(position)
-- "Add X to queue" → search_music(X) → add_to_queue(id)
+- "Play X" → search_music(X) → add_to_queue([id]) → play_track(position)
+- "Add X to queue" → search_music(X) → add_to_queue([id])
+- "Build me a playlist of N tracks" → search_music for each → ONE add_to_queue([id1, id2, ..., idN]) in the intended play order
 - "Search X" → search_music(X) — just search, show results
 - "Play track N" → play_track(N) — play an existing track in the playlist
 - "Skip" / "Next" → skip_next()
@@ -50,11 +51,11 @@ Workflow:
 
 IMPORTANT:
 - search_music only searches — it does NOT add to queue or play.
-- add_to_queue needs a track_id from search_music results.
+- add_to_queue needs track_ids (an array) from search_music results. Pass MULTIPLE in one call to queue multiple tracks — don't loop.
 - play_track plays a track ALREADY in the playlist (1-indexed).
 - remove_from_playlist takes a 1-indexed position.
 - web_search is for discovery and recommendations (web results). search_music is for finding specific tracks on Apple Music.
-- When asked to build a playlist, use web_search for ideas, then search_music + add_to_queue for each track.
+- When asked to build a playlist, use web_search for ideas, then search_music for each track, then ONE add_to_queue call with all the resolved track_ids in the desired play order.
 
 Be conversational and fun! Keep responses concise.`;
 
@@ -274,7 +275,7 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
     const effectiveSearchProvider = (searchDbOverride?.providerType || this.env.SEARCH_PROVIDER || (card?.nativeSearch ? "anthropic" : "")).toLowerCase();
     console.log(`[WebSearch] Resolution: dbOverride=${JSON.stringify(searchDbOverride ? { providerType: searchDbOverride.providerType, hasApiKey: !!searchDbOverride.apiKey } : null)} envProvider=${this.env.SEARCH_PROVIDER || "unset"} nativeSearch=${card?.nativeSearch} effective="${effectiveSearchProvider}" hasAnthropicInstance=${!!anthropicInstance}`);
 
-    const toolCtx = { env: this.env, state: globalState, storefront };
+    const toolCtx = { env: this.env, state: globalState, storefront, sessionId };
     const musicTools = createMusicTools(toolCtx);
     let tools: Parameters<typeof streamText>[0]["tools"] = { ...musicTools };
 
@@ -301,6 +302,24 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
     const agentEnv = this.env;
 
     const stream = createUIMessageStream({
+      onError: (err) => {
+        // Errors thrown inside streamText (provider 400s etc.) don't bubble
+        // to the outer try/catch — capture them here so the frontend gets a
+        // visible message instead of silent failure. Log full details with
+        // statusCode / responseBody so we can debug in observability.
+        const details: Record<string, unknown> = {};
+        if (err && typeof err === "object") {
+          const e = err as Record<string, unknown>;
+          if (typeof e.message === "string") details.message = e.message;
+          if ("statusCode" in e) details.statusCode = e.statusCode;
+          if ("responseBody" in e) details.responseBody = e.responseBody;
+          if ("url" in e) details.url = e.url;
+          if ("cause" in e) details.cause = String(e.cause);
+        }
+        console.error("[MusicChatAgent] streamText error:", JSON.stringify(details));
+        const msg = (err as { message?: string })?.message || String(err);
+        return `LLM error: ${msg}`;
+      },
       execute: ({ writer }) => {
         const result = streamText({
           model: model as Parameters<typeof streamText>[0]["model"],

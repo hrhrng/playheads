@@ -241,19 +241,19 @@ export function AlbumCard({
     <div className={`animate-genui-card-in transition-[width] duration-300 ease-out ${expanded ? 'w-full' : 'w-[130px] shrink-0'}`}>
       {/* Header — always visible */}
       <div
-        className={`cursor-pointer ${expanded ? 'flex items-start gap-3 rounded-lg hover:bg-gray-50 p-1.5 -m-1.5 transition-colors' : ''}`}
+        className={`cursor-pointer ${expanded ? 'flex items-start gap-3 rounded-2xl hover:bg-chip p-1.5 -m-1.5 transition-colors' : ''}`}
         onMouseEnter={() => setHovering(true)}
         onMouseLeave={() => setHovering(false)}
         onClick={handleToggle}
       >
         {/* Artwork — fixed sizes, no aspect-ratio transition */}
         <div
-          className="relative rounded-xl overflow-hidden bg-gray-100 shadow-sm shrink-0 transition-[width,height] duration-300 ease-out"
+          className="relative rounded-card overflow-hidden bg-chip shadow-cover shrink-0 transition-[width,height] duration-300 ease-out"
           style={{ width: expanded ? 56 : 130, height: expanded ? 56 : 130 }}
         >
           {artworkUrl ? (
             <>
-              {!imageLoaded && <div className="absolute inset-0 bg-gray-200 animate-pulse rounded-xl" />}
+              {!imageLoaded && <div className="absolute inset-0 bg-chip-2 animate-pulse rounded-card" />}
               <img
                 src={artworkUrl}
                 alt={`${title} by ${subtitle}`}
@@ -263,19 +263,19 @@ export function AlbumCard({
               />
             </>
           ) : (
-            <div className="w-full h-full bg-gray-100 flex items-center justify-center animate-pulse">
-              <svg className="w-7 h-7 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="w-full h-full bg-chip flex items-center justify-center animate-pulse">
+              <svg className="w-7 h-7 text-ink-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 19V6l12-3v13M9 10l12-3" />
               </svg>
             </div>
           )}
           {/* Hover overlay — play album + add to queue */}
           {(canPlay || albumId) && !expanded && (
-            <div className={`absolute inset-0 bg-black/30 backdrop-blur-[2px] flex items-center justify-center gap-2 transition-opacity duration-200 ${hovering ? 'opacity-100' : 'opacity-0'}`}>
-              <button onClick={handlePlayAlbum} className="w-9 h-9 rounded-full bg-white text-gray-900 flex items-center justify-center hover:scale-110 transition-transform shadow-md" title="Play album">
+            <div className={`absolute inset-0 bg-black/35 backdrop-blur-[2px] flex items-center justify-center gap-2 transition-opacity duration-200 ${hovering ? 'opacity-100' : 'opacity-0'}`}>
+              <button onClick={handlePlayAlbum} className="w-9 h-9 rounded-full bg-white text-black flex items-center justify-center hover:scale-110 transition-transform shadow-glass" title="Play album">
                 <svg className="w-4 h-4 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
               </button>
-              <button onClick={handleQueueAlbum} className="w-8 h-8 rounded-full bg-white/80 text-gray-700 flex items-center justify-center hover:scale-110 transition-transform shadow-md" title="Add album to queue">
+              <button onClick={handleQueueAlbum} className="w-8 h-8 rounded-full bg-white/80 text-black flex items-center justify-center hover:scale-110 transition-transform shadow-glass" title="Add album to queue">
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
               </button>
             </div>
@@ -284,17 +284,17 @@ export function AlbumCard({
 
         {/* Info text */}
         <div className={expanded ? 'flex-1 min-w-0 py-0.5' : 'mt-2 px-0.5'}>
-          <p className={`font-medium text-gray-800 leading-tight line-clamp-2 ${expanded ? 'text-[13px] line-clamp-1' : 'text-[12px]'}`}>{title}</p>
-          <p className="text-[11px] text-gray-500 mt-0.5 line-clamp-1">{subtitle}</p>
+          <p className={`font-display font-medium text-ink leading-tight line-clamp-2 ${expanded ? 'text-[13px] line-clamp-1' : 'text-[12px]'}`}>{title}</p>
+          <p className="text-[11px] text-ink-3 mt-0.5 line-clamp-1">{subtitle}</p>
           <div className="flex items-center gap-2 mt-0.5">
-            {year && <span className="text-[10px] text-gray-400">{year}</span>}
-            {expanded && tracks.length > 0 && <span className="text-[10px] text-gray-400">{tracks.length} tracks</span>}
+            {year && <span className="text-[10px] text-ink-4">{year}</span>}
+            {expanded && tracks.length > 0 && <span className="text-[10px] text-ink-4">{tracks.length} tracks</span>}
           </div>
         </div>
 
         {/* Chevron — only when expanded */}
         {expanded && (
-          <svg className="w-4 h-4 text-gray-400 mt-1 rotate-180 transition-transform shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+          <svg className="w-4 h-4 text-ink-3 mt-1 rotate-180 transition-transform shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
             <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
           </svg>
         )}
@@ -304,38 +304,38 @@ export function AlbumCard({
       <div className={`grid transition-[grid-template-rows] duration-300 ease-out ${expanded ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
         <div className="overflow-hidden">
           {(expanded || tracks.length > 0) && (
-            <div className="pt-2 ml-1 border-l-2 border-gray-100 pl-3 space-y-0">
+            <div className="pt-2 ml-1 hairline-l pl-3 space-y-0" style={{ borderLeftColor: 'rgb(var(--accent) / 0.5)' }}>
               {loadingTracks && (
                 <div className="py-3 space-y-2">
-                  {[1,2,3].map(i => <div key={i} className="h-3 w-32 bg-gray-100 rounded animate-pulse" />)}
+                  {[1,2,3].map(i => <div key={i} className="h-3 w-32 bg-chip rounded animate-pulse" />)}
                 </div>
               )}
               {tracks.map((track) => (
                 <div
                   key={track.id}
-                  className="flex items-center gap-2 py-1.5 px-2 -mx-2 rounded-md hover:bg-gray-50 group/track transition-colors"
+                  className="flex items-center gap-2 py-1.5 px-2 -mx-2 rounded-md hover:bg-chip group/track transition-colors"
                 >
-                  <span className="text-[10px] text-gray-400 w-4 text-right tabular-nums shrink-0">
+                  <span className="text-[10px] text-ink-4 w-4 text-right tabular-nums shrink-0">
                     {track.trackNumber}
                   </span>
-                  <span className="text-[12px] text-gray-700 flex-1 min-w-0 truncate">
+                  <span className="text-[12px] text-ink-2 flex-1 min-w-0 truncate">
                     {track.name}
                   </span>
-                  <span className="text-[10px] text-gray-400 tabular-nums shrink-0">
+                  <span className="text-[10px] text-ink-4 tabular-nums shrink-0">
                     {formatDuration(track.durationMs)}
                   </span>
                   {actions && (
                     <div className="flex items-center gap-0.5 opacity-0 group-hover/track:opacity-100 transition-opacity">
                       <button
                         onClick={(e) => handlePlay(e, track.id)}
-                        className="w-6 h-6 rounded-full bg-gray-900 text-white flex items-center justify-center hover:scale-110 transition-transform"
+                        className="w-6 h-6 rounded-full bg-ink text-page flex items-center justify-center hover:scale-110 transition-transform"
                         title="Play"
                       >
                         <svg className="w-2.5 h-2.5 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
                       </button>
                       <button
                         onClick={(e) => handleQueue(e, track.id, track.name)}
-                        className="w-6 h-6 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center hover:scale-110 transition-transform"
+                        className="w-6 h-6 rounded-full bg-chip-2 text-ink-2 flex items-center justify-center hover:scale-110 transition-transform"
                         title="Add to queue"
                       >
                         <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>

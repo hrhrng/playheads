@@ -1,0 +1,179 @@
+{
+  "common": {
+    "appName": "Playheads",
+    "loading": "加载中...",
+    "retry": "重试",
+    "cancel": "取消",
+    "confirm": "确认",
+    "delete": "删除",
+    "rename": "重命名",
+    "pin": "置顶",
+    "unpin": "取消置顶",
+    "pinChat": "置顶对话",
+    "unpinChat": "取消置顶",
+    "newConversation": "新对话",
+    "settings": "设置",
+    "logout": "退出登录"
+  },
+  "deleteDialog": {
+    "title": "删除对话？",
+    "descriptionNamedPrefix": "确定要删除",
+    "descriptionNamedSuffix": "吗？此操作无法撤销。",
+    "descriptionUnnamed": "确定要删除这段对话吗？此操作无法撤销。",
+    "hintCancel": "取消",
+    "hintDelete": "删除"
+  },
+  "nav": {
+    "newChat": "New Chat",
+    "playheads": "Playheads",
+    "openMenu": "打开菜单",
+    "playlists": "歌单",
+    "chats": "对话",
+    "newPlaylist": "新建歌单"
+  },
+  "discovery": {
+    "title": "听点啥？",
+    "subtitle": "说一句你想听的，或者从下面选个开始。",
+    "recent": "Recent",
+    "playlists": "歌单",
+    "recentChats": "最近对话",
+    "trySomething": "试试这些",
+    "failedToStart": "无法开启对话",
+    "imagePlaceholderMessage": "看下这张图",
+    "trackCount_one": "{{count}} 首",
+    "trackCount_other": "{{count}} 首"
+  },
+  "moods": {
+    "focus": { "label": "专注", "prompt": "给我一些适合专注工作的歌" },
+    "sad": { "label": "伤心", "prompt": "想听点伤感的歌" },
+    "high_energy": { "label": "高能", "prompt": "放点高能炸场的" },
+    "chill": { "label": "放空", "prompt": "想听点放松发呆的" },
+    "surprise": { "label": "惊喜我", "prompt": "随便推荐点我可能没听过的好歌" },
+    "workout": { "label": "健身", "prompt": "健身时听的歌" },
+    "sleep": { "label": "助眠", "prompt": "帮我入睡的歌" }
+  },
+  "chatInput": {
+    "startVibe": "Start a vibe...",
+    "askDJ": "Ask the DJ...",
+    "pushToInterrupt": "Push to Interrupt...",
+    "uploadImage": "上传图片",
+    "send": "发送",
+    "voice": "语音",
+    "voiceTip": "短按口述 · 长按语音对话",
+    "like": "加入喜欢",
+    "unlike": "移出喜欢"
+  },
+  "playlist": {
+    "title": "PLAYLIST",
+    "nowPlaying": "Now Playing",
+    "upNext": "Up Next",
+    "history": "History",
+    "expand": "展开列表",
+    "collapse": "收起列表",
+    "resize": "拖动调整宽度",
+    "tabQueue": "队列",
+    "tabTopic": "本话题",
+    "topicEmpty": "这段对话还没攒出歌单——跟它聊聊喜欢的风格。",
+    "playNow": "立即播放",
+    "addToQueue": "加入队列",
+    "playAll": "全部播放",
+    "addAll": "全部加入",
+    "tracksCount_one": "{{count}} 首",
+    "tracksCount_other": "{{count}} 首",
+    "emptyTracks": "还没有歌曲 — 聊一聊你喜欢的风格，让它慢慢长起来。",
+    "chatAbout": "聊聊这个歌单",
+    "chatCreating": "正在开聊…"
+  },
+  "trackMenu": {
+    "more": "更多",
+    "removeFromPlaylist": "从这个歌单移除",
+    "removeFromQueue": "从队列移除",
+    "openInAppleMusic": "在 Apple Music 打开"
+  },
+  "miniPlayer": {
+    "play": "播放",
+    "pause": "暂停",
+    "skipNext": "下一首",
+    "openFeed": "在 Feed 中打开",
+    "seek": "拖动进度",
+    "unknownTrack": "未知曲目",
+    "unknownArtist": "未知艺人"
+  },
+  "addToPlaylist": {
+    "button": "加入歌单",
+    "header": "加入到歌单",
+    "empty": "还没有自建歌单——去侧边栏建一个。",
+    "untitled": "未命名",
+    "already": "已在其中",
+    "failed": "失败"
+  },
+  "lyrics": {
+    "tapToView": "有歌词 · 点击查看",
+    "notAvailable": "暂无歌词"
+  },
+  "chat": {
+    "connectAppleMusic": "连接 Apple Music 听全曲",
+    "viewTranscript": "查看历史消息",
+    "backToPlayer": "回到播放器",
+    "chatFailed": "对话出错",
+    "uploadFailed": "上传失败"
+  },
+  "settings": {
+    "title": "设置",
+    "general": "通用",
+    "integrations": "集成",
+    "billing": "订阅",
+    "appearance": "外观",
+    "appearanceSystem": "跟随系统",
+    "appearanceLight": "浅色",
+    "appearanceDark": "深色",
+    "language": "语言",
+    "languageAuto": "自动检测",
+    "languageZh": "中文",
+    "languageEn": "English",
+    "appleMusic": "Apple Music",
+    "appleMusicHint": "开启全曲播放和推荐",
+    "connect": "连接",
+    "disconnect": "断开",
+    "connected": "已连接",
+    "account": "账户"
+  },
+  "auth": {
+    "signIn": "登录",
+    "signUp": "注册",
+    "email": "邮箱",
+    "password": "密码",
+    "continueWith": "使用 {{provider}} 登录",
+    "or": "或",
+    "welcome": "欢迎回来",
+    "createAccount": "创建账户",
+    "tagline": "回到音乐",
+    "emailPlaceholder": "你的邮箱",
+    "signInWithEmail": "用邮箱登录",
+    "sendingMagicLink": "发送登录链接...",
+    "continueWithApple": "用 Apple 继续",
+    "continueWithGoogle": "用 Google 继续"
+  },
+  "billing": {
+    "tier": { "free": "免费版", "plus": "Plus", "pro": "Pro" },
+    "currentPlan": "当前套餐",
+    "upgrade": "升级",
+    "manage": "管理订阅",
+    "manageToDowngrade": "通过管理切换",
+    "renewsOn": "{{date}} 续费",
+    "cancelsOn": "{{date}} 到期取消",
+    "perks": {
+      "unlimited": "无限聊天",
+      "priorityModel": "优先模型",
+      "advancedModel": "高级模型 + 语音",
+      "earlyAccess": "抢先体验新功能"
+    }
+  },
+  "waitlist": {
+    "title": "你在候补名单上",
+    "subtitlePrefix": "我们正在分批开放。到你的时候会通过邮箱",
+    "subtitleSuffix": "通知你。",
+    "checkAgain": "再看看",
+    "approved": "通过了！欢迎进入。"
+  }
+}

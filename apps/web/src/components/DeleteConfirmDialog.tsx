@@ -4,6 +4,7 @@
  */
 
 import { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 
 interface DeleteConfirmDialogProps {
   /** Whether the dialog is currently open */
@@ -30,6 +31,7 @@ export const DeleteConfirmDialog = ({
   onCancel,
   conversationTitle
 }: DeleteConfirmDialogProps): React.JSX.Element | null => {
+  const { t } = useTranslation();
   // Handle keyboard shortcuts
   useEffect(() => {
     if (!isOpen) return;
@@ -66,17 +68,17 @@ export const DeleteConfirmDialog = ({
       onClick={onCancel}
     >
       {/* Backdrop with blur effect */}
-      <div className="absolute inset-0 bg-black/20 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/35 backdrop-blur-sm" />
 
       {/* Dialog */}
       <div
-        className="relative bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 animate-scale-in"
+        className="relative glass-strong rounded-sheet shadow-glass max-w-md w-full p-6 animate-scale-in"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Icon */}
-        <div className="flex items-center justify-center w-12 h-12 mx-auto mb-4 bg-red-50 rounded-full">
+        <div className="flex items-center justify-center w-12 h-12 mx-auto mb-4 bg-red-500/10 rounded-full">
           <svg
-            className="w-6 h-6 text-red-600"
+            className="w-6 h-6 text-red-500"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
@@ -91,18 +93,18 @@ export const DeleteConfirmDialog = ({
         </div>
 
         {/* Title */}
-        <h3 className="text-xl font-semibold text-center text-gemini-text mb-2">
-          Delete Conversation?
+        <h3 className="text-xl font-display font-medium text-center text-ink mb-2">
+          {t('deleteDialog.title')}
         </h3>
 
         {/* Description */}
-        <p className="text-center text-gemini-subtext text-sm mb-6">
+        <p className="text-center text-ink-2 text-sm mb-6">
           {conversationTitle ? (
             <>
-              Are you sure you want to delete <span className="font-medium text-gemini-text">"{conversationTitle}"</span>? This action cannot be undone.
+              {t('deleteDialog.descriptionNamedPrefix')} <span className="font-medium text-ink">"{conversationTitle}"</span>{t('deleteDialog.descriptionNamedSuffix')}
             </>
           ) : (
-            'Are you sure you want to delete this conversation? This action cannot be undone.'
+            t('deleteDialog.descriptionUnnamed')
           )}
         </p>
 
@@ -111,29 +113,29 @@ export const DeleteConfirmDialog = ({
           {/* Cancel Button */}
           <button
             onClick={onCancel}
-            className="flex-1 px-4 py-2.5 rounded-xl font-medium text-gemini-text bg-gemini-hover hover:bg-gemini-hover/80 transition-all active:scale-95"
+            className="flex-1 px-4 py-2.5 rounded-full font-medium text-ink bg-chip hover:bg-chip-2 transition-all active:scale-95"
           >
-            Cancel
+            {t('common.cancel')}
           </button>
 
           {/* Delete Button */}
           <button
             onClick={onConfirm}
-            className="flex-1 px-4 py-2.5 rounded-xl font-medium text-white bg-red-600 hover:bg-red-700 transition-all active:scale-95 shadow-sm hover:shadow-md"
+            className="flex-1 px-4 py-2.5 rounded-full font-medium text-white bg-red-500 hover:bg-red-600 transition-all active:scale-95"
           >
-            Delete
+            {t('common.delete')}
           </button>
         </div>
 
         {/* Keyboard Hints */}
-        <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-center gap-4 text-xs text-gemini-subtext">
+        <div className="mt-4 pt-4 hairline-t flex items-center justify-center gap-4 text-xs text-ink-3">
           <div className="flex items-center gap-1.5">
-            <kbd className="px-2 py-0.5 bg-gray-100 rounded text-[10px] font-mono">ESC</kbd>
-            <span>Cancel</span>
+            <kbd className="px-2 py-0.5 bg-chip rounded text-[10px] font-mono">ESC</kbd>
+            <span>{t('deleteDialog.hintCancel')}</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <kbd className="px-2 py-0.5 bg-gray-100 rounded text-[10px] font-mono">ENTER</kbd>
-            <span>Delete</span>
+            <kbd className="px-2 py-0.5 bg-chip rounded text-[10px] font-mono">ENTER</kbd>
+            <span>{t('deleteDialog.hintDelete')}</span>
           </div>
         </div>
       </div>

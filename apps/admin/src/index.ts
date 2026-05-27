@@ -6,6 +6,7 @@ import { generateText } from "ai";
 
 interface Env {
   DB: D1Database;
+  CONFIG_KV: KVNamespace;
   RESEND_API_KEY?: string;
   ADMIN_ENCRYPTION_KEY?: string; // 32-byte hex, used for AES-256-GCM key encryption
   CF_AIG_TOKEN?: string;
@@ -57,6 +58,20 @@ export default {
     if (url.pathname === "/api/waitlist" && request.method === "GET") return handleList(request, env);
     if (url.pathname === "/api/waitlist" && request.method === "PATCH") return handleAction(request, env);
     if (url.pathname === "/api/invite" && request.method === "POST") return handleInvite(request, env);
+
+    // App-level config (waitlist bypass etc) — backed by CONFIG_KV, read by
+    // the gateway. Writing here propagates live to all signed-in users on
+    // their next /api/waitlist/config fetch (cached 30s).
+    if (url.pathname === "/api/config/waitlist-bypass" && request.method === "GET") {
+      const raw = await env.CONFIG_KV.get("waitlist:bypass");
+      return Response.json({ bypass: raw === "true" });
+    }
+    if (url.pathname === "/api/config/waitlist-bypass" && request.method === "PUT") {
+      const body = await request.json<{ bypass?: boolean }>().catch(() => ({}));
+      const value = body.bypass === true ? "true" : "false";
+      await env.CONFIG_KV.put("waitlist:bypass", value);
+      return Response.json({ bypass: body.bypass === true });
+    }
 
     // LLM config endpoints
     if (url.pathname === "/api/llm-config" && request.method === "GET") return handleLlmList(env);
@@ -611,6 +626,19 @@ function serveHTML(): Response {
   .btn-ghost.active { background: #111; color: #fff; }
   .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
+  /* Bypass toggle row */
+  .bypass-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 20px; border-radius: 12px; background: #fff; border: 1px solid #f0f0f0; margin-bottom: 16px; transition: background 0.2s; }
+  .bypass-row.bypass-on { background: #ecfdf5; border-color: #bbf7d0; }
+  .bypass-title { font-size: 13px; font-weight: 600; color: #111827; display: flex; align-items: center; gap: 8px; }
+  .bypass-on-pill { font-size: 10px; padding: 2px 8px; border-radius: 999px; background: #15803d; color: #fff; font-weight: 600; letter-spacing: 0.4px; }
+  .bypass-off-pill { font-size: 10px; padding: 2px 8px; border-radius: 999px; background: #9ca3af; color: #fff; font-weight: 600; letter-spacing: 0.4px; }
+  .bypass-sub { font-size: 12px; color: #6b7280; margin-top: 4px; max-width: 560px; }
+  .bypass-toggle { position: relative; width: 44px; height: 26px; border-radius: 13px; background: #d1d5db; border: none; cursor: pointer; flex-shrink: 0; transition: background 0.2s; padding: 0; }
+  .bypass-toggle.on { background: #15803d; }
+  .bypass-toggle:disabled { opacity: 0.5; cursor: not-allowed; }
+  .bypass-knob { position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; transition: transform 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+  .bypass-toggle.on .bypass-knob { transform: translateX(18px); }
+
   /* Stats */
   .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
   .stat { padding: 18px; border-radius: 12px; background: #fff; border: 1px solid #f0f0f0; }
@@ -673,6 +701,9 @@ let loading = false;
 let showInviteModal = false;
 let inviteMsg = '';
 let inviteMsgType = '';
+// null = not loaded yet, true/false = current KV value
+let waitlistBypass = null;
+let waitlistBypassBusy = false;
 
 // LLM Config state
 let llmProviders = [];
@@ -1039,6 +1070,20 @@ function renderWaitlistPage() {
       <button class="btn btn-primary" onclick="openInvite()">\${icons.plus} Grant Access</button>
     </div>
     <div class="main-body">
+      <div class="bypass-row \${waitlistBypass ? 'bypass-on' : ''}">
+        <div>
+          <div class="bypass-title">Open access \${waitlistBypass === null ? '' : (waitlistBypass ? '<span class="bypass-on-pill">ON</span>' : '<span class="bypass-off-pill">OFF</span>')}</div>
+          <div class="bypass-sub">\${waitlistBypass ? 'Anyone who signs in is admitted — the waitlist gate is bypassed for everyone.' : 'Per-user gating active — only approved emails get past the gate.'}</div>
+        </div>
+        <button
+          class="bypass-toggle \${waitlistBypass ? 'on' : ''}"
+          \${waitlistBypass === null || waitlistBypassBusy ? 'disabled' : ''}
+          onclick="toggleWaitlistBypass()"
+          title="Toggle global waitlist bypass"
+        >
+          <span class="bypass-knob"></span>
+        </button>
+      </div>
       <div class="stats">
         \${statItems.map(s => \`<div class="stat">
           <div class="stat-num" style="color:\${s.color}">\${s.value ?? 0}</div>
@@ -1203,15 +1248,38 @@ async function fetchData() {
   loading = true; render();
   const params = new URLSearchParams({ page: String(page) });
   if (filter) params.set('status', filter);
-  const res = await fetch('/api/waitlist?' + params);
-  const json = await res.json();
+  const [listRes, bypassRes] = await Promise.all([
+    fetch('/api/waitlist?' + params),
+    fetch('/api/config/waitlist-bypass'),
+  ]);
+  const json = await listRes.json();
   entries = json.data || [];
   stats = json.stats || stats;
   totalPages = Math.ceil((json.pagination?.total || 0) / (json.pagination?.limit || 50));
+  try {
+    const bypassJson = await bypassRes.json();
+    waitlistBypass = !!bypassJson.bypass;
+  } catch { /* leave previous value */ }
   selected.clear();
   loading = false;
   render();
 }
+
+window.toggleWaitlistBypass = async () => {
+  if (waitlistBypassBusy) return;
+  const next = !waitlistBypass;
+  waitlistBypassBusy = true; render();
+  try {
+    const res = await fetch('/api/config/waitlist-bypass', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bypass: next }),
+    });
+    const json = await res.json();
+    waitlistBypass = !!json.bypass;
+  } catch { /* swallow; render() reflects no change */ }
+  waitlistBypassBusy = false; render();
+};
 
 // Actions
 window.setFilter = (f) => { filter = f; page = 1; fetchData(); };
