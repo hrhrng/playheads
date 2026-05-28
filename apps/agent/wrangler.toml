@@ -37,7 +37,10 @@ ANTHROPIC_MODEL = "claude-sonnet-4-6"
 # Secret: set via `wrangler secret put DOUBAO_API_KEY`
 DOUBAO_MODEL = "doubao-1.5-pro-32k"
 
-APPLE_MUSIC_TOKEN_TTL_SECONDS = "3600"
+# 6h dev-token TTL. The web client refreshes ~5 min before expiry (timer
+# + visibilitychange), so a longer TTL mainly widens the safety margin
+# against background-tab timer throttling. Apple allows up to 6 months.
+APPLE_MUSIC_TOKEN_TTL_SECONDS = "21600"
 CLOUDFLARE_ACCOUNT_ID = "44af79e51582ca20c9003eb926540242"
 AI_GATEWAY_ID = "clash"
 

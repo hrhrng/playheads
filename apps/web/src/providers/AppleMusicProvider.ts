@@ -17,6 +17,17 @@ type QueueChangeCallback = () => void;
 type UnresolvableIdsCallback = (badIds: Set<string>) => void;
 type Phase = 'init' | 'idle' | 'buffering' | 'playing' | 'paused';
 
+// Passed to MusicKit.configure() on both init and token refresh — must
+// stay identical so re-configuring only swaps the developer token and
+// doesn't look like a different app to the singleton.
+const APP_CONFIG = { name: 'Playhead', build: '1.0.0' } as const;
+// Refresh the developer token this many seconds before it expires.
+const TOKEN_REFRESH_SAFETY_SECONDS = 300;
+// setTimeout delays above the 32-bit signed-int ms limit (~24.8 days)
+// overflow and fire immediately. Clamp below that so a long-lived token
+// can't wrap the timer into an instant re-fire loop.
+const MAX_TIMEOUT_MS = 24 * 24 * 60 * 60 * 1000; // 24 days
+
 interface AppleMusicProviderConfig {
   storedMusicUserToken?: string | null;
 }
@@ -67,6 +78,12 @@ export class AppleMusicProvider implements MusicProvider {
   private seekTarget: { trackId: string; time: number } | null = null;
   private transitionTimeout: ReturnType<typeof setTimeout> | null = null;
   private developerToken: string | null = null;
+  // Developer-token lifecycle. tokenExp is the JWT's unix-seconds expiry
+  // (0 = unknown). refreshTimer fires ~5 min before that; onVisibility
+  // re-checks on tab foreground to cover background-throttled timers.
+  private tokenExp = 0;
+  private refreshTimer: ReturnType<typeof setTimeout> | null = null;
+  private onVisibility: (() => void) | null = null;
 
   // Storefront
   private _storefrontId = 'us';
@@ -136,16 +153,9 @@ export class AppleMusicProvider implements MusicProvider {
         return;
       }
 
+      // First token fetch — abort init if it fails (no token → no playback).
       try {
-        const response = await fetch(`${API_BASE}/apple-music/developer-token`);
-        if (!response.ok) throw new Error(`Developer token request failed: ${response.status}`);
-        const data = await response.json();
-        this.developerToken = data.token;
-
-        const refreshTime = (data.expires_at - Date.now() / 1000 - 300) * 1000;
-        if (refreshTime > 0) {
-          setTimeout(() => { if (!this.destroyed) this.initialize(); }, refreshTime);
-        }
+        await this.fetchDeveloperToken();
       } catch (error) {
         console.error('[AppleMusicProvider] Failed to fetch developer token:', error);
         this._isInitializing = false;
@@ -155,13 +165,15 @@ export class AppleMusicProvider implements MusicProvider {
 
       const mk = await window.MusicKit.configure({
         developerToken: this.developerToken!,
-        app: { name: 'Playhead', build: '1.0.0' },
+        app: APP_CONFIG,
       } as any) as MusicKitInstance;
       this.musicKit = mk;
       this._isAuthorized = mk.isAuthorized;
       this._storefrontId = mk.storefrontId || 'us';
 
       // Register events BEFORE setting musicUserToken so authorizationStatusDidChange is caught.
+      // NOTE: only ever called once — token refresh must NOT re-run this, or
+      // every listener would be duplicated.
       this.registerEvents(mk);
 
       // MusicKit v3 does not accept musicUserToken in configure() options.
@@ -170,6 +182,14 @@ export class AppleMusicProvider implements MusicProvider {
         (mk as any).musicUserToken = this.config.storedMusicUserToken;
         this._isAuthorized = mk.isAuthorized;
       }
+
+      // Keep the developer token fresh for marathon sessions. A timer fires
+      // ~5 min before expiry; a visibilitychange handler re-checks when the
+      // tab returns to the foreground (background tabs throttle setTimeout,
+      // so the timer alone fires late — that gap was the MEDIA_LICENSE the
+      // user hit after leaving the tab open past the 1-hour token TTL).
+      this.scheduleTokenRefresh();
+      this.registerVisibilityRefresh();
     } catch (err) {
       console.error('[AppleMusicProvider] Error initializing:', err);
     } finally {
@@ -179,6 +199,76 @@ export class AppleMusicProvider implements MusicProvider {
       this._isInitializing = false;
       this.emit();
     }
+  }
+
+  // ── Developer token lifecycle ───────────────────────────────────
+
+  /** Fetch a developer token from the backend; store it + its expiry. */
+  private async fetchDeveloperToken(): Promise<void> {
+    const response = await fetch(`${API_BASE}/apple-music/developer-token`);
+    if (!response.ok) throw new Error(`Developer token request failed: ${response.status}`);
+    const data = await response.json();
+    this.developerToken = data.token;
+    // expires_at is unix seconds from the backend; 0 if absent.
+    this.tokenExp = typeof data.expires_at === 'number' ? data.expires_at : 0;
+  }
+
+  /**
+   * (Re)arm the refresh timer to fire ~5 min before the current token
+   * expires, clamped below setTimeout's 32-bit overflow point.
+   */
+  private scheduleTokenRefresh(): void {
+    if (this.refreshTimer) { clearTimeout(this.refreshTimer); this.refreshTimer = null; }
+    if (!this.tokenExp) return; // unknown expiry — rely on visibility refresh
+    const delay = Math.min(
+      Math.max((this.tokenExp - Date.now() / 1000 - TOKEN_REFRESH_SAFETY_SECONDS) * 1000, 0),
+      MAX_TIMEOUT_MS,
+    );
+    this.refreshTimer = setTimeout(() => {
+      if (!this.destroyed) void this.refreshDeveloperToken();
+    }, delay);
+  }
+
+  /**
+   * Pull a fresh developer token and hand it to the live MusicKit
+   * singleton WITHOUT re-running init (which would duplicate event
+   * listeners and reset the playback phase). Both a direct property
+   * write and the official re-configure are applied so the new token
+   * reaches the media-license path regardless of MusicKit version;
+   * re-configure keeps the same instance + app config, so the queue and
+   * current playback are preserved.
+   */
+  private async refreshDeveloperToken(): Promise<void> {
+    if (this.destroyed) return;
+    try {
+      await this.fetchDeveloperToken();
+      if (this.developerToken) {
+        if (this.musicKit) (this.musicKit as any).developerToken = this.developerToken;
+        await window.MusicKit?.configure({
+          developerToken: this.developerToken,
+          app: APP_CONFIG,
+        } as any);
+      }
+    } catch (e) {
+      console.error('[AppleMusicProvider] token refresh failed:', e);
+    } finally {
+      this.scheduleTokenRefresh();
+    }
+  }
+
+  /**
+   * Refresh proactively when the tab returns to the foreground and the
+   * token is within the safety window of expiry. Covers background tabs
+   * whose refresh timer was throttled while hidden.
+   */
+  private registerVisibilityRefresh(): void {
+    if (this.onVisibility || typeof document === 'undefined') return;
+    this.onVisibility = () => {
+      if (this.destroyed || document.visibilityState !== 'visible' || !this.tokenExp) return;
+      const secsLeft = this.tokenExp - Date.now() / 1000;
+      if (secsLeft < TOKEN_REFRESH_SAFETY_SECONDS) void this.refreshDeveloperToken();
+    };
+    document.addEventListener('visibilitychange', this.onVisibility);
   }
 
   /**
@@ -693,6 +783,11 @@ export class AppleMusicProvider implements MusicProvider {
     this.destroyed = true;
     this.phase = 'init';
     this.clearTransitionTimeout();
+    if (this.refreshTimer) { clearTimeout(this.refreshTimer); this.refreshTimer = null; }
+    if (this.onVisibility && typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', this.onVisibility);
+      this.onVisibility = null;
+    }
     if (this.musicKit) {
       try { this.musicKit.stop(); } catch (_) { /* ignore */ }
       for (const [event, handler] of this.eventListeners) {
