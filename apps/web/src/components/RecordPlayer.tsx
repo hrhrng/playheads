@@ -70,8 +70,12 @@ const RecordPlayerImpl = ({
     <div className="flex flex-col items-center gap-7 group w-full">
       {/* Cover Art — fills the parent container width (matches ChatInput
          max-w-xl so cover + composer line up), aspect-square keeps it
-         a perfect square, 10px radius + dual cover shadow per iOS Spec. */}
-      <div className="relative pointer-events-auto w-full">
+         a perfect square, 10px radius + dual cover shadow per iOS Spec.
+         max-w caps the cover by viewport HEIGHT so on short/landscape
+         viewports it shrinks instead of crushing the title/lyrics/seek
+         row against the composer. On tall screens the calc exceeds
+         max-w-xl, so the clamp is a no-op and desktop is unchanged. */}
+      <div className="relative pointer-events-auto w-full max-w-[calc(100dvh-340px)] mx-auto">
         {/* Cover stays at scale-1.0 always. The previous pause-shrink
             animation caused a visible size jump on every swap in the
             feed (preview card 0.97 → playing card 1.0). */}
