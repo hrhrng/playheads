@@ -579,14 +579,18 @@ export const ChatInterface = ({
           `from-page → transparent` gradient here would create a colour
           band where its top edge meets the mood blob bg (the two
           page-derived hues never line up). */}
-      <div className={`absolute bottom-0 left-0 right-0 px-6 pb-5 pt-10 z-30 transition-all duration-300 ${
-        showLyrics && !showHistory ? 'opacity-0 pointer-events-none translate-y-4' : 'opacity-100 pointer-events-auto translate-y-0'
+      {/* pointer-events-none on the console box so its transparent pt-10
+          strip doesn't eat clicks meant for the song stack behind it (the
+          "Connect Apple Music" link sits right under here). The actual
+          interactive rows below re-enable pointer-events-auto. */}
+      <div className={`absolute bottom-0 left-0 right-0 px-6 pb-5 pt-10 z-30 transition-all duration-300 pointer-events-none ${
+        showLyrics && !showHistory ? 'opacity-0 translate-y-4' : 'opacity-100 translate-y-0'
       }`}>
         {/* Toggle row — only rendered in chat mode (showHistory) as the
             "back to feed" affordance, or on mobile when a playlist is
             available (the playlist button lives here). In feed mode it's
             empty and not needed: the pill itself is the entry point. */}
-        <div className={`max-w-xl mx-auto flex items-center transition-all duration-200 ${showHistory || hasPlaylist ? 'mb-2 h-8 opacity-100' : 'h-0 mb-0 opacity-0 pointer-events-none overflow-hidden'}`}>
+        <div className={`max-w-xl mx-auto flex items-center transition-all duration-200 ${showHistory || hasPlaylist ? 'mb-2 h-8 opacity-100 pointer-events-auto' : 'h-0 mb-0 opacity-0 pointer-events-none overflow-hidden'}`}>
           {showHistory && (
             <button
               onClick={toggleHistory}
@@ -646,7 +650,7 @@ export const ChatInterface = ({
             like Like / Save go here so they're always reachable in feed
             mode without having to open chat. Extend by adding more buttons. */}
         {currentTrack && (
-          <div className="max-w-xl mx-auto mb-2 flex items-center gap-2 px-1">
+          <div className="max-w-xl mx-auto mb-2 flex items-center gap-2 px-1 pointer-events-auto">
             <button
               onClick={toggleLiked}
               disabled={!userId}
@@ -681,25 +685,29 @@ export const ChatInterface = ({
 
         {/* Input Bar — pill in feed mode (default), expanded composer once
             the user activates chat. iOS pattern: tap pill → enters chat
-            (showHistory true); explicit toggle button or ESC → back to feed. */}
-        <ChatInput
-          input={input}
-          isLoading={isLoading}
-          isDJSpeaking={isDJSpeaking}
-          isPlaying={isPlaying}
-          onInputChange={setInput}
-          onSend={() => handleSendMessage()}
-          onAttach={handleAttach}
-          attachments={attachments.map((a) => a.file)}
-          onRemoveAttachment={handleRemoveAttachment}
-          collapsed={!showHistory}
-          onActivate={toggleHistory}
-          onVoiceHoldStart={startHold}
-          onVoiceHoldEnd={endHold}
-          onVoiceHoldCancel={cancelHold}
-          isRecording={isRecording}
-          isTranscribing={isTranscribing}
-        />
+            (showHistory true); explicit toggle button or ESC → back to feed.
+            Wrapped in pointer-events-auto since the console box is now
+            pointer-events-none (see above). */}
+        <div className="pointer-events-auto">
+          <ChatInput
+            input={input}
+            isLoading={isLoading}
+            isDJSpeaking={isDJSpeaking}
+            isPlaying={isPlaying}
+            onInputChange={setInput}
+            onSend={() => handleSendMessage()}
+            onAttach={handleAttach}
+            attachments={attachments.map((a) => a.file)}
+            onRemoveAttachment={handleRemoveAttachment}
+            collapsed={!showHistory}
+            onActivate={toggleHistory}
+            onVoiceHoldStart={startHold}
+            onVoiceHoldEnd={endHold}
+            onVoiceHoldCancel={cancelHold}
+            isRecording={isRecording}
+            isTranscribing={isTranscribing}
+          />
+        </div>
 
       </div>
 
