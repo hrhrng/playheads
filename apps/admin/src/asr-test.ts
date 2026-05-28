@@ -219,6 +219,11 @@ async function runWorkersAi(
   const langCode = lang.split("-")[0];
   const result = (await env.AI.run("@cf/openai/whisper-large-v3-turbo" as never, {
     audio: toBase64(audio),
+    // Lock to transcribe — the "translate" task forces English output, and
+    // CF's whisper-v3-turbo defaults to translating non-English speech in
+    // practice (Chinese came back as English). transcribe keeps the source
+    // language; the language hint further pins detection on short clips.
+    task: "transcribe",
     ...(/^[a-z]{2}$/.test(langCode) ? { language: langCode } : {}),
   } as never)) as { text?: string };
   if (typeof result.text !== "string") {
