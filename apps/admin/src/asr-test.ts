@@ -207,9 +207,9 @@ async function runOne(
 
 // ── CF Workers AI whisper-large-v3-turbo ─────────────────────────
 //
-// Workers AI binding takes the audio as a Uint8Array-like or a regular
-// array of ints. We pass a regular number[] to satisfy the type without
-// wrestling with the Ai binding overloads.
+// whisper-large-v3-turbo expects `audio` as a BASE64-ENCODED STRING
+// (not a byte array — that's the classic @cf/openai/whisper schema, and
+// passing number[] here gets rejected with code 5006 type-mismatch).
 async function runWorkersAi(
   audio: Uint8Array,
   lang: string,
@@ -218,13 +218,24 @@ async function runWorkersAi(
   if (!env.AI) throw new Error("AI binding not configured");
   const langCode = lang.split("-")[0];
   const result = (await env.AI.run("@cf/openai/whisper-large-v3-turbo" as never, {
-    audio: Array.from(audio),
+    audio: toBase64(audio),
     ...(/^[a-z]{2}$/.test(langCode) ? { language: langCode } : {}),
   } as never)) as { text?: string };
   if (typeof result.text !== "string") {
     throw new Error("workers-ai: missing text");
   }
   return result.text.trim();
+}
+
+// Chunked base64 — String.fromCharCode(...bytes) overflows the call
+// stack for large buffers, so encode in 32 KB windows.
+function toBase64(bytes: Uint8Array): string {
+  let binary = "";
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binary);
 }
 
 // ── xAI Grok STT (via AI Gateway unified billing if no BYOK) ────────
