@@ -59,6 +59,7 @@ function App() {
 
   // Apple Music account linking
   const {
+    isAppleLinked,
     storedMusicUserToken,
     isTokenChecked,
     linkApple,
@@ -70,7 +71,6 @@ function App() {
     playback,
     queue,
     storefrontId,
-    isAuthorized: isAppleMusicAuthorized,
     isInitializing,
     login: appleMusicLogin,
     logout: appleMusicLogout,
@@ -79,6 +79,14 @@ function App() {
     storedMusicUserToken,
     isTokenChecked,
   });
+
+  // Connection status is ACCOUNT-level: driven by the backend profile token
+  // (isAppleLinked), not MusicKit's browser-cached session. MusicKit persists
+  // the Music User Token per-browser, so reading provider.isAuthorized made a
+  // brand-new account inherit a stale "connected" badge from whoever linked
+  // on this device before. The backend profile is the source of truth;
+  // provider.isAuthorized stays internal to the provider for playback.
+  const isAppleMusicAuthorized = isAppleLinked;
 
   // Album-driven palette: extract colours from the current track's artwork
   // and pipe them into CSS vars on <html>. Empty state stays neutral.

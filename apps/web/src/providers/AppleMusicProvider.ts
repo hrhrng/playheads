@@ -176,25 +176,16 @@ export class AppleMusicProvider implements MusicProvider {
       // every listener would be duplicated.
       this.registerEvents(mk);
 
-      // Reconcile MusicKit's (browser-persisted) auth with THIS account's
-      // stored token. MusicKit keeps the Music User Token in the browser
-      // independent of which playheads account is signed in, so:
-      //   - account has a token  → restore it (MusicKit v3 doesn't accept
-      //     musicUserToken in configure(); direct assignment is the way).
-      //   - account has NO token but MusicKit is still authorized → that's
-      //     a residual session from a previous account on this browser.
-      //     Clear it, otherwise the new account shows "connected" and would
-      //     play through the previous user's Apple Music subscription.
+      // Restore THIS account's stored token into MusicKit (v3 doesn't accept
+      // musicUserToken in configure(); direct assignment is the way).
+      // We deliberately do NOT clear a residual browser session when the
+      // account has no token: keeping it lets "Connect" link instantly
+      // (no full Apple re-login) and keeps playback working. The "connected"
+      // badge is gated on the backend account token (isAppleLinked) in
+      // App.tsx, so a residual session no longer shows a false "connected".
       if (this.config.storedMusicUserToken && !this._isAuthorized) {
         (mk as any).musicUserToken = this.config.storedMusicUserToken;
         this._isAuthorized = mk.isAuthorized;
-      } else if (!this.config.storedMusicUserToken && this._isAuthorized) {
-        // Pre-clear so the authorizationStatusDidChange that unauthorize()
-        // fires doesn't trip handleAuthLost() (which would toast a bogus
-        // "session expired — reconnect" at a brand-new account).
-        this._isAuthorized = false;
-        try { await mk.unauthorize(); } catch { /* ignore */ }
-        this._isAuthorized = mk.isAuthorized; // now false
       }
 
       // Keep the developer token fresh for marathon sessions. A timer fires
