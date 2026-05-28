@@ -1136,7 +1136,7 @@ function renderAsrTestPage() {
         \${providerRows || '<div style="font-size:12px;color:#9ca3af">Loading…</div>'}
 
         <div style="font-size:12px;font-weight:600;text-transform:uppercase;color:#6b7280;margin:16px 0 8px">Language hint</div>
-        <select onchange="asrLang = this.value;" style="width:100%;height:36px;padding:0 10px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;background:#fff">
+        <select onchange="asrSetLang(this.value)" style="width:100%;height:36px;padding:0 10px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;background:#fff">
           \${[['zh','中文 (zh)'],['en','English (en)'],['ja','日本語 (ja)'],['ko','한국어 (ko)'],['es','Español (es)'],['fr','Français (fr)'],['','auto-detect']].map(([v,l]) =>
             \`<option value="\${v}" \${asrLang===v?'selected':''}>\${l}</option>\`
           ).join('')}
@@ -1151,7 +1151,7 @@ function renderAsrTestPage() {
               \${['fish','elevenlabs','xai','groq'].map(k => \`
                 <div>
                   <label style="font-size:11px;color:#6b7280;display:block;margin-bottom:2px">\${k.toUpperCase()}</label>
-                  <input type="password" placeholder="leave empty to use env / unified billing" value="\${asrByokKeys[k] || ''}" oninput="asrByokKeys['\${k}'] = this.value" style="width:100%;height:32px;padding:0 8px;border:1px solid #e5e7eb;border-radius:6px;font-size:12px;font-family:ui-monospace,monospace" />
+                  <input type="password" placeholder="leave empty to use env / unified billing" value="\${asrByokKeys[k] || ''}" oninput="asrSetByokKey('\${k}', this.value)" style="width:100%;height:32px;padding:0 8px;border:1px solid #e5e7eb;border-radius:6px;font-size:12px;font-family:ui-monospace,monospace" />
                 </div>
               \`).join('')}
             </div>
@@ -1631,6 +1631,14 @@ window.asrToggleProvider = (key) => {
   else asrSelected.add(key);
   render();
 };
+
+// Inline onchange/oninput handlers run in a scope where top-level let
+// bindings aren't writable, so a bare "asrLang = this.value" lands on
+// window while asrRun() reads the script-scoped let — the dropdown
+// selection never reached the request. Route through a window fn, like
+// every other select in this file (callerAssign, searchOnProviderChange).
+window.asrSetLang = (v) => { asrLang = v; };
+window.asrSetByokKey = (k, v) => { asrByokKeys[k] = v; };
 
 window.asrToggleKeys = () => {
   asrShowKeys = !asrShowKeys;
