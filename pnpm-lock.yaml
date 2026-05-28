@@ -14,9 +14,9 @@ importers:
 
   apps/admin:
     dependencies:
-      '@msgpack/msgpack':
-        specifier: ^3.1.3
-        version: 3.1.3
+      '@playheads/asr':
+        specifier: workspace:*
+        version: link:../../packages/asr
       '@playheads/auth':
         specifier: workspace:*
         version: link:../../packages/auth
@@ -101,9 +101,9 @@ importers:
 
   apps/gateway:
     dependencies:
-      '@msgpack/msgpack':
-        specifier: ^3.1.3
-        version: 3.1.3
+      '@playheads/asr':
+        specifier: workspace:*
+        version: link:../../packages/asr
       '@playheads/auth':
         specifier: workspace:*
         version: link:../../packages/auth
@@ -393,6 +393,12 @@ importers:
       wrangler:
         specifier: ^4.73.0
         version: 4.73.0(@cloudflare/workers-types@4.20260313.1)
+
+  packages/asr:
+    dependencies:
+      '@msgpack/msgpack':
+        specifier: ^3.1.3
+        version: 3.1.3
 
   packages/auth:
     dependencies:

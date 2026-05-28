@@ -3,7 +3,7 @@ import { schema } from "@playheads/auth";
 import { eq, inArray, count, asc } from "drizzle-orm";
 import { MODEL_REGISTRY, CALLER_TYPES, createLLMModel } from "@playheads/llm-config";
 import { generateText } from "ai";
-import { runAsrProvider, ASR_PROVIDER_PRESETS } from "./asr-test";
+import { runAsrProvider, ASR_PROVIDER_PRESETS } from "@playheads/asr";
 
 interface Env {
   DB: D1Database;

@@ -36,6 +36,9 @@ bucket_name = "playheads-uploads"
 binding = "CONFIG_KV"
 id = "1d947fda21c9442aaa6c3877b0b32a0e"
 
+[ai]
+binding = "AI"
+
 [observability]
 enabled = true
 

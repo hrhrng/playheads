@@ -41,6 +41,9 @@ bucket_name = "playheads-uploads"
 binding = "CONFIG_KV"
 id = "1d947fda21c9442aaa6c3877b0b32a0e"
 
+[ai]
+binding = "AI"
+
 # Preview: serve uploads via R2 public managed domain so external LLM
 # providers can fetch images (preview gateway is behind Cloudflare Access).
 # Production leaves this empty so uploads stay behind our own gateway.

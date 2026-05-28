@@ -1,14 +1,15 @@
 /**
- * ASR provider catalog + transcription dispatcher.
+ * @playheads/asr — shared ASR provider catalog + transcription dispatcher.
  *
- * The admin "ASR" page stores provider configs in D1 (asr_provider_config:
- * providerType + model + encrypted apiKey + isActive) exactly like the LLM
+ * Single source of truth shared by the admin smoke test and the production
+ * gateway /api/transcribe, so what you test in admin is exactly what runs
+ * in production. Provider configs live in D1 (asr_provider_config:
+ * providerType + model + encrypted apiKey + isActive), mirroring the LLM
  * and Search configs. This module supplies:
- *   - ASR_PROVIDER_PRESETS: the catalog of supported provider types, their
+ *   - ASR_PROVIDER_PRESETS: catalog of supported provider types, their
  *     default model, and whether they need an API key.
- *   - runAsrProvider(): dispatch a recorded clip to one provider using a
- *     (already-decrypted) key + model. Used by the integrated smoke test
- *     and, later, by the production /api/transcribe path.
+ *   - runAsrProvider(): dispatch a clip to one provider using an
+ *     (already-decrypted) key + model.
  */
 
 import { encode as encodeMsgpack } from "@msgpack/msgpack";

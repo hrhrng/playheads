@@ -53,11 +53,12 @@ interface Env {
    *  via `wrangler kv key put --binding=CONFIG_KV waitlist:bypass true`. */
   CONFIG_KV: KVNamespace;
 
-  /** ASR provider secrets — used by /api/transcribe. Chinese routes to
-   *  Fish Audio (sync HTTP); other languages route to ElevenLabs Scribe
-   *  via Cloudflare AI Gateway. */
-  FISH_AUDIO_API_KEY?: string;
-  ELEVENLABS_API_KEY?: string;
+  /** ASR — /api/transcribe reads the active asr_provider_config row,
+   *  decrypts its key with ADMIN_ENCRYPTION_KEY, and dispatches via
+   *  @playheads/asr. AI binding serves the cf-workers-ai provider; the
+   *  AI Gateway vars + CF_AIG_TOKEN serve the gateway-proxied providers. */
+  AI?: Ai;
+  ADMIN_ENCRYPTION_KEY?: string;
   CF_AIG_TOKEN?: string;
   CLOUDFLARE_ACCOUNT_ID?: string;
   AI_GATEWAY_ID?: string;
