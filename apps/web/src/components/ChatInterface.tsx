@@ -470,8 +470,15 @@ export const ChatInterface = ({
                 const isCenter = idx === currentTrackIndex;
                 return (
                   <SwiperSlide key={track.id} virtualIndex={idx} className="!h-full">
-                    <div className="h-full flex flex-col items-center justify-center pb-20 px-6">
-                      <div className={`relative z-10 w-full max-w-xl mx-auto ${isCenter ? '' : 'pointer-events-none'}`}>
+                    {/* Reserve the bottom band for the Command Console
+                        (tools row + composer pill, ~176px) so the song
+                        stack lives strictly above it. The inner wrapper is
+                        a bounded flex column (flex-1 + min-h-0) and the
+                        cover inside flex-shrinks — together that keeps the
+                        title/lyrics/seek row above the composer on any
+                        viewport without magic per-element height caps. */}
+                    <div className="h-full flex flex-col items-center px-6 pt-4 pb-[176px]">
+                      <div className={`relative z-10 w-full max-w-xl mx-auto flex flex-col min-h-0 flex-1 ${isCenter ? '' : 'pointer-events-none'}`}>
                         <RecordPlayer
                           currentTrack={track}
                           isPaused={isCenter ? !isPlaying : false}
