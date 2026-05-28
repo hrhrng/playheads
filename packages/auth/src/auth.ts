@@ -31,7 +31,7 @@ async function sendEmailViaResend(
   subject: string,
   html: string,
 ) {
-  await fetch('https://api.resend.com/emails', {
+  const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -44,6 +44,16 @@ async function sendEmailViaResend(
       html,
     }),
   });
+  // Resend returns 4xx for unverified domains, sandbox recipient
+  // restrictions ("you can only send to your own address"), bad keys,
+  // rate limits, etc. Swallowing those left the client showing
+  // "check your email" while nothing was sent — surface it instead so
+  // better-auth returns an error and the failure shows in gateway logs.
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    console.error('[auth] Resend send failed', { status: res.status, to, detail: detail.slice(0, 500) });
+    throw new Error(`Resend ${res.status}: ${detail.slice(0, 300)}`);
+  }
 }
 
 /**
