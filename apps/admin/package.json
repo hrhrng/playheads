@@ -7,6 +7,7 @@
     "deploy": "wrangler deploy"
   },
   "dependencies": {
+    "@msgpack/msgpack": "^3.1.3",
     "@playheads/auth": "workspace:*",
     "@playheads/llm-config": "workspace:*",
     "ai": "^6.0.0",

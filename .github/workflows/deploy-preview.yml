@@ -171,6 +171,21 @@ jobs:
           if [ -n "${{ secrets.CF_AIG_TOKEN }}" ]; then
             printf '%s' "${{ secrets.CF_AIG_TOKEN }}" | npx wrangler secret put CF_AIG_TOKEN --name "$WORKER" && echo "✓ CF_AIG_TOKEN" || echo "✗ CF_AIG_TOKEN failed"
           fi
+          # ASR smoke-test page — env fallbacks for the BYOK key fields.
+          # All optional; missing keys disable the corresponding provider
+          # unless the operator pastes one in the UI.
+          if [ -n "${{ secrets.FISH_AUDIO_API_KEY }}" ]; then
+            printf '%s' "${{ secrets.FISH_AUDIO_API_KEY }}" | npx wrangler secret put FISH_AUDIO_API_KEY --name "$WORKER" && echo "✓ FISH_AUDIO_API_KEY" || echo "✗ FISH_AUDIO_API_KEY failed"
+          fi
+          if [ -n "${{ secrets.ELEVENLABS_API_KEY }}" ]; then
+            printf '%s' "${{ secrets.ELEVENLABS_API_KEY }}" | npx wrangler secret put ELEVENLABS_API_KEY --name "$WORKER" && echo "✓ ELEVENLABS_API_KEY" || echo "✗ ELEVENLABS_API_KEY failed"
+          fi
+          if [ -n "${{ secrets.XAI_API_KEY }}" ]; then
+            printf '%s' "${{ secrets.XAI_API_KEY }}" | npx wrangler secret put XAI_API_KEY --name "$WORKER" && echo "✓ XAI_API_KEY" || echo "✗ XAI_API_KEY failed"
+          fi
+          if [ -n "${{ secrets.GROQ_API_KEY }}" ]; then
+            printf '%s' "${{ secrets.GROQ_API_KEY }}" | npx wrangler secret put GROQ_API_KEY --name "$WORKER" && echo "✓ GROQ_API_KEY" || echo "✗ GROQ_API_KEY failed"
+          fi
 
       - name: Sync gateway secrets
         env:

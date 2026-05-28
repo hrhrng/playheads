@@ -18,7 +18,15 @@ id = "1d947fda21c9442aaa6c3877b0b32a0e"
 CLOUDFLARE_ACCOUNT_ID = "44af79e51582ca20c9003eb926540242"
 AI_GATEWAY_ID = "clash"
 
+# Workers AI binding — used by the ASR smoke test page to invoke
+# @cf/openai/whisper-large-v3-turbo (and Deepgram models on Workers AI)
+# without going through the REST API. Billed via the normal CF account.
+[ai]
+binding = "AI"
+
 # Secrets (set via: wrangler secret put <NAME> --name playheads-admin)
 # ADMIN_ENCRYPTION_KEY: 64-char hex string (32 bytes), used for AES-256-GCM key encryption
-# CF_AIG_TOKEN: Cloudflare AI Gateway token, for LLM test endpoint
+# CF_AIG_TOKEN: Cloudflare AI Gateway token, for LLM test + ASR test endpoints
+# FISH_AUDIO_API_KEY, ELEVENLABS_API_KEY: optional fallbacks for ASR smoke test
+# (test page also accepts pasted keys for ad-hoc BYOK runs).
 # Generate encryption key with: openssl rand -hex 32

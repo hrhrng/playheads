@@ -3,6 +3,7 @@ import { schema } from "@playheads/auth";
 import { eq, inArray, count, asc } from "drizzle-orm";
 import { MODEL_REGISTRY, CALLER_TYPES, createLLMModel } from "@playheads/llm-config";
 import { generateText } from "ai";
+import { handleAsrTest, ASR_PROVIDERS } from "./asr-test";
 
 interface Env {
   DB: D1Database;
@@ -12,6 +13,14 @@ interface Env {
   CF_AIG_TOKEN?: string;
   CLOUDFLARE_ACCOUNT_ID?: string;
   AI_GATEWAY_ID?: string;
+  // ASR smoke test — env keys are optional; the test page also accepts
+  // ad-hoc BYOK keys via form field so an operator can probe a provider
+  // without redeploying.
+  AI?: Ai;
+  FISH_AUDIO_API_KEY?: string;
+  ELEVENLABS_API_KEY?: string;
+  XAI_API_KEY?: string;
+  GROQ_API_KEY?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -92,6 +101,16 @@ export default {
 
     // Test LLM connection
     if (url.pathname === "/api/llm-test" && request.method === "POST") return handleLlmTest(request, env);
+
+    // ASR smoke test — fan out a recorded blob to one or many providers
+    // and return side-by-side transcript + latency.
+    if (url.pathname === "/api/asr-test" && request.method === "POST") {
+      return handleAsrTest(request, env);
+    }
+    // Static list of providers for the UI dropdown.
+    if (url.pathname === "/api/asr-providers" && request.method === "GET") {
+      return Response.json({ providers: ASR_PROVIDERS });
+    }
 
     // Search config endpoints
     if (url.pathname === "/api/search-config" && request.method === "GET") return handleSearchList(env);
@@ -720,6 +739,24 @@ let searchMsg = '';
 let searchMsgType = '';
 let searchKeyVisible = false;
 
+// ASR Test state
+let asrProviders = []; // loaded from /api/asr-providers
+let asrSelected = new Set(); // provider keys checked for the next run
+let asrLang = 'zh';
+let asrByokKeys = { fish: '', elevenlabs: '', xai: '', groq: '' };
+let asrShowKeys = false;
+let asrRecording = false;
+let asrTranscribing = false;
+let asrBlob = null; // last recorded Blob
+let asrBlobUrl = '';
+let asrResults = []; // last run's results
+let asrError = '';
+// Recorder refs (kept on window so async callbacks can find them
+// without going through React-style state).
+let _asrRecorder = null;
+let _asrStream = null;
+let _asrChunks = [];
+
 const SEARCH_PROVIDER_PRESETS = {
   brave:  { label: 'Brave Search', keyLabel: 'API Key', keyPlaceholder: 'BSAxxxxxxxx' },
   tavily: { label: 'Tavily', keyLabel: 'API Key', keyPlaceholder: 'tvly-...' },
@@ -751,6 +788,7 @@ function renderApp() {
     { id: 'waitlist', label: 'Waitlist', icon: icons.waitlist },
     { id: 'llm-config', label: 'LLM Config', icon: icons.key },
     { id: 'search-config', label: 'Search Config', icon: icons.search },
+    { id: 'asr-test', label: 'ASR Test', icon: icons.search },
   ];
 
   return \`<div class="app">
@@ -780,6 +818,7 @@ function renderPageContent() {
   if (currentPage === 'waitlist') return renderWaitlistPage();
   if (currentPage === 'llm-config') return renderLlmConfigPage();
   if (currentPage === 'search-config') return renderSearchConfigPage();
+  if (currentPage === 'asr-test') return renderAsrTestPage();
   return '<div class="main-body"><p class="empty">Coming soon</p></div>';
 }
 
@@ -1043,6 +1082,124 @@ function renderSearchModal() {
       </form>
     </div>
   </div>\`;
+}
+
+// ── ASR Test page ─────────────────────────────────────────────────
+// Hold-to-talk mic + provider multi-select + side-by-side results.
+function renderAsrTestPage() {
+  const providerRows = asrProviders.map(p => {
+    const checked = asrSelected.has(p.key);
+    const billing = p.unifiedBilling ? '<span style="color:#16a34a">unified billing</span>' : '<span style="color:#9ca3af">BYOK</span>';
+    return \`
+      <label style="display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid \${checked ? '#111827' : '#e5e7eb'};border-radius:8px;cursor:pointer;background:\${checked ? '#fafafa' : '#fff'};margin-bottom:6px">
+        <input type="checkbox" \${checked ? 'checked' : ''} onchange="asrToggleProvider('\${p.key}')" style="margin:0" />
+        <div style="flex:1">
+          <div style="font-weight:500;font-size:13px">\${p.label}</div>
+          <div style="font-size:11px;color:#6b7280">\${p.model} · \${p.cost} · \${billing}</div>
+        </div>
+      </label>
+    \`;
+  }).join('');
+
+  const resultRows = asrResults.map(r => {
+    const provider = asrProviders.find(p => p.key === r.provider);
+    const label = provider?.label || r.provider;
+    const ok = !r.error;
+    return \`
+      <div style="padding:14px;border:1px solid \${ok ? '#e5e7eb' : '#fecaca'};border-radius:8px;margin-bottom:8px;background:\${ok ? '#fff' : '#fef2f2'}">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
+          <div style="font-weight:500;font-size:13px">\${label}</div>
+          <div style="font-size:11px;color:#6b7280">\${r.latencyMs} ms · \${(r.bytes/1024).toFixed(1)} KB</div>
+        </div>
+        <div style="font-size:11px;color:#9ca3af;margin-bottom:6px">\${r.model}</div>
+        \${ok
+          ? \`<div style="font-size:14px;line-height:1.5;font-family:ui-monospace,monospace;white-space:pre-wrap;word-break:break-word">\${escapeHtml(r.text || '')}</div>\`
+          : \`<div style="font-size:12px;color:#b91c1c;font-family:ui-monospace,monospace;white-space:pre-wrap;word-break:break-word">\${escapeHtml(r.error || '')}</div>\`
+        }
+      </div>
+    \`;
+  }).join('');
+
+  const hasAudio = !!asrBlob;
+  const canRun = hasAudio && asrSelected.size > 0 && !asrTranscribing;
+
+  return \`<div class="main-body">
+    <div class="page-header">
+      <h2>ASR Smoke Test</h2>
+      <div style="font-size:12px;color:#6b7280">Record once, fan out to multiple providers in parallel, compare side by side.</div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:320px 1fr;gap:24px;margin-top:16px">
+      <!-- LEFT: controls -->
+      <div>
+        <div style="font-size:12px;font-weight:600;text-transform:uppercase;color:#6b7280;margin-bottom:8px">Providers</div>
+        \${providerRows || '<div style="font-size:12px;color:#9ca3af">Loading…</div>'}
+
+        <div style="font-size:12px;font-weight:600;text-transform:uppercase;color:#6b7280;margin:16px 0 8px">Language hint</div>
+        <select onchange="asrLang = this.value;" style="width:100%;height:36px;padding:0 10px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;background:#fff">
+          \${[['zh','中文 (zh)'],['en','English (en)'],['ja','日本語 (ja)'],['ko','한국어 (ko)'],['es','Español (es)'],['fr','Français (fr)'],['','auto-detect']].map(([v,l]) =>
+            \`<option value="\${v}" \${asrLang===v?'selected':''}>\${l}</option>\`
+          ).join('')}
+        </select>
+
+        <div style="margin-top:16px">
+          <button class="btn btn-ghost" onclick="asrToggleKeys()" style="font-size:12px;padding:6px 10px">
+            \${asrShowKeys ? '▼' : '▶'} BYOK keys (override env)
+          </button>
+          \${asrShowKeys ? \`
+            <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px">
+              \${['fish','elevenlabs','xai','groq'].map(k => \`
+                <div>
+                  <label style="font-size:11px;color:#6b7280;display:block;margin-bottom:2px">\${k.toUpperCase()}</label>
+                  <input type="password" placeholder="leave empty to use env / unified billing" value="\${asrByokKeys[k] || ''}" oninput="asrByokKeys['\${k}'] = this.value" style="width:100%;height:32px;padding:0 8px;border:1px solid #e5e7eb;border-radius:6px;font-size:12px;font-family:ui-monospace,monospace" />
+                </div>
+              \`).join('')}
+            </div>
+          \` : ''}
+        </div>
+      </div>
+
+      <!-- RIGHT: mic + results -->
+      <div>
+        <div style="font-size:12px;font-weight:600;text-transform:uppercase;color:#6b7280;margin-bottom:8px">Recording</div>
+        <div style="display:flex;gap:12px;align-items:center;padding:16px;border:1px solid #e5e7eb;border-radius:10px;background:#fafafa">
+          <button
+            id="asr-mic-btn"
+            onpointerdown="asrStart()"
+            onpointerup="asrStop()"
+            onpointerleave="asrCancel()"
+            onpointercancel="asrCancel()"
+            class="btn \${asrRecording ? 'btn-red' : 'btn-primary'}"
+            style="width:64px;height:64px;border-radius:32px;font-size:20px;padding:0;flex-shrink:0;touch-action:none;user-select:none"
+          >🎙️</button>
+          <div style="flex:1;font-size:13px;color:#374151">
+            \${asrRecording ? '<span style="color:#dc2626">● Recording — release to stop</span>'
+              : hasAudio ? \`<span>✓ \${(asrBlob.size/1024).toFixed(1)} KB recorded · \${asrBlob.type || 'audio/webm'}</span><audio controls src="\${asrBlobUrl}" style="width:100%;margin-top:6px;height:32px"></audio>\`
+              : '<span style="color:#9ca3af">Hold the mic to record</span>'}
+          </div>
+          <button
+            class="btn btn-primary"
+            onclick="asrRun()"
+            \${canRun ? '' : 'disabled'}
+            style="height:64px;padding:0 20px"
+          >\${asrTranscribing ? 'Running…' : \`Run (\${asrSelected.size})\`}</button>
+        </div>
+        \${asrError ? \`<div style="margin-top:10px;padding:10px;border-radius:8px;background:#fef2f2;color:#b91c1c;font-size:12px;font-family:ui-monospace,monospace">\${escapeHtml(asrError)}</div>\` : ''}
+
+        <div style="font-size:12px;font-weight:600;text-transform:uppercase;color:#6b7280;margin:20px 0 8px">Results</div>
+        \${resultRows || '<div style="font-size:12px;color:#9ca3af;padding:12px;border:1px dashed #e5e7eb;border-radius:8px">Run a transcription to see results here.</div>'}
+      </div>
+    </div>
+  </div>\`;
+}
+
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function renderWaitlistPage() {
@@ -1447,7 +1604,134 @@ window.navigateTo = (p) => {
   currentPage = p;
   if (p === 'llm-config' && llmProviders.length === 0) fetchLlmData();
   if (p === 'search-config' && searchProviders.length === 0) fetchSearchData();
+  if (p === 'asr-test' && asrProviders.length === 0) fetchAsrProviders();
   render();
+};
+
+// ── ASR test handlers ──────────────────────────────────────────
+async function fetchAsrProviders() {
+  try {
+    const res = await fetch('/api/asr-providers');
+    const json = await res.json();
+    asrProviders = json.providers || [];
+    // Default-select the unified-billing providers — those are the
+    // ones we can run without pasting a BYOK key.
+    if (asrSelected.size === 0) {
+      asrProviders.forEach(p => { if (p.unifiedBilling) asrSelected.add(p.key); });
+    }
+    render();
+  } catch (e) {
+    asrError = String(e);
+    render();
+  }
+}
+
+window.asrToggleProvider = (key) => {
+  if (asrSelected.has(key)) asrSelected.delete(key);
+  else asrSelected.add(key);
+  render();
+};
+
+window.asrToggleKeys = () => {
+  asrShowKeys = !asrShowKeys;
+  render();
+};
+
+// MediaRecorder picks the first MIME the browser supports — order
+// biased toward opus (lower bitrate at speech) then mp4 for Safari.
+function _asrPickMime() {
+  if (typeof MediaRecorder === 'undefined') return '';
+  for (const m of ['audio/webm;codecs=opus','audio/ogg;codecs=opus','audio/webm','audio/mp4','audio/mpeg']) {
+    if (MediaRecorder.isTypeSupported(m)) return m;
+  }
+  return '';
+}
+
+window.asrStart = async () => {
+  if (_asrRecorder) return;
+  asrError = '';
+  asrResults = [];
+  // Free the URL from the previous take so we don't leak.
+  if (asrBlobUrl) { URL.revokeObjectURL(asrBlobUrl); asrBlobUrl = ''; }
+  asrBlob = null;
+  _asrChunks = [];
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    _asrStream = stream;
+    const mime = _asrPickMime();
+    const rec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+    rec.ondataavailable = (e) => { if (e.data && e.data.size > 0) _asrChunks.push(e.data); };
+    rec.onstop = () => {
+      const blobMime = rec.mimeType || mime || 'audio/webm';
+      const blob = new Blob(_asrChunks, { type: blobMime });
+      _asrStream && _asrStream.getTracks().forEach(t => t.stop());
+      _asrStream = null;
+      _asrRecorder = null;
+      _asrChunks = [];
+      if (blob.size > 0) {
+        asrBlob = blob;
+        asrBlobUrl = URL.createObjectURL(blob);
+      }
+      asrRecording = false;
+      render();
+    };
+    _asrRecorder = rec;
+    rec.start();
+    asrRecording = true;
+    render();
+  } catch (e) {
+    asrError = 'getUserMedia: ' + (e && e.message ? e.message : String(e));
+    _asrStream && _asrStream.getTracks().forEach(t => t.stop());
+    _asrStream = null;
+    _asrRecorder = null;
+    asrRecording = false;
+    render();
+  }
+};
+
+window.asrStop = () => {
+  const rec = _asrRecorder;
+  if (!rec) return;
+  if (rec.state === 'recording') rec.stop();
+};
+
+window.asrCancel = () => {
+  // Same as stop — we keep the blob for replay even on pointerleave,
+  // since a smoke-test page benefits from not losing the recording.
+  window.asrStop();
+};
+
+window.asrRun = async () => {
+  if (!asrBlob || asrSelected.size === 0 || asrTranscribing) return;
+  asrTranscribing = true;
+  asrError = '';
+  asrResults = [];
+  render();
+
+  const ext = (asrBlob.type || '').includes('mp4') ? 'm4a' : ((asrBlob.type || '').includes('ogg') ? 'ogg' : 'webm');
+  const fd = new FormData();
+  fd.set('audio', asrBlob, 'recording.' + ext);
+  fd.set('lang', asrLang || '');
+  fd.set('providers', [...asrSelected].join(','));
+  // Only include BYOK keys that are non-empty — server falls back to
+  // env / unified billing for anything missing here.
+  const nonEmpty = Object.fromEntries(Object.entries(asrByokKeys).filter(([,v]) => v && v.length > 0));
+  if (Object.keys(nonEmpty).length > 0) fd.set('apiKeys', JSON.stringify(nonEmpty));
+
+  try {
+    const res = await fetch('/api/asr-test', { method: 'POST', body: fd });
+    if (!res.ok) {
+      const t = await res.text().catch(() => '');
+      throw new Error('HTTP ' + res.status + ': ' + t.slice(0, 200));
+    }
+    const json = await res.json();
+    asrResults = json.results || [];
+  } catch (e) {
+    asrError = e && e.message ? e.message : String(e);
+  } finally {
+    asrTranscribing = false;
+    render();
+  }
 };
 
 fetchData();
