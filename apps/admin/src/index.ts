@@ -3,7 +3,7 @@ import { schema } from "@playheads/auth";
 import { eq, inArray, count, asc } from "drizzle-orm";
 import { MODEL_REGISTRY, CALLER_TYPES, createLLMModel } from "@playheads/llm-config";
 import { generateText } from "ai";
-import { handleAsrTest, ASR_PROVIDERS } from "./asr-test";
+import { runAsrProvider, ASR_PROVIDER_PRESETS } from "./asr-test";
 
 interface Env {
   DB: D1Database;
@@ -50,6 +50,20 @@ interface SearchProviderRow {
   updatedAt: number;
 }
 
+// ---------------------------------------------------------------------------
+// ASR Provider Config types
+// ---------------------------------------------------------------------------
+interface AsrProviderRow {
+  id: string;
+  name: string;
+  providerType: string; // key into ASR_PROVIDER_PRESETS
+  model: string;
+  apiKey: string;       // encrypted; empty for cf-workers-ai (binding billing)
+  isActive: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -58,6 +72,7 @@ export default {
     try {
       await ensureLlmTable(env);
       await ensureSearchTable(env);
+      await ensureAsrTable(env);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       return new Response(`DB init error: ${msg}`, { status: 500 });
@@ -102,14 +117,23 @@ export default {
     // Test LLM connection
     if (url.pathname === "/api/llm-test" && request.method === "POST") return handleLlmTest(request, env);
 
-    // ASR smoke test — fan out a recorded blob to one or many providers
-    // and return side-by-side transcript + latency.
-    if (url.pathname === "/api/asr-test" && request.method === "POST") {
-      return handleAsrTest(request, env);
+    // ASR config — CRUD + activate, mirrors search-config.
+    if (url.pathname === "/api/asr-config" && request.method === "GET") return handleAsrList(env);
+    if (url.pathname === "/api/asr-config" && request.method === "POST") return handleAsrCreate(request, env);
+    const asrEditMatch = url.pathname.match(/^\/api\/asr-config\/([^/]+)$/);
+    if (asrEditMatch) {
+      const id = asrEditMatch[1];
+      if (request.method === "PATCH") return handleAsrUpdate(id, request, env);
+      if (request.method === "DELETE") return handleAsrDelete(id, env);
     }
-    // Static list of providers for the UI dropdown.
-    if (url.pathname === "/api/asr-providers" && request.method === "GET") {
-      return Response.json({ providers: ASR_PROVIDERS });
+    const asrActivateMatch = url.pathname.match(/^\/api\/asr-config\/([^/]+)\/activate$/);
+    if (asrActivateMatch && request.method === "POST") return handleAsrActivate(asrActivateMatch[1], env);
+    // Integrated smoke test — run one stored config against a recorded clip.
+    const asrTestMatch = url.pathname.match(/^\/api\/asr-config\/([^/]+)\/test$/);
+    if (asrTestMatch && request.method === "POST") return handleAsrConfigTest(asrTestMatch[1], request, env);
+    // Provider catalog for the add/edit modal dropdown.
+    if (url.pathname === "/api/asr-presets" && request.method === "GET") {
+      return Response.json({ presets: ASR_PROVIDER_PRESETS });
     }
 
     // Search config endpoints
@@ -598,6 +622,129 @@ async function handleSearchActivate(id: string, env: Env): Promise<Response> {
   return Response.json({ success: true });
 }
 
+// ---------------------------------------------------------------------------
+// ASR Config — DB migration + handlers (mirrors search-config)
+// ---------------------------------------------------------------------------
+
+async function ensureAsrTable(env: Env): Promise<void> {
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS asr_provider_config (
+    id           TEXT PRIMARY KEY,
+    name         TEXT NOT NULL,
+    providerType TEXT NOT NULL,
+    model        TEXT NOT NULL DEFAULT '',
+    apiKey       TEXT NOT NULL DEFAULT '',
+    isActive     INTEGER NOT NULL DEFAULT 0,
+    createdAt    INTEGER NOT NULL,
+    updatedAt    INTEGER NOT NULL
+  )`).run();
+}
+
+async function handleAsrList(env: Env): Promise<Response> {
+  const rows = await env.DB.prepare(
+    "SELECT * FROM asr_provider_config ORDER BY isActive DESC, createdAt ASC"
+  ).all<AsrProviderRow>();
+  const data = await Promise.all((rows.results || []).map(async (r) => ({
+    ...r,
+    apiKey: r.apiKey ? maskKey(await decrypt(r.apiKey, env)) : "",
+  })));
+  return Response.json({ data });
+}
+
+async function handleAsrCreate(request: Request, env: Env): Promise<Response> {
+  const body = await request.json() as Partial<AsrProviderRow>;
+  if (!body.providerType) {
+    return Response.json({ error: "providerType required" }, { status: 400 });
+  }
+  const preset = ASR_PROVIDER_PRESETS[body.providerType];
+  const now = Date.now();
+  const id = crypto.randomUUID();
+  const encKey = body.apiKey ? await encrypt(body.apiKey, env) : "";
+  await env.DB.prepare(
+    `INSERT INTO asr_provider_config (id,name,providerType,model,apiKey,isActive,createdAt,updatedAt) VALUES (?,?,?,?,?,0,?,?)`
+  ).bind(
+    id,
+    body.name || preset?.label || body.providerType,
+    body.providerType,
+    body.model || preset?.defaultModel || "",
+    encKey,
+    now,
+    now,
+  ).run();
+  return Response.json({ success: true, id });
+}
+
+async function handleAsrUpdate(id: string, request: Request, env: Env): Promise<Response> {
+  const body = await request.json() as Partial<AsrProviderRow>;
+  const now = Date.now();
+  const updates: string[] = ["updatedAt = ?"];
+  const vals: unknown[] = [now];
+  if (body.name !== undefined) { updates.push("name = ?"); vals.push(body.name); }
+  if (body.providerType !== undefined) { updates.push("providerType = ?"); vals.push(body.providerType); }
+  if (body.model !== undefined) { updates.push("model = ?"); vals.push(body.model); }
+  if (body.apiKey !== undefined && body.apiKey && !body.apiKey.startsWith("****")) {
+    updates.push("apiKey = ?"); vals.push(await encrypt(body.apiKey, env));
+  }
+  vals.push(id);
+  await env.DB.prepare(`UPDATE asr_provider_config SET ${updates.join(", ")} WHERE id = ?`).bind(...vals).run();
+  return Response.json({ success: true });
+}
+
+async function handleAsrDelete(id: string, env: Env): Promise<Response> {
+  await env.DB.prepare("DELETE FROM asr_provider_config WHERE id = ?").bind(id).run();
+  return Response.json({ success: true });
+}
+
+async function handleAsrActivate(id: string, env: Env): Promise<Response> {
+  await env.DB.batch([
+    env.DB.prepare("UPDATE asr_provider_config SET isActive = 0, updatedAt = ?").bind(Date.now()),
+    env.DB.prepare("UPDATE asr_provider_config SET isActive = 1, updatedAt = ? WHERE id = ?").bind(Date.now(), id),
+  ]);
+  return Response.json({ success: true });
+}
+
+/**
+ * Integrated smoke test — run one stored ASR config against a recorded
+ * clip. Multipart in: audio (+ optional lang). Decrypts the row's key and
+ * dispatches via runAsrProvider.
+ */
+async function handleAsrConfigTest(id: string, request: Request, env: Env): Promise<Response> {
+  const row = await env.DB.prepare("SELECT * FROM asr_provider_config WHERE id = ?")
+    .bind(id).first<AsrProviderRow>();
+  if (!row) return Response.json({ error: "config not found" }, { status: 404 });
+
+  let form: FormData;
+  try { form = await request.formData(); }
+  catch { return Response.json({ error: "multipart required" }, { status: 400 }); }
+
+  const entry = form.get("audio");
+  if (!entry || typeof entry === "string" ||
+      typeof (entry as { arrayBuffer?: unknown }).arrayBuffer !== "function") {
+    return Response.json({ error: "audio field required" }, { status: 400 });
+  }
+  const file = entry as unknown as { name?: string; type: string; arrayBuffer: () => Promise<ArrayBuffer> };
+  const audio = new Uint8Array(await file.arrayBuffer());
+  const lang = (form.get("lang") as string | null)?.trim() || "";
+
+  const apiKey = row.apiKey ? await decrypt(row.apiKey, env) : "";
+  const start = Date.now();
+  try {
+    const text = await runAsrProvider({
+      providerType: row.providerType,
+      model: row.model,
+      apiKey: apiKey || undefined,
+      audio,
+      mime: file.type || "audio/webm",
+      filename: file.name || "recording.webm",
+      lang,
+      env,
+    });
+    return Response.json({ text, latencyMs: Date.now() - start, bytes: audio.byteLength, model: row.model });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return Response.json({ error: msg, latencyMs: Date.now() - start, bytes: audio.byteLength }, { status: 502 });
+  }
+}
+
 // --- HTML ---
 
 function serveHTML(): Response {
@@ -739,20 +886,21 @@ let searchMsg = '';
 let searchMsgType = '';
 let searchKeyVisible = false;
 
-// ASR Test state
-let asrProviders = []; // loaded from /api/asr-providers
-let asrSelected = new Set(); // provider keys checked for the next run
-let asrLang = ''; // '' = auto-detect (default)
-let asrByokKeys = { fish: '', elevenlabs: '', xai: '', groq: '' };
-let asrShowKeys = false;
+// ASR Config state (mirrors Search Config + an integrated recorder)
+let asrConfigs = [];           // rows from /api/asr-config
+let asrPresets = {};           // catalog from /api/asr-presets
+let asrLoading = false;
+let asrModal = null;           // null | { mode: 'add'|'edit', data: {} }
+let asrMsg = '';
+let asrMsgType = '';
+let asrKeyVisible = false;
+// Shared recorder + per-config test results
+let asrLang = '';              // '' = auto-detect
 let asrRecording = false;
-let asrTranscribing = false;
-let asrBlob = null; // last recorded Blob
+let asrBlob = null;            // last recorded Blob
 let asrBlobUrl = '';
-let asrResults = []; // last run's results
-let asrError = '';
-// Recorder refs (kept on window so async callbacks can find them
-// without going through React-style state).
+let asrTestingId = null;       // config id currently transcribing
+let asrResults = {};           // configId -> { text } | { error } | { latencyMs, bytes, model }
 let _asrRecorder = null;
 let _asrStream = null;
 let _asrChunks = [];
@@ -788,7 +936,7 @@ function renderApp() {
     { id: 'waitlist', label: 'Waitlist', icon: icons.waitlist },
     { id: 'llm-config', label: 'LLM Config', icon: icons.key },
     { id: 'search-config', label: 'Search Config', icon: icons.search },
-    { id: 'asr-test', label: 'ASR Test', icon: icons.search },
+    { id: 'asr-config', label: 'ASR', icon: icons.search },
   ];
 
   return \`<div class="app">
@@ -811,6 +959,7 @@ function renderApp() {
     \${showInviteModal ? renderInviteModal() : ''}
     \${llmModal ? renderLlmModal() : ''}
     \${searchModal ? renderSearchModal() : ''}
+    \${asrModal ? renderAsrModal() : ''}
   </div>\`;
 }
 
@@ -818,7 +967,7 @@ function renderPageContent() {
   if (currentPage === 'waitlist') return renderWaitlistPage();
   if (currentPage === 'llm-config') return renderLlmConfigPage();
   if (currentPage === 'search-config') return renderSearchConfigPage();
-  if (currentPage === 'asr-test') return renderAsrTestPage();
+  if (currentPage === 'asr-config') return renderAsrConfigPage();
   return '<div class="main-body"><p class="empty">Coming soon</p></div>';
 }
 
@@ -1086,109 +1235,130 @@ function renderSearchModal() {
 
 // ── ASR Test page ─────────────────────────────────────────────────
 // Hold-to-talk mic + provider multi-select + side-by-side results.
-function renderAsrTestPage() {
-  const providerRows = asrProviders.map(p => {
-    const checked = asrSelected.has(p.key);
-    const billing = p.unifiedBilling ? '<span style="color:#16a34a">unified billing</span>' : '<span style="color:#9ca3af">BYOK</span>';
-    return \`
-      <label style="display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid \${checked ? '#111827' : '#e5e7eb'};border-radius:8px;cursor:pointer;background:\${checked ? '#fafafa' : '#fff'};margin-bottom:6px">
-        <input type="checkbox" \${checked ? 'checked' : ''} onchange="asrToggleProvider('\${p.key}')" style="margin:0" />
-        <div style="flex:1">
-          <div style="font-weight:500;font-size:13px">\${p.label}</div>
-          <div style="font-size:11px;color:#6b7280">\${p.model} · \${p.cost} · \${billing}</div>
-        </div>
-      </label>
-    \`;
-  }).join('');
-
-  const resultRows = asrResults.map(r => {
-    const provider = asrProviders.find(p => p.key === r.provider);
-    const label = provider?.label || r.provider;
-    const ok = !r.error;
-    return \`
-      <div style="padding:14px;border:1px solid \${ok ? '#e5e7eb' : '#fecaca'};border-radius:8px;margin-bottom:8px;background:\${ok ? '#fff' : '#fef2f2'}">
-        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
-          <div style="font-weight:500;font-size:13px">\${label}</div>
-          <div style="font-size:11px;color:#6b7280">\${r.latencyMs} ms · \${(r.bytes/1024).toFixed(1)} KB</div>
-        </div>
-        <div style="font-size:11px;color:#9ca3af;margin-bottom:6px">\${r.model}</div>
-        \${ok
-          ? \`<div style="font-size:14px;line-height:1.5;font-family:ui-monospace,monospace;white-space:pre-wrap;word-break:break-word">\${escapeHtml(r.text || '')}</div>\`
-          : \`<div style="font-size:12px;color:#b91c1c;font-family:ui-monospace,monospace;white-space:pre-wrap;word-break:break-word">\${escapeHtml(r.error || '')}</div>\`
-        }
+function renderAsrConfigPage() {
+  const active = asrConfigs.find(p => p.isActive);
+  const activeCard = active ? \`
+    <div style="background:#fff;border:2px solid #111;border-radius:12px;padding:20px 24px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <div style="font-size:11px;color:#9ca3af;font-weight:500;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Active ASR Provider</div>
+        <div style="font-weight:600;font-size:15px">\${active.name}</div>
+        <div style="font-size:12px;color:#6b7280;margin-top:2px">\${(asrPresets[active.providerType]?.label) || active.providerType} · \${active.model || '—'}</div>
       </div>
-    \`;
-  }).join('');
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="width:8px;height:8px;background:#22c55e;border-radius:50%;display:inline-block"></span>
+        <span style="font-size:12px;color:#15803d;font-weight:500">Active</span>
+      </div>
+    </div>\` : \`
+    <div style="background:#fefce8;border:1px solid #fef08a;border-radius:12px;padding:16px 20px;margin-bottom:20px;font-size:13px;color:#a16207">
+      No active ASR provider — add one and click Activate. Production /api/transcribe uses the active provider.
+    </div>\`;
 
   const hasAudio = !!asrBlob;
-  const canRun = hasAudio && asrSelected.size > 0 && !asrTranscribing;
-
-  return \`<div class="main-body">
-    <div class="page-header">
-      <h2>ASR Smoke Test</h2>
-      <div style="font-size:12px;color:#6b7280">Record once, fan out to multiple providers in parallel, compare side by side.</div>
-    </div>
-
-    <div style="display:grid;grid-template-columns:320px 1fr;gap:24px;margin-top:16px">
-      <!-- LEFT: controls -->
-      <div>
-        <div style="font-size:12px;font-weight:600;text-transform:uppercase;color:#6b7280;margin-bottom:8px">Providers</div>
-        \${providerRows || '<div style="font-size:12px;color:#9ca3af">Loading…</div>'}
-
-        <div style="font-size:12px;font-weight:600;text-transform:uppercase;color:#6b7280;margin:16px 0 8px">Language hint</div>
-        <select onchange="asrSetLang(this.value)" style="width:100%;height:36px;padding:0 10px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px;background:#fff">
-          \${[['zh','中文 (zh)'],['en','English (en)'],['ja','日本語 (ja)'],['ko','한국어 (ko)'],['es','Español (es)'],['fr','Français (fr)'],['','auto-detect']].map(([v,l]) =>
-            \`<option value="\${v}" \${asrLang===v?'selected':''}>\${l}</option>\`
-          ).join('')}
+  const recorder = \`
+    <div style="display:flex;gap:12px;align-items:center;padding:14px 16px;border:1px solid #e5e7eb;border-radius:10px;background:#fafafa;margin-bottom:16px">
+      <button id="asr-mic-btn"
+        onpointerdown="asrStart()" onpointerup="asrStop()" onpointerleave="asrCancel()" onpointercancel="asrCancel()"
+        class="btn \${asrRecording ? 'btn-red' : 'btn-primary'}"
+        style="width:56px;height:56px;border-radius:28px;font-size:18px;padding:0;flex-shrink:0;touch-action:none;user-select:none">🎙️</button>
+      <div style="flex:1;font-size:13px;color:#374151">
+        \${asrRecording ? '<span style="color:#dc2626">● Recording — release to stop</span>'
+          : hasAudio ? \`<span>✓ \${(asrBlob.size/1024).toFixed(1)} KB · \${asrBlob.type || 'audio/webm'}</span><audio controls src="\${asrBlobUrl}" style="width:100%;margin-top:6px;height:30px"></audio>\`
+          : '<span style="color:#9ca3af">Hold the mic, speak, release — then hit Test on a provider below.</span>'}
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end">
+        <span style="font-size:11px;color:#9ca3af">lang hint</span>
+        <select onchange="asrSetLang(this.value)" style="height:32px;padding:0 8px;border:1px solid #e5e7eb;border-radius:6px;font-size:12px;background:#fff">
+          \${[['','auto-detect'],['zh','中文 (zh)'],['en','English (en)'],['ja','日本語 (ja)'],['ko','한국어 (ko)'],['es','Español (es)'],['fr','Français (fr)']].map(([v,l]) =>
+            \`<option value="\${v}" \${asrLang===v?'selected':''}>\${l}</option>\`).join('')}
         </select>
-
-        <div style="margin-top:16px">
-          <button class="btn btn-ghost" onclick="asrToggleKeys()" style="font-size:12px;padding:6px 10px">
-            \${asrShowKeys ? '▼' : '▶'} BYOK keys (override env)
-          </button>
-          \${asrShowKeys ? \`
-            <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px">
-              \${['fish','elevenlabs','xai','groq'].map(k => \`
-                <div>
-                  <label style="font-size:11px;color:#6b7280;display:block;margin-bottom:2px">\${k.toUpperCase()}</label>
-                  <input type="password" placeholder="leave empty to use env / unified billing" value="\${asrByokKeys[k] || ''}" oninput="asrSetByokKey('\${k}', this.value)" style="width:100%;height:32px;padding:0 8px;border:1px solid #e5e7eb;border-radius:6px;font-size:12px;font-family:ui-monospace,monospace" />
-                </div>
-              \`).join('')}
-            </div>
-          \` : ''}
-        </div>
       </div>
+    </div>\`;
 
-      <!-- RIGHT: mic + results -->
-      <div>
-        <div style="font-size:12px;font-weight:600;text-transform:uppercase;color:#6b7280;margin-bottom:8px">Recording</div>
-        <div style="display:flex;gap:12px;align-items:center;padding:16px;border:1px solid #e5e7eb;border-radius:10px;background:#fafafa">
-          <button
-            id="asr-mic-btn"
-            onpointerdown="asrStart()"
-            onpointerup="asrStop()"
-            onpointerleave="asrCancel()"
-            onpointercancel="asrCancel()"
-            class="btn \${asrRecording ? 'btn-red' : 'btn-primary'}"
-            style="width:64px;height:64px;border-radius:32px;font-size:20px;padding:0;flex-shrink:0;touch-action:none;user-select:none"
-          >🎙️</button>
-          <div style="flex:1;font-size:13px;color:#374151">
-            \${asrRecording ? '<span style="color:#dc2626">● Recording — release to stop</span>'
-              : hasAudio ? \`<span>✓ \${(asrBlob.size/1024).toFixed(1)} KB recorded · \${asrBlob.type || 'audio/webm'}</span><audio controls src="\${asrBlobUrl}" style="width:100%;margin-top:6px;height:32px"></audio>\`
-              : '<span style="color:#9ca3af">Hold the mic to record</span>'}
+  const rows = asrConfigs.map(p => {
+    const presetLabel = (asrPresets[p.providerType]?.label) || p.providerType;
+    const res = asrResults[p.id];
+    const testing = asrTestingId === p.id;
+    const resultBlock = res ? (res.error
+      ? \`<div style="margin-top:6px;font-size:12px;color:#b91c1c;font-family:ui-monospace,monospace;white-space:pre-wrap;word-break:break-word">\${escapeHtml(res.error)}</div>\`
+      : \`<div style="margin-top:6px;font-size:14px;line-height:1.5;font-family:ui-monospace,monospace;white-space:pre-wrap;word-break:break-word">\${escapeHtml(res.text || '')}<span style="color:#9ca3af;font-size:11px"> · \${res.latencyMs} ms</span></div>\`
+    ) : '';
+    return \`
+    <tr>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px">
+          \${p.isActive ? '<span style="font-size:14px">★</span>' : '<span style="font-size:14px;opacity:.2">★</span>'}
+          <div>
+            <div style="font-weight:500">\${p.name}</div>
+            <div style="font-size:11px;color:#9ca3af">\${presetLabel} · \${p.model || '—'}</div>
           </div>
-          <button
-            class="btn btn-primary"
-            onclick="asrRun()"
-            \${canRun ? '' : 'disabled'}
-            style="height:64px;padding:0 20px"
-          >\${asrTranscribing ? 'Running…' : \`Run (\${asrSelected.size})\`}</button>
         </div>
-        \${asrError ? \`<div style="margin-top:10px;padding:10px;border-radius:8px;background:#fef2f2;color:#b91c1c;font-size:12px;font-family:ui-monospace,monospace">\${escapeHtml(asrError)}</div>\` : ''}
+        \${resultBlock}
+      </td>
+      <td style="font-family:monospace;font-size:12px;color:#9ca3af">\${p.apiKey || (asrPresets[p.providerType] && !asrPresets[p.providerType].needsKey ? '(binding)' : '—')}</td>
+      <td class="actions">
+        <button class="btn btn-ghost" onclick="asrTestRow('\${p.id}')" \${hasAudio && !testing ? '' : 'disabled'}>\${testing ? '…' : 'Test'}</button>
+        \${!p.isActive ? \`<button class="btn btn-green" onclick="asrActivate('\${p.id}')">Activate</button>\` : ''}
+        <button class="btn btn-ghost" onclick="asrEdit('\${p.id}')">Edit</button>
+        <button class="btn btn-red" onclick="asrDelete('\${p.id}')">Delete</button>
+      </td>
+    </tr>\`;
+  }).join('');
 
-        <div style="font-size:12px;font-weight:600;text-transform:uppercase;color:#6b7280;margin:20px 0 8px">Results</div>
-        \${resultRows || '<div style="font-size:12px;color:#9ca3af;padding:12px;border:1px dashed #e5e7eb;border-radius:8px">Run a transcription to see results here.</div>'}
-      </div>
+  return \`
+    <div class="main-header">
+      <h2>ASR Configuration</h2>
+      <button class="btn btn-primary" onclick="asrOpenAdd()">\${icons.plus} Add Provider</button>
+    </div>
+    <div class="main-body">
+      \${activeCard}
+      \${recorder}
+      \${asrLoading ? '<p class="empty">Loading...</p>' :
+        asrConfigs.length === 0 ? '<p class="empty">No ASR providers configured</p>' : \`
+        <table>
+          <thead><tr><th>Provider</th><th>API Key</th><th style="text-align:right">Actions</th></tr></thead>
+          <tbody>\${rows}</tbody>
+        </table>\`}
+    </div>\`;
+}
+
+function renderAsrModal() {
+  const d = asrModal.data || {};
+  const isEdit = asrModal.mode === 'edit';
+  const curType = d.providerType || 'xai-grok';
+  const preset = asrPresets[curType] || {};
+  return \`<div class="modal-overlay" id="asrModalOverlay">
+    <div class="modal" style="max-width:440px">
+      <h3>\${isEdit ? 'Edit ASR Provider' : 'Add ASR Provider'}</h3>
+      <p>Configure a speech-to-text provider. API keys are encrypted at rest. The active provider serves /api/transcribe.</p>
+      \${asrMsg ? \`<div class="msg \${asrMsgType === 'error' ? 'msg-err' : 'msg-ok'}">\${asrMsg}</div>\` : ''}
+      <form id="asrForm">
+        <div class="form-group">
+          <label>Display Name</label>
+          <input id="am_name" value="\${d.name || ''}" placeholder="e.g. Grok STT" />
+        </div>
+        <div class="form-group">
+          <label>Provider Type</label>
+          <select id="am_providerType" onchange="asrOnProviderChange()" style="width:100%;height:42px;padding:0 14px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;outline:none;background:#fff">
+            \${Object.entries(asrPresets).map(([k,v]) =>
+              \`<option value="\${k}" \${curType===k?'selected':''}>\${v.label}</option>\`).join('')}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Model</label>
+          <input id="am_model" value="\${d.model || preset.defaultModel || ''}" placeholder="\${preset.defaultModel || ''}" style="font-family:'SF Mono',SFMono-Regular,Menlo,monospace;font-size:13px" />
+        </div>
+        <div class="form-group">
+          <label id="am_keyLabel">API Key \${preset.needsKey === false ? '<span style="font-weight:400;color:#9ca3af">— not needed (Workers AI binding)</span>' : (isEdit ? '<span style="font-weight:400;color:#9ca3af">(leave masked to keep)</span>' : '')}</label>
+          <div style="position:relative">
+            <input id="am_apiKey" type="\${asrKeyVisible ? 'text' : 'password'}" value="\${d.apiKey || ''}" placeholder="\${preset.keyPlaceholder || ''}" style="padding-right:44px;font-family:'SF Mono',SFMono-Regular,Menlo,monospace;font-size:13px" />
+            <button type="button" onclick="asrToggleKey()" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#9ca3af;font-size:16px">\${asrKeyVisible ? '🙈' : '👁'}</button>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" onclick="asrCloseModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">\${isEdit ? 'Save Changes' : 'Add Provider'}</button>
+        </div>
+      </form>
     </div>
   </div>\`;
 }
@@ -1398,6 +1568,26 @@ function bind() {
       else { llmMsg = data.error || 'Failed'; llmMsgType = 'error'; render(); }
     } catch { llmMsg = 'Network error'; llmMsgType = 'error'; render(); }
   };
+
+  const asrForm = document.getElementById('asrForm');
+  if (asrForm) asrForm.onsubmit = async (e) => {
+    e.preventDefault();
+    const body = {
+      name: document.getElementById('am_name').value.trim(),
+      providerType: document.getElementById('am_providerType').value,
+      model: document.getElementById('am_model').value.trim(),
+      apiKey: document.getElementById('am_apiKey').value,
+    };
+    if (!body.name) body.name = asrPresets[body.providerType]?.label || body.providerType;
+    try {
+      const isEdit = asrModal.mode === 'edit';
+      const url = isEdit ? \`/api/asr-config/\${asrModal.data.id}\` : '/api/asr-config';
+      const res = await fetch(url, { method: isEdit ? 'PATCH' : 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+      const data = await res.json();
+      if (res.ok) { asrMsg = isEdit ? 'Saved!' : 'Provider added!'; asrMsgType = 'ok'; render(); setTimeout(() => { asrCloseModal(); fetchAsrData(); }, 900); }
+      else { asrMsg = data.error || 'Failed'; asrMsgType = 'error'; render(); }
+    } catch { asrMsg = 'Network error'; asrMsgType = 'error'; render(); }
+  };
 }
 
 // Data
@@ -1604,45 +1794,63 @@ window.navigateTo = (p) => {
   currentPage = p;
   if (p === 'llm-config' && llmProviders.length === 0) fetchLlmData();
   if (p === 'search-config' && searchProviders.length === 0) fetchSearchData();
-  if (p === 'asr-test' && asrProviders.length === 0) fetchAsrProviders();
+  if (p === 'asr-config' && asrConfigs.length === 0) fetchAsrData();
   render();
 };
 
-// ── ASR test handlers ──────────────────────────────────────────
-async function fetchAsrProviders() {
+// ── ASR config handlers (mirror Search config) ─────────────────
+async function fetchAsrData() {
+  asrLoading = true; render();
   try {
-    const res = await fetch('/api/asr-providers');
-    const json = await res.json();
-    asrProviders = json.providers || [];
-    // Default-select the unified-billing providers — those are the
-    // ones we can run without pasting a BYOK key.
-    if (asrSelected.size === 0) {
-      asrProviders.forEach(p => { if (p.unifiedBilling) asrSelected.add(p.key); });
+    const [cfgRes, presetRes] = await Promise.all([
+      fetch('/api/asr-config'),
+      Object.keys(asrPresets).length === 0 ? fetch('/api/asr-presets') : null,
+    ]);
+    const cfgJson = await cfgRes.json();
+    asrConfigs = cfgJson.data || [];
+    if (presetRes) {
+      const pj = await presetRes.json();
+      asrPresets = pj.presets || {};
     }
-    render();
   } catch (e) {
-    asrError = String(e);
-    render();
+    asrMsg = String(e); asrMsgType = 'error';
   }
+  asrLoading = false; render();
 }
 
-window.asrToggleProvider = (key) => {
-  if (asrSelected.has(key)) asrSelected.delete(key);
-  else asrSelected.add(key);
-  render();
-};
-
-// Inline onchange/oninput handlers run in a scope where top-level let
-// bindings aren't writable, so a bare "asrLang = this.value" lands on
-// window while asrRun() reads the script-scoped let — the dropdown
-// selection never reached the request. Route through a window fn, like
-// every other select in this file (callerAssign, searchOnProviderChange).
+// Inline onchange handlers can't write top-level let bindings — route the
+// language select through a window fn (same pattern as callerAssign).
 window.asrSetLang = (v) => { asrLang = v; };
-window.asrSetByokKey = (k, v) => { asrByokKeys[k] = v; };
 
-window.asrToggleKeys = () => {
-  asrShowKeys = !asrShowKeys;
-  render();
+window.asrOpenAdd = () => { asrModal = { mode: 'add', data: { providerType: 'xai-grok' } }; asrMsg = ''; asrKeyVisible = false; render(); };
+window.asrEdit = (id) => {
+  const p = asrConfigs.find(x => x.id === id);
+  if (p) { asrModal = { mode: 'edit', data: { ...p } }; asrMsg = ''; asrKeyVisible = false; render(); }
+};
+window.asrCloseModal = () => { asrModal = null; asrMsg = ''; render(); };
+window.asrToggleKey = () => { asrKeyVisible = !asrKeyVisible; render(); };
+window.asrOnProviderChange = () => {
+  const type = document.getElementById('am_providerType').value;
+  const preset = asrPresets[type];
+  if (!preset) return;
+  const modelEl = document.getElementById('am_model');
+  // Only auto-fill the model when empty or it matches another preset's
+  // default — don't clobber a user's custom value.
+  if (modelEl && (!modelEl.value || Object.values(asrPresets).some(p => p.defaultModel === modelEl.value))) {
+    modelEl.value = preset.defaultModel || '';
+  }
+  const keyEl = document.getElementById('am_apiKey');
+  if (keyEl) keyEl.placeholder = preset.keyPlaceholder || '';
+};
+window.asrActivate = async (id) => {
+  await fetch(\`/api/asr-config/\${id}/activate\`, { method: 'POST' });
+  fetchAsrData();
+};
+window.asrDelete = async (id) => {
+  if (!confirm('Delete this ASR provider?')) return;
+  await fetch(\`/api/asr-config/\${id}\`, { method: 'DELETE' });
+  delete asrResults[id];
+  fetchAsrData();
 };
 
 // MediaRecorder picks the first MIME the browser supports — order
@@ -1657,8 +1865,7 @@ function _asrPickMime() {
 
 window.asrStart = async () => {
   if (_asrRecorder) return;
-  asrError = '';
-  asrResults = [];
+  asrResults = {};
   // Free the URL from the previous take so we don't leak.
   if (asrBlobUrl) { URL.revokeObjectURL(asrBlobUrl); asrBlobUrl = ''; }
   asrBlob = null;
@@ -1688,7 +1895,7 @@ window.asrStart = async () => {
     asrRecording = true;
     render();
   } catch (e) {
-    asrError = 'getUserMedia: ' + (e && e.message ? e.message : String(e));
+    asrResults = { _mic: { error: 'getUserMedia: ' + (e && e.message ? e.message : String(e)) } };
     _asrStream && _asrStream.getTracks().forEach(t => t.stop());
     _asrStream = null;
     _asrRecorder = null;
@@ -1704,40 +1911,28 @@ window.asrStop = () => {
 };
 
 window.asrCancel = () => {
-  // Same as stop — we keep the blob for replay even on pointerleave,
-  // since a smoke-test page benefits from not losing the recording.
+  // Same as stop — keep the blob for replay even on pointerleave.
   window.asrStop();
 };
 
-window.asrRun = async () => {
-  if (!asrBlob || asrSelected.size === 0 || asrTranscribing) return;
-  asrTranscribing = true;
-  asrError = '';
-  asrResults = [];
+// Run one stored config against the current recording.
+window.asrTestRow = async (id) => {
+  if (!asrBlob || asrTestingId) return;
+  asrTestingId = id;
+  delete asrResults[id];
   render();
-
   const ext = (asrBlob.type || '').includes('mp4') ? 'm4a' : ((asrBlob.type || '').includes('ogg') ? 'ogg' : 'webm');
   const fd = new FormData();
   fd.set('audio', asrBlob, 'recording.' + ext);
   fd.set('lang', asrLang || '');
-  fd.set('providers', [...asrSelected].join(','));
-  // Only include BYOK keys that are non-empty — server falls back to
-  // env / unified billing for anything missing here.
-  const nonEmpty = Object.fromEntries(Object.entries(asrByokKeys).filter(([,v]) => v && v.length > 0));
-  if (Object.keys(nonEmpty).length > 0) fd.set('apiKeys', JSON.stringify(nonEmpty));
-
   try {
-    const res = await fetch('/api/asr-test', { method: 'POST', body: fd });
-    if (!res.ok) {
-      const t = await res.text().catch(() => '');
-      throw new Error('HTTP ' + res.status + ': ' + t.slice(0, 200));
-    }
+    const res = await fetch(\`/api/asr-config/\${id}/test\`, { method: 'POST', body: fd });
     const json = await res.json();
-    asrResults = json.results || [];
+    asrResults[id] = json;
   } catch (e) {
-    asrError = e && e.message ? e.message : String(e);
+    asrResults[id] = { error: e && e.message ? e.message : String(e) };
   } finally {
-    asrTranscribing = false;
+    asrTestingId = null;
     render();
   }
 };
