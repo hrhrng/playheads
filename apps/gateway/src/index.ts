@@ -121,6 +121,18 @@ export default {
 
     // /api/waitlist → landing worker (waitlist API)
     if (url.pathname === "/api/waitlist") {
+      // When the global bypass is on, admit everyone: short-circuit the
+      // POST check so the email sign-in flow (which calls this before
+      // sending a magic link, and only proceeds on status==='approved')
+      // isn't gated. OAuth already skips this pre-check; this makes email
+      // consistent. Reads KV directly so it reflects the admin toggle
+      // immediately (no 30s cache like /api/waitlist/config).
+      if (request.method === "POST") {
+        const raw = await env.CONFIG_KV.get("waitlist:bypass");
+        if (raw === "true") {
+          return Response.json({ status: "approved", bypass: true });
+        }
+      }
       if (lane) return laneProxy("landing", lane, env.PREVIEW_DOMAIN, request);
       return env.LANDING.fetch(request);
     }
