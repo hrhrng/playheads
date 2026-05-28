@@ -742,7 +742,7 @@ let searchKeyVisible = false;
 // ASR Test state
 let asrProviders = []; // loaded from /api/asr-providers
 let asrSelected = new Set(); // provider keys checked for the next run
-let asrLang = 'zh';
+let asrLang = ''; // '' = auto-detect (default)
 let asrByokKeys = { fish: '', elevenlabs: '', xai: '', groq: '' };
 let asrShowKeys = false;
 let asrRecording = false;
