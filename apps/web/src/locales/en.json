@@ -59,7 +59,8 @@
     "uploadImage": "Upload image",
     "send": "Send",
     "voice": "Voice",
-    "voiceTip": "Hold to talk",
+    "voiceTip": "Start dictation",
+    "stopDictation": "Stop dictation",
     "like": "Add to Liked",
     "unlike": "Remove from Liked"
   },

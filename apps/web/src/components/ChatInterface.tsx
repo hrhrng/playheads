@@ -16,6 +16,7 @@ import { NewChatView } from './NewChatView';
 import { SkeletonLoader } from './SkeletonLoader';
 import { AddToPlaylistButton } from './AddToPlaylistButton';
 import { TrackMenu } from './TrackMenu';
+import { PlaybackSeekBar } from './PlaybackSeekBar';
 import type { TrackMenuItem } from './TrackMenu';
 import { ChatInput } from './chat/ChatInput';
 import { TranscriptOverlay } from './chat/TranscriptOverlay';
@@ -196,7 +197,8 @@ export const ChatInterface = ({
     onSessionCreated,
   });
 
-  // Voice input — hold-to-talk on the mic button. Server routes by lang
+  // Voice input — click the mic to start dictation, click again to stop.
+  // Server routes by lang
   // (zh* → Fish Audio, else → ElevenLabs Scribe via AI Gateway). On a
   // successful transcript we append to whatever the user has already
   // typed so dictation works as an additive prompt builder, not a
@@ -206,7 +208,6 @@ export const ChatInterface = ({
     isTranscribing,
     startHold,
     endHold,
-    cancelHold,
   } = useVoiceInput({
     lang: i18n.language,
     // Read input freshly from zustand store — depending on `input` here
@@ -218,13 +219,6 @@ export const ChatInterface = ({
     },
     onError: (msg) => console.warn('[ChatInterface] voice input error', msg),
   });
-
-  const formatTime = (seconds: number): string => {
-    if (!seconds) return '0:00';
-    const m = Math.floor(seconds / 60);
-    const s = Math.floor(seconds % 60);
-    return `${m}:${s < 10 ? '0' : ''}${s}`;
-  };
 
   // --- Vertical swipe feed (Swiper.js) ---
   //
@@ -506,45 +500,22 @@ export const ChatInterface = ({
                               </div>
                             )}
                             {isAppleMusicAuthorized && (playbackTime?.total || 0) > 0 && (
-                              <div className={`max-w-sm mx-auto px-2 mt-4 flex items-center gap-3 transition-opacity duration-200 ${showHistory || !currentTrack ? 'opacity-0 pointer-events-none' : ''}`}>
-                                <span className="text-[11px] font-mono text-ink-3 tabular-nums shrink-0">
-                                  {formatTime(seekDisplayValue)}
-                                </span>
-                                <div className="relative flex-1 h-5 flex items-center">
-                                  <div className="w-full h-1 bg-ink/15 rounded-full pointer-events-none overflow-hidden">
-                                    <div
-                                      className="h-full bg-ink rounded-full"
-                                      style={{ width: `${Math.min(100, (seekDisplayValue / (playbackTime?.total || 1)) * 100)}%` }}
-                                    />
-                                  </div>
-                                  <div
-                                    className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-ink rounded-full shadow pointer-events-none"
-                                    style={{ left: `calc(${Math.min(100, (seekDisplayValue / (playbackTime?.total || 1)) * 100)}% - 5px)` }}
-                                  />
-                                  <input
-                                    type="range"
-                                    min={0}
-                                    max={playbackTime?.total || 1}
-                                    step={0.1}
-                                    value={seekDisplayValue}
-                                    onPointerDown={() => { seekDragTrackIdRef.current = currentTrack?.id ?? null; }}
-                                    onChange={(e) => { setSeekDragging(true); setSeekDragValue(parseFloat(e.target.value)); }}
-                                    onPointerUp={(e) => {
-                                      // Only apply seek if the track is still the one we started on.
-                                      // Otherwise the user's intent doesn't transfer cleanly.
-                                      if (seekDragTrackIdRef.current && seekDragTrackIdRef.current === currentTrack?.id) {
-                                        onSeek?.(parseFloat((e.target as HTMLInputElement).value));
-                                      }
-                                      seekDragTrackIdRef.current = null;
-                                      setSeekDragging(false);
-                                    }}
-                                    className="absolute inset-0 w-full opacity-0 cursor-pointer"
-                                  />
-                                </div>
-                                <span className="text-[11px] font-mono text-ink-3 tabular-nums shrink-0">
-                                  {formatTime(playbackTime?.total || 0)}
-                                </span>
-                              </div>
+                              <PlaybackSeekBar
+                                current={seekDisplayValue}
+                                total={playbackTime?.total || 0}
+                                hidden={showHistory || !currentTrack}
+                                onSeekStart={() => { seekDragTrackIdRef.current = currentTrack?.id ?? null; }}
+                                onSeekChange={(time) => { setSeekDragging(true); setSeekDragValue(time); }}
+                                onSeekCommit={(time) => {
+                                  // Only apply seek if the track is still the one we started on.
+                                  // Otherwise the user's intent doesn't transfer cleanly.
+                                  if (seekDragTrackIdRef.current && seekDragTrackIdRef.current === currentTrack?.id) {
+                                    onSeek?.(time);
+                                  }
+                                  seekDragTrackIdRef.current = null;
+                                  setSeekDragging(false);
+                                }}
+                              />
                             )}
                           </>
                         ) : (
@@ -703,7 +674,6 @@ export const ChatInterface = ({
             onActivate={toggleHistory}
             onVoiceHoldStart={startHold}
             onVoiceHoldEnd={endHold}
-            onVoiceHoldCancel={cancelHold}
             isRecording={isRecording}
             isTranscribing={isTranscribing}
           />

@@ -1,5 +1,5 @@
 /**
- * Tests for hold-to-talk voice input.
+ * Tests for click-to-dictate voice input.
  */
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -46,7 +46,7 @@ beforeEach(() => {
 });
 
 describe('useVoiceInput', () => {
-  it('honors release while microphone permission is still resolving', async () => {
+  it('honors stop while microphone permission is still resolving', async () => {
     const streamReady = deferred<MediaStream>();
     const stopTrack = vi.fn();
     const stream = {

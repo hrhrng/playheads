@@ -65,14 +65,14 @@ export function DiscoveryPage({
   const [isCreating, setIsCreating] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
 
-  // Voice — hold the mic to record; transcripts are appended to whatever
-  // the user has already typed so dictation composes.
+  // Voice — click the mic to start dictation, click again to stop.
+  // Transcripts are appended to whatever the user has already typed so
+  // dictation composes.
   const {
     isRecording,
     isTranscribing,
     startHold,
     endHold,
-    cancelHold,
   } = useVoiceInput({
     lang: i18n.language,
     onTranscript: (text) =>
@@ -322,7 +322,6 @@ export function DiscoveryPage({
           onRemoveAttachment={handleRemoveAttachment}
           onVoiceHoldStart={startHold}
           onVoiceHoldEnd={endHold}
-          onVoiceHoldCancel={cancelHold}
           isRecording={isRecording}
           isTranscribing={isTranscribing}
         />

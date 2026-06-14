@@ -1,8 +1,8 @@
 /**
- * useVoiceInput — hold-to-talk mic that uploads to `/api/transcribe`.
+ * useVoiceInput — click-to-dictate mic that uploads to `/api/transcribe`.
  *
- * UX: pointerdown on the mic button → start recording (MediaRecorder).
- * pointerup → stop, POST the blob + current i18n lang to the gateway,
+ * UX: click the mic button → start recording (MediaRecorder).
+ * click stop → POST the blob + current i18n lang to the gateway,
  * await the transcript, and hand it back via `onTranscript`. The caller
  * decides what to do with the text (append to textarea, replace, etc.).
  *
@@ -28,15 +28,15 @@ export interface UseVoiceInputOptions {
 }
 
 export interface UseVoiceInputReturn {
-  /** True between pointerdown and pointerup — mic capsule pulses. */
+  /** True while dictation is active. */
   isRecording: boolean;
   /** True while the upload/transcribe round-trip is in flight. */
   isTranscribing: boolean;
-  /** Wire to the mic button's onPointerDown. */
+  /** Start dictation. */
   startHold: () => Promise<void>;
-  /** Wire to the mic button's onPointerUp / onPointerLeave / onPointerCancel. */
+  /** Stop dictation and upload for transcription. */
   endHold: () => void;
-  /** Abort a hold without transcribing (e.g. user drags off the button). */
+  /** Abort dictation without transcribing. */
   cancelHold: () => void;
 }
 

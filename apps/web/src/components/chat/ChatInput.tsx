@@ -24,13 +24,11 @@ interface ChatInputProps {
   onSend: () => void;
   /** Active music provider type */
   activeProvider?: ProviderType;
-  /** Mic: pointerdown — start hold-to-talk recording. */
+  /** Mic: start dictation recording. */
   onVoiceHoldStart?: () => void;
-  /** Mic: pointerup — stop recording and trigger upload/transcribe. */
+  /** Mic: stop recording and trigger upload/transcribe. */
   onVoiceHoldEnd?: () => void;
-  /** Mic: pointerleave / cancel — drop the in-flight recording, no upload. */
-  onVoiceHoldCancel?: () => void;
-  /** True while the user is actively holding & recording. */
+  /** True while the user is recording dictation. */
   isRecording?: boolean;
   /** True after release while the transcript round-trip is in flight. */
   isTranscribing?: boolean;
@@ -64,7 +62,6 @@ export const ChatInput = ({
   activeProvider,
   onVoiceHoldStart,
   onVoiceHoldEnd,
-  onVoiceHoldCancel,
   isRecording = false,
   isTranscribing = false,
   onAttach,
@@ -102,38 +99,14 @@ export const ChatInput = ({
     wasCollapsedRef.current = collapsed;
   }, [collapsed, textareaRef]);
 
-  // Voice button — hold-to-talk. pointerdown starts recording; pointerup
-  // stops and triggers transcribe; pointerleave/cancel discards. The
-  // active flag (touch vs mouse) and capture aren't needed here because
-  // the consuming hook tracks its own recorder state — these handlers
-  // just forward intent. (Long-press voice-mode is unimplemented and
-  // intentionally dropped to keep the mic single-purpose.)
-  const handleVoicePointerDown = useCallback(
-    (e: React.PointerEvent<HTMLButtonElement>) => {
-      // Prevent the synthetic touch→mouse double-fire on iOS Safari.
-      e.preventDefault();
-      e.stopPropagation();
-      onVoiceHoldStart?.();
-    },
-    [onVoiceHoldStart],
-  );
-
-  const handleVoicePointerUp = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
+  // Voice button — click once to start dictation, click again to stop and
+  // send the recorded blob to the transcription endpoint.
+  const handleVoiceClick = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    onVoiceHoldEnd?.();
-  }, [onVoiceHoldEnd]);
-
-  const handleVoicePointerCancel = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    onVoiceHoldCancel?.();
-  }, [onVoiceHoldCancel]);
-
-  const stopVoiceClick = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-  }, []);
+    if (isRecording) onVoiceHoldEnd?.();
+    else onVoiceHoldStart?.();
+  }, [isRecording, onVoiceHoldEnd, onVoiceHoldStart]);
 
   const handleCollapsedKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key === 'Enter' || e.key === ' ') {
@@ -178,14 +151,10 @@ export const ChatInput = ({
               {getPlaceholder()}
             </span>
 
-            {/* Voice (mic) — real hold-to-talk target even in collapsed feed mode. */}
+            {/* Voice (mic) — real dictation target even in collapsed feed mode. */}
             <button
               type="button"
-              onPointerDown={handleVoicePointerDown}
-              onPointerUp={handleVoicePointerUp}
-              onPointerLeave={handleVoicePointerCancel}
-              onPointerCancel={handleVoicePointerCancel}
-              onClick={stopVoiceClick}
+              onClick={handleVoiceClick}
               disabled={isLoading || isTranscribing}
               className={`w-11 h-11 flex items-center justify-center rounded-full transition-all shrink-0 touch-none select-none ${
                 isRecording
@@ -194,12 +163,16 @@ export const ChatInput = ({
                     ? 'bg-chip-2 text-ink-2'
                     : 'bg-chip-2 text-ink-2 hover:bg-chip-hover hover:text-ink'
               }`}
-              title={t('chatInput.voiceTip')}
-              aria-label={t('chatInput.voice')}
+              title={isRecording ? t('chatInput.stopDictation') : t('chatInput.voiceTip')}
+              aria-label={isRecording ? t('chatInput.stopDictation') : t('chatInput.voice')}
             >
-              <svg className="w-[20px] h-[20px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.8">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4M12 15a3 3 0 003-3V5a3 3 0 00-6 0v7a3 3 0 003 3z" />
-              </svg>
+              {isRecording ? (
+                <span className="w-3 h-3 rounded-[3px] bg-current" aria-hidden />
+              ) : (
+                <svg className="w-[20px] h-[20px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.8">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4M12 15a3 3 0 003-3V5a3 3 0 00-6 0v7a3 3 0 003 3z" />
+                </svg>
+              )}
             </button>
           </div>
         </div>
@@ -324,36 +297,41 @@ export const ChatInput = ({
             )}
           </button>
         ) : (
-          /* Voice button — hold-to-talk. Three visual states:
+          /* Voice button — click-to-dictate. Three visual states:
              idle (chip), recording (accent + pulse), transcribing (spinner). */
-          <button
-            type="button"
-            onPointerDown={handleVoicePointerDown}
-            onPointerUp={handleVoicePointerUp}
-            onPointerLeave={handleVoicePointerCancel}
-            onPointerCancel={handleVoicePointerCancel}
-            onClick={stopVoiceClick}
-            disabled={isLoading || isTranscribing}
-            className={`w-11 h-11 flex items-center justify-center rounded-full transition-all shrink-0 self-end touch-none select-none ${
-              isRecording
-                ? 'bg-accent text-page animate-pulse scale-110'
-                : isTranscribing
-                  ? 'bg-chip-2 text-ink-2'
-                  : 'bg-chip-2 text-ink-2 hover:bg-chip-hover hover:text-ink'
-            }`}
-            title={t('chatInput.voiceTip')}
-            aria-label={t('chatInput.voice')}
-          >
-            {isTranscribing ? (
-              <svg className="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-            ) : (
-              <svg className="w-[20px] h-[20px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.8">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4M12 15a3 3 0 003-3V5a3 3 0 00-6 0v7a3 3 0 003 3z" />
-              </svg>
+          <div className="shrink-0 self-end flex items-center gap-2">
+            {isRecording && (
+              <span className="hidden sm:inline-flex h-8 items-center rounded-full bg-chip px-3 text-[13px] text-ink-2 hairline">
+                {t('chatInput.stopDictation')}
+              </span>
             )}
-          </button>
+            <button
+              type="button"
+              onClick={handleVoiceClick}
+              disabled={isLoading || isTranscribing}
+              className={`w-11 h-11 flex items-center justify-center rounded-full transition-all shrink-0 touch-none select-none ${
+                isRecording
+                  ? 'bg-ink text-page'
+                  : isTranscribing
+                    ? 'bg-chip-2 text-ink-2'
+                    : 'bg-chip-2 text-ink-2 hover:bg-chip-hover hover:text-ink'
+              }`}
+              title={isRecording ? t('chatInput.stopDictation') : t('chatInput.voiceTip')}
+              aria-label={isRecording ? t('chatInput.stopDictation') : t('chatInput.voice')}
+            >
+              {isTranscribing ? (
+                <svg className="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              ) : isRecording ? (
+                <span className="w-3 h-3 rounded-[3px] bg-current" aria-hidden />
+              ) : (
+                <svg className="w-[20px] h-[20px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.8">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4M12 15a3 3 0 003-3V5a3 3 0 00-6 0v7a3 3 0 003 3z" />
+                </svg>
+              )}
+            </button>
+          </div>
         )}
         </div>
       </div>

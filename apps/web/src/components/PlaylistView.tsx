@@ -78,7 +78,6 @@ export const PlaylistView = ({
     isTranscribing,
     startHold,
     endHold,
-    cancelHold,
   } = useVoiceInput({
     lang: i18n.language,
     onTranscript: (text) =>
@@ -473,7 +472,6 @@ export const PlaylistView = ({
             onRemoveAttachment={handleRemoveAttachment}
             onVoiceHoldStart={startHold}
             onVoiceHoldEnd={endHold}
-            onVoiceHoldCancel={cancelHold}
             isRecording={isRecording}
             isTranscribing={isTranscribing}
           />

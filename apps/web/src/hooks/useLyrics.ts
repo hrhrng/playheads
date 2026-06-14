@@ -65,7 +65,7 @@ export function useLyrics(
     setPlainText(null);
 
     // Add timeout to prevent hanging requests
-    const timeout = setTimeout(() => ac.abort(), 10000);
+    const timeout = setTimeout(() => ac.abort(), 22000);
 
     const params = new URLSearchParams();
     if (currentTrack.artist) params.set('artist_name', currentTrack.artist);

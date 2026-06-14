@@ -26,25 +26,37 @@ function renderChatInput(overrides: Partial<React.ComponentProps<typeof ChatInpu
 }
 
 describe('ChatInput', () => {
-  it('starts voice input from the collapsed mic without activating chat', () => {
+  it('starts dictation from the collapsed mic on click without activating chat', () => {
     const onActivate = vi.fn();
     const onVoiceHoldStart = vi.fn();
-    const onVoiceHoldEnd = vi.fn();
 
     renderChatInput({
       collapsed: true,
       onActivate,
       onVoiceHoldStart,
-      onVoiceHoldEnd,
     });
 
     const mic = screen.getByRole('button', { name: 'Voice' });
-    fireEvent.pointerDown(mic);
-    fireEvent.pointerUp(mic);
     fireEvent.click(mic);
 
     expect(onVoiceHoldStart).toHaveBeenCalledTimes(1);
-    expect(onVoiceHoldEnd).toHaveBeenCalledTimes(1);
     expect(onActivate).not.toHaveBeenCalled();
+  });
+
+  it('stops dictation from the mic on click while recording', () => {
+    const onVoiceHoldStart = vi.fn();
+    const onVoiceHoldEnd = vi.fn();
+
+    renderChatInput({
+      isRecording: true,
+      onVoiceHoldStart,
+      onVoiceHoldEnd,
+    });
+
+    const stop = screen.getByRole('button', { name: 'Stop dictation' });
+    fireEvent.click(stop);
+
+    expect(onVoiceHoldStart).not.toHaveBeenCalled();
+    expect(onVoiceHoldEnd).toHaveBeenCalledTimes(1);
   });
 });
