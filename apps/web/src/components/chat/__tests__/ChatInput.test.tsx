@@ -59,4 +59,21 @@ describe('ChatInput', () => {
     expect(onVoiceHoldStart).not.toHaveBeenCalled();
     expect(onVoiceHoldEnd).toHaveBeenCalledTimes(1);
   });
+
+  it('turns the whole composer input area into a voice waveform while recording', () => {
+    const onVoiceHoldEnd = vi.fn();
+
+    renderChatInput({
+      isRecording: true,
+      onVoiceHoldEnd,
+    });
+
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    expect(screen.getByText('0:00')).toBeInTheDocument();
+
+    const sendVoice = screen.getByRole('button', { name: 'Send' });
+    fireEvent.click(sendVoice);
+
+    expect(onVoiceHoldEnd).toHaveBeenCalledTimes(1);
+  });
 });

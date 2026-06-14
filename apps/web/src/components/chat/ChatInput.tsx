@@ -4,10 +4,18 @@
  * @module components/chat/ChatInput
  */
 
-import { useRef, useCallback, useEffect } from 'react';
+import { useRef, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAutoResizeTextarea } from '../../hooks/useChatHelpers';
 import type { ProviderType } from '../../providers/types';
+
+const VOICE_BARS = [18, 34, 52, 70, 84, 90, 88, 86, 84, 82, 82, 82, 84, 88, 90, 88, 82, 70, 54, 36, 22];
+
+function formatElapsed(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
 
 interface ChatInputProps {
   /** Current input value */
@@ -73,6 +81,7 @@ export const ChatInput = ({
   const { t } = useTranslation();
   const textareaRef = useAutoResizeTextarea(input);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [recordingElapsed, setRecordingElapsed] = useState(0);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -122,7 +131,101 @@ export const ChatInput = ({
     e.target.value = '';
   }, [onAttach]);
 
-  if (collapsed) {
+  useEffect(() => {
+    if (!isRecording) return;
+
+    const startedAt = Date.now();
+    setRecordingElapsed(0);
+
+    const interval = window.setInterval(() => {
+      setRecordingElapsed(Math.max(0, Math.floor((Date.now() - startedAt) / 1000)));
+    }, 250);
+
+    return () => window.clearInterval(interval);
+  }, [isRecording]);
+
+  useEffect(() => {
+    if (!isRecording && !isTranscribing) {
+      setRecordingElapsed(0);
+    }
+  }, [isRecording, isTranscribing]);
+
+  const voiceInputRow = (
+    <div className="flex items-center gap-2">
+      <button
+        onClick={() => fileInputRef.current?.click()}
+        disabled={isLoading || isTranscribing}
+        className="w-11 h-11 flex items-center justify-center rounded-full text-ink-3 hover:text-ink hover:bg-chip transition-colors shrink-0"
+        title={t('chatInput.uploadImage')}
+        aria-label={t('chatInput.uploadImage')}
+      >
+        <svg className="w-[22px] h-[22px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m-7-7h14" />
+        </svg>
+      </button>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        onChange={handleFileSelect}
+        className="hidden"
+      />
+
+      <div className="relative flex min-w-0 flex-1 items-center gap-4 py-2" aria-label={t('chatInput.stopDictation')}>
+        <div className="h-px min-w-8 flex-1 border-t border-dashed border-ink/25" aria-hidden />
+        <div className="flex h-9 shrink-0 items-center gap-[3px]" aria-hidden>
+          {VOICE_BARS.map((height, index) => (
+            <span
+              key={index}
+              className="w-[3px] rounded-full bg-ink"
+              style={{
+                height: `${height}%`,
+                animation: isRecording
+                  ? `music-bar ${0.64 + (index % 5) * 0.08}s ease-in-out ${index * 0.025}s infinite`
+                  : undefined,
+              }}
+            />
+          ))}
+        </div>
+        <span className="w-11 shrink-0 text-center text-[15px] tabular-nums text-ink-2">
+          {formatElapsed(recordingElapsed)}
+        </span>
+      </div>
+
+      <button
+        type="button"
+        onClick={handleVoiceClick}
+        disabled={isLoading || isTranscribing}
+        className="w-11 h-11 flex items-center justify-center rounded-full bg-chip-2 text-ink hover:bg-chip-hover transition-colors shrink-0 touch-none select-none"
+        title={t('chatInput.stopDictation')}
+        aria-label={t('chatInput.stopDictation')}
+      >
+        {isTranscribing ? (
+          <svg className="w-5 h-5 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+        ) : (
+          <span className="w-3 h-3 rounded-[3px] bg-current" aria-hidden />
+        )}
+      </button>
+
+      <button
+        type="button"
+        onClick={handleVoiceClick}
+        disabled={isLoading || isTranscribing}
+        className="w-11 h-11 flex items-center justify-center rounded-full bg-ink text-page hover:bg-accent transition-colors shrink-0 touch-none select-none"
+        title={t('chatInput.send')}
+        aria-label={t('chatInput.send')}
+      >
+        <svg className="w-[20px] h-[20px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.2">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 19V5m0 0l-6 6m6-6l6 6" />
+        </svg>
+      </button>
+    </div>
+  );
+
+  if (collapsed && !isRecording && !isTranscribing) {
     // Mirror the composer's full layout (+ on left, mic on right, text
     // in middle) so the capsule looks structurally identical before /
     // after activation — only the textarea ↔ static hint text swaps.
@@ -216,6 +319,7 @@ export const ChatInput = ({
           </div>
         )}
 
+      {isRecording || isTranscribing ? voiceInputRow : (
       <div className="flex items-center gap-2">
         {/* Attachment Button — plus icon, image upload. Naked (no chip
             fill) — only the right-side action button carries fill.
@@ -334,6 +438,7 @@ export const ChatInput = ({
           </div>
         )}
         </div>
+      )}
       </div>
     </div>
   );
