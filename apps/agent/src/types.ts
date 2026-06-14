@@ -48,6 +48,11 @@ export interface Env {
   APPLE_MUSIC_KEY_ID: string;
   APPLE_MUSIC_PRIVATE_KEY: string;
   APPLE_MUSIC_TOKEN_TTL_SECONDS: string;
+  // Lyrics source ordering: "apple-first" | "lrclib-first" | "off".
+  APPLE_LYRICS_SOURCE?: string;
+  // Optional override for the public Apple Music web bearer token. When not
+  // configured, the agent extracts the token from music.apple.com at runtime.
+  APPLE_MUSIC_WEB_TOKEN?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -82,4 +87,3 @@ export interface MusicAction {
   type: MusicActionType;
   data: Record<string, unknown>;
 }
-

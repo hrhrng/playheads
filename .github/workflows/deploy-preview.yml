@@ -237,6 +237,7 @@ jobs:
             [APPLE_MUSIC_TEAM_ID]="${{ secrets.APPLE_MUSIC_TEAM_ID }}"
             [APPLE_MUSIC_KEY_ID]="${{ secrets.APPLE_MUSIC_KEY_ID }}"
             [APPLE_MUSIC_PRIVATE_KEY]="${{ secrets.APPLE_MUSIC_PRIVATE_KEY }}"
+            [APPLE_MUSIC_WEB_TOKEN]="${{ secrets.APPLE_MUSIC_WEB_TOKEN }}"
             [ADMIN_ENCRYPTION_KEY]="${{ secrets.ADMIN_ENCRYPTION_KEY }}"
           )
           FAILED=0
@@ -271,4 +272,3 @@ jobs:
               echo "○ $KEY not set in GitHub yet — billing routes will 500 until configured"
             fi
           done
-

@@ -45,7 +45,7 @@ export default {
     // Lyrics API proxy (stateless, no DO needed)
     // -----------------------------------------------------------------------
     if (url.pathname === "/lyrics") {
-      return handleLyrics(request);
+      return handleLyrics(request, env);
     }
 
     // -----------------------------------------------------------------------

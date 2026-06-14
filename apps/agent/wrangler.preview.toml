@@ -28,5 +28,7 @@ head_sampling_rate = 1
 ANTHROPIC_MODEL = "claude-sonnet-4-6"
 # 6h dev-token TTL — see wrangler.toml note. Client refreshes proactively.
 APPLE_MUSIC_TOKEN_TTL_SECONDS = "21600"
+# Apple private lyrics source ordering: apple-first | lrclib-first | off.
+APPLE_LYRICS_SOURCE = "apple-first"
 CLOUDFLARE_ACCOUNT_ID = "44af79e51582ca20c9003eb926540242"
 AI_GATEWAY_ID = "clash"

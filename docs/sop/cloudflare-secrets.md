@@ -20,6 +20,7 @@
 | `APPLE_MUSIC_TEAM_ID` | Apple Developer Team ID |
 | `APPLE_MUSIC_KEY_ID` | Apple Music Key ID |
 | `APPLE_MUSIC_PRIVATE_KEY` | Apple Music 私钥（PEM 内容，直接粘贴） |
+| `APPLE_MUSIC_WEB_TOKEN` | 可选。Apple Music Web bearer token override；不设置时 agent 会从 `music.apple.com` 前端资源动态提取，用于 Apple private lyrics 链路 |
 | `MINIMAX_API_KEY` | Minimax TTS API 密钥 |
 
 7. 点击 **Encrypt** 保存每个变量
@@ -38,3 +39,4 @@ make deploy-secrets
 - Secrets 设置一次即可，后续部署自动携带
 - 修改 secret 后需要重新部署 gateway 才生效
 - `APPLE_MUSIC_PRIVATE_KEY` 是多行 PEM，Dashboard 中直接粘贴全文即可
+- Agent lyrics 开关是 Worker var `APPLE_LYRICS_SOURCE`，支持 `apple-first`、`lrclib-first`、`off`；默认 preview/prod 配置为 `apple-first`

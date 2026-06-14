@@ -122,7 +122,10 @@ export const ChatInterface = ({
   const seekDragTrackIdRef = useRef<string | null>(null);
   const seekDisplayValue = seekDragging ? seekDragValue : (playbackTime?.current || 0);
   const [showLyrics, setShowLyrics] = useState(false);
-  const lyrics = useLyrics(currentTrack, playbackTime?.current || 0);
+  const lyrics = useLyrics(currentTrack, playbackTime?.current || 0, {
+    userId,
+    storefront: musicActions?.storefront,
+  });
   const { isLiked, toggle: toggleLiked } = useLikedTrack({
     userId,
     currentTrack,

@@ -178,6 +178,7 @@ jobs:
             [APPLE_MUSIC_TEAM_ID]="${{ secrets.APPLE_MUSIC_TEAM_ID }}"
             [APPLE_MUSIC_KEY_ID]="${{ secrets.APPLE_MUSIC_KEY_ID }}"
             [APPLE_MUSIC_PRIVATE_KEY]="${{ secrets.APPLE_MUSIC_PRIVATE_KEY }}"
+            [APPLE_MUSIC_WEB_TOKEN]="${{ secrets.APPLE_MUSIC_WEB_TOKEN }}"
             [ADMIN_ENCRYPTION_KEY]="${{ secrets.ADMIN_ENCRYPTION_KEY }}"
           )
           FAILED=0
@@ -193,4 +194,3 @@ jobs:
             fi
           done
           if [ "$FAILED" -eq 1 ]; then exit 1; fi
-
