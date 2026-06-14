@@ -78,6 +78,8 @@ export function useVoiceInput({
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const startingRef = useRef(false);
+  const pendingStopRef = useRef<'stop' | 'cancel' | null>(null);
   // Flag flipped by cancelHold so the onstop handler knows to discard
   // instead of upload. Holds across the async stop → ondataavailable →
   // onstop chain that we can't await directly.
@@ -90,17 +92,47 @@ export function useVoiceInput({
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
       recorderRef.current = null;
+      startingRef.current = false;
+      pendingStopRef.current = null;
     };
   }, []);
 
+  const stopRecorder = useCallback((mode: 'stop' | 'cancel') => {
+    const rec = recorderRef.current;
+    if (!rec) {
+      pendingStopRef.current = mode;
+      setIsRecording(false);
+      return;
+    }
+
+    pendingStopRef.current = null;
+    cancelledRef.current = mode === 'cancel';
+    setIsRecording(false);
+    if (rec.state === 'recording') {
+      rec.stop(); // triggers onstop → upload or discard
+    }
+  }, []);
+
   const startHold = useCallback(async () => {
-    if (recorderRef.current) return; // already recording, ignore re-entry
+    if (recorderRef.current || startingRef.current) return; // already recording, ignore re-entry
+    startingRef.current = true;
+    pendingStopRef.current = null;
     cancelledRef.current = false;
     chunksRef.current = [];
+    setIsRecording(true);
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
+
+      if (pendingStopRef.current === 'cancel') {
+        stream.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+        pendingStopRef.current = null;
+        startingRef.current = false;
+        setIsRecording(false);
+        return;
+      }
 
       const mime = pickMime();
       const recorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
@@ -147,7 +179,10 @@ export function useVoiceInput({
       };
 
       recorder.start();
-      setIsRecording(true);
+      startingRef.current = false;
+      if (pendingStopRef.current) {
+        stopRecorder(pendingStopRef.current);
+      }
     } catch (err) {
       // getUserMedia rejection (denied permission, no device, http-not-localhost, etc.)
       const msg = err instanceof Error ? err.message : String(err);
@@ -156,28 +191,19 @@ export function useVoiceInput({
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
       recorderRef.current = null;
+      startingRef.current = false;
+      pendingStopRef.current = null;
       setIsRecording(false);
     }
-  }, [lang, onTranscript, onError]);
+  }, [lang, onTranscript, onError, stopRecorder]);
 
   const endHold = useCallback(() => {
-    const rec = recorderRef.current;
-    if (!rec) return;
-    setIsRecording(false);
-    if (rec.state === 'recording') {
-      rec.stop(); // triggers onstop → upload
-    }
-  }, []);
+    stopRecorder('stop');
+  }, [stopRecorder]);
 
   const cancelHold = useCallback(() => {
-    const rec = recorderRef.current;
-    if (!rec) return;
-    cancelledRef.current = true;
-    setIsRecording(false);
-    if (rec.state === 'recording') {
-      rec.stop(); // onstop will see cancelledRef and discard
-    }
-  }, []);
+    stopRecorder('cancel');
+  }, [stopRecorder]);
 
   return { isRecording, isTranscribing, startHold, endHold, cancelHold };
 }

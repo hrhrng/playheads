@@ -112,18 +112,35 @@ export const ChatInput = ({
     (e: React.PointerEvent<HTMLButtonElement>) => {
       // Prevent the synthetic touch→mouse double-fire on iOS Safari.
       e.preventDefault();
+      e.stopPropagation();
       onVoiceHoldStart?.();
     },
     [onVoiceHoldStart],
   );
 
-  const handleVoicePointerUp = useCallback(() => {
+  const handleVoicePointerUp = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
     onVoiceHoldEnd?.();
   }, [onVoiceHoldEnd]);
 
-  const handleVoicePointerCancel = useCallback(() => {
+  const handleVoicePointerCancel = useCallback((e: React.PointerEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
     onVoiceHoldCancel?.();
   }, [onVoiceHoldCancel]);
+
+  const stopVoiceClick = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+  }, []);
+
+  const handleCollapsedKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onActivate?.();
+    }
+  }, [onActivate]);
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -140,9 +157,11 @@ export const ChatInput = ({
     // h-11) so capsule height/width don't budge on transition.
     return (
       <div className="max-w-xl mx-auto">
-        <button
-          type="button"
+        <div
+          role="button"
+          tabIndex={0}
           onClick={onActivate}
+          onKeyDown={handleCollapsedKeyDown}
           className="w-full glass rounded-full py-2.5 px-2 hover:bg-ink/5 transition-colors text-left font-sans"
           aria-label={t('chatInput.askDJ')}
         >
@@ -159,14 +178,31 @@ export const ChatInput = ({
               {getPlaceholder()}
             </span>
 
-            {/* Voice (mic) — decorative; mirrors composer's voice button */}
-            <div className="w-11 h-11 flex items-center justify-center rounded-full bg-chip-2 text-ink-2 shrink-0" aria-hidden>
+            {/* Voice (mic) — real hold-to-talk target even in collapsed feed mode. */}
+            <button
+              type="button"
+              onPointerDown={handleVoicePointerDown}
+              onPointerUp={handleVoicePointerUp}
+              onPointerLeave={handleVoicePointerCancel}
+              onPointerCancel={handleVoicePointerCancel}
+              onClick={stopVoiceClick}
+              disabled={isLoading || isTranscribing}
+              className={`w-11 h-11 flex items-center justify-center rounded-full transition-all shrink-0 touch-none select-none ${
+                isRecording
+                  ? 'bg-accent text-page animate-pulse scale-110'
+                  : isTranscribing
+                    ? 'bg-chip-2 text-ink-2'
+                    : 'bg-chip-2 text-ink-2 hover:bg-chip-hover hover:text-ink'
+              }`}
+              title={t('chatInput.voiceTip')}
+              aria-label={t('chatInput.voice')}
+            >
               <svg className="w-[20px] h-[20px]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.8">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4M12 15a3 3 0 003-3V5a3 3 0 00-6 0v7a3 3 0 003 3z" />
               </svg>
-            </div>
+            </button>
           </div>
-        </button>
+        </div>
       </div>
     );
   }
@@ -296,6 +332,7 @@ export const ChatInput = ({
             onPointerUp={handleVoicePointerUp}
             onPointerLeave={handleVoicePointerCancel}
             onPointerCancel={handleVoicePointerCancel}
+            onClick={stopVoiceClick}
             disabled={isLoading || isTranscribing}
             className={`w-11 h-11 flex items-center justify-center rounded-full transition-all shrink-0 self-end touch-none select-none ${
               isRecording

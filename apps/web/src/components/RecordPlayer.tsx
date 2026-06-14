@@ -68,17 +68,17 @@ const RecordPlayerImpl = ({
 
   return (
     <div className="flex flex-col items-center gap-5 group w-full flex-1 min-h-0 justify-center">
-      {/* Cover Art — a square that FLEXES to fit the height the parent
-         gives it (flex-1 + min-h-0), so the title/lyrics/seek row always
-         stay above the composer no matter the viewport. h-full fills the
-         available height, aspect-square keeps it square, max-w-full caps
-         it at the column width (max-w-xl) so it never grows past the
-         desktop size. 10px radius + dual cover shadow per iOS Spec. */}
-      <div className="relative pointer-events-auto w-full flex-1 min-h-0 flex items-center justify-center">
+      {/* Cover Art — use container query units so the frame is the smaller
+         of the available width/height. `h-full max-w-full` can distort the
+         square when the height wins and the width is clamped. */}
+      <div className="relative pointer-events-auto w-full flex-1 min-h-0 flex items-center justify-center [container-type:size]">
         {/* Cover stays at scale-1.0 always. The previous pause-shrink
             animation caused a visible size jump on every swap in the
             feed (preview card 0.97 → playing card 1.0). */}
-        <div className="h-full max-w-full aspect-square rounded-card shadow-cover overflow-hidden relative">
+        <div
+          className="max-w-full max-h-full aspect-square rounded-card shadow-cover overflow-hidden relative"
+          style={{ width: 'min(100cqw, 100cqh)', height: 'min(100cqw, 100cqh)' }}
+        >
           {artworkUrl ? (
             <img
               src={artworkUrl}
