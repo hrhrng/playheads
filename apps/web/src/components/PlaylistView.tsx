@@ -76,7 +76,7 @@ export const PlaylistView = ({
   const {
     isRecording,
     isTranscribing,
-    audioLevels,
+    mediaRecorder,
     startHold,
     endHold,
     cancelHold,
@@ -477,7 +477,7 @@ export const PlaylistView = ({
             onVoiceCancel={cancelHold}
             isRecording={isRecording}
             isTranscribing={isTranscribing}
-            voiceLevels={audioLevels}
+            mediaRecorder={mediaRecorder}
           />
         </div>
       </div>

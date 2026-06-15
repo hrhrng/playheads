@@ -18,9 +18,6 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 
-const WAVEFORM_BAR_COUNT = 48;
-const EMPTY_AUDIO_LEVELS = Array.from({ length: WAVEFORM_BAR_COUNT }, () => 0);
-
 export interface UseVoiceInputOptions {
   /** BCP-47 tag from i18n (e.g. "zh", "en", "ja"). Server routes on this. */
   lang: string;
@@ -35,8 +32,8 @@ export interface UseVoiceInputReturn {
   isRecording: boolean;
   /** True while the upload/transcribe round-trip is in flight. */
   isTranscribing: boolean;
-  /** Live microphone levels, normalized 0..1 for waveform rendering. */
-  audioLevels: number[];
+  /** Current recorder, exposed for live waveform visualization. */
+  mediaRecorder: MediaRecorder | null;
   /** Start dictation. */
   startHold: () => Promise<void>;
   /** Stop dictation and upload for transcription. */
@@ -79,13 +76,10 @@ export function useVoiceInput({
 }: UseVoiceInputOptions): UseVoiceInputReturn {
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
-  const [audioLevels, setAudioLevels] = useState<number[]>(EMPTY_AUDIO_LEVELS);
+  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const audioFrameRef = useRef<number | null>(null);
-  const audioSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const startingRef = useRef(false);
   const pendingStopRef = useRef<'stop' | 'cancel' | null>(null);
@@ -94,84 +88,24 @@ export function useVoiceInput({
   // onstop chain that we can't await directly.
   const cancelledRef = useRef(false);
 
-  const stopAudioMeter = useCallback(() => {
-    if (audioFrameRef.current !== null) {
-      window.cancelAnimationFrame(audioFrameRef.current);
-      audioFrameRef.current = null;
-    }
-    audioSourceRef.current?.disconnect();
-    audioSourceRef.current = null;
-    const audioContext = audioContextRef.current;
-    audioContextRef.current = null;
-    void audioContext?.close().catch(() => undefined);
-    setAudioLevels(EMPTY_AUDIO_LEVELS);
-  }, []);
-
-  const startAudioMeter = useCallback((stream: MediaStream) => {
-    stopAudioMeter();
-
-    const AudioContextCtor =
-      window.AudioContext ??
-      (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!AudioContextCtor) return;
-
-    try {
-      const audioContext = new AudioContextCtor();
-      const analyser = audioContext.createAnalyser();
-      analyser.fftSize = 1024;
-      analyser.smoothingTimeConstant = 0.68;
-
-      const source = audioContext.createMediaStreamSource(stream);
-      source.connect(analyser);
-
-      audioContextRef.current = audioContext;
-      audioSourceRef.current = source;
-
-      const samples = new Uint8Array(analyser.fftSize);
-      const samplesPerBar = Math.floor(samples.length / WAVEFORM_BAR_COUNT);
-
-      const tick = () => {
-        analyser.getByteTimeDomainData(samples);
-        const next = Array.from({ length: WAVEFORM_BAR_COUNT }, (_, barIndex) => {
-          let sum = 0;
-          const start = barIndex * samplesPerBar;
-          const end = start + samplesPerBar;
-          for (let i = start; i < end; i += 1) {
-            const centered = (samples[i] - 128) / 128;
-            sum += centered * centered;
-          }
-          const rms = Math.sqrt(sum / samplesPerBar);
-          return Math.min(1, Math.pow(rms * 3.2, 0.72));
-        });
-        setAudioLevels(next);
-        audioFrameRef.current = window.requestAnimationFrame(tick);
-      };
-
-      tick();
-    } catch {
-      setAudioLevels(EMPTY_AUDIO_LEVELS);
-    }
-  }, [stopAudioMeter]);
-
   // Clean up if the component unmounts mid-recording — don't leave the
   // browser's mic indicator on.
   useEffect(() => {
     return () => {
-      stopAudioMeter();
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
       recorderRef.current = null;
+      setMediaRecorder(null);
       startingRef.current = false;
       pendingStopRef.current = null;
     };
-  }, [stopAudioMeter]);
+  }, []);
 
   const stopRecorder = useCallback((mode: 'stop' | 'cancel') => {
     const rec = recorderRef.current;
     if (!rec) {
       pendingStopRef.current = mode;
       setIsRecording(false);
-      stopAudioMeter();
       return;
     }
 
@@ -181,7 +115,7 @@ export function useVoiceInput({
     if (rec.state === 'recording') {
       rec.stop(); // triggers onstop → upload or discard
     }
-  }, [stopAudioMeter]);
+  }, []);
 
   const startHold = useCallback(async () => {
     if (recorderRef.current || startingRef.current) return; // already recording, ignore re-entry
@@ -196,7 +130,6 @@ export function useVoiceInput({
       streamRef.current = stream;
 
       if (pendingStopRef.current === 'cancel') {
-        stopAudioMeter();
         stream.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
         pendingStopRef.current = null;
@@ -205,11 +138,10 @@ export function useVoiceInput({
         return;
       }
 
-      startAudioMeter(stream);
-
       const mime = pickMime();
       const recorder = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
       recorderRef.current = recorder;
+      setMediaRecorder(recorder);
 
       recorder.ondataavailable = (e) => {
         if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
@@ -220,10 +152,10 @@ export function useVoiceInput({
         const blob = new Blob(chunksRef.current, { type: recordedMime });
         // Always release the mic before the network call — otherwise the
         // OS indicator stays red while we wait for the transcript.
-        stopAudioMeter();
         streamRef.current?.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
         recorderRef.current = null;
+        setMediaRecorder(null);
         chunksRef.current = [];
 
         if (cancelledRef.current || blob.size === 0) return;
@@ -262,15 +194,15 @@ export function useVoiceInput({
       const msg = err instanceof Error ? err.message : String(err);
       console.error('[useVoiceInput] start failed', msg);
       onError?.(msg);
-      stopAudioMeter();
       streamRef.current?.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
       recorderRef.current = null;
+      setMediaRecorder(null);
       startingRef.current = false;
       pendingStopRef.current = null;
       setIsRecording(false);
     }
-  }, [lang, onTranscript, onError, startAudioMeter, stopAudioMeter, stopRecorder]);
+  }, [lang, onTranscript, onError, stopRecorder]);
 
   const endHold = useCallback(() => {
     stopRecorder('stop');
@@ -280,5 +212,5 @@ export function useVoiceInput({
     stopRecorder('cancel');
   }, [stopRecorder]);
 
-  return { isRecording, isTranscribing, audioLevels, startHold, endHold, cancelHold };
+  return { isRecording, isTranscribing, mediaRecorder, startHold, endHold, cancelHold };
 }

@@ -71,7 +71,7 @@ export function DiscoveryPage({
   const {
     isRecording,
     isTranscribing,
-    audioLevels,
+    mediaRecorder,
     startHold,
     endHold,
     cancelHold,
@@ -327,7 +327,7 @@ export function DiscoveryPage({
           onVoiceCancel={cancelHold}
           isRecording={isRecording}
           isTranscribing={isTranscribing}
-          voiceLevels={audioLevels}
+          mediaRecorder={mediaRecorder}
         />
       </div>
     </div>

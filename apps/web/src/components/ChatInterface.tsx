@@ -209,7 +209,7 @@ export const ChatInterface = ({
   const {
     isRecording,
     isTranscribing,
-    audioLevels,
+    mediaRecorder,
     startHold,
     endHold,
     cancelHold,
@@ -682,7 +682,7 @@ export const ChatInterface = ({
             onVoiceCancel={cancelHold}
             isRecording={isRecording}
             isTranscribing={isTranscribing}
-            voiceLevels={audioLevels}
+            mediaRecorder={mediaRecorder}
           />
         </div>
 

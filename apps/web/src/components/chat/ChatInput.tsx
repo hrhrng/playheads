@@ -7,9 +7,8 @@
 import { useRef, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAutoResizeTextarea } from '../../hooks/useChatHelpers';
+import { LiveVoiceWaveform } from '../LiveVoiceWaveform';
 import type { ProviderType } from '../../providers/types';
-
-const EMPTY_VOICE_LEVELS = Array.from({ length: 48 }, () => 0);
 
 function formatElapsed(seconds: number): string {
   const mins = Math.floor(seconds / 60);
@@ -42,8 +41,8 @@ interface ChatInputProps {
   isRecording?: boolean;
   /** True after release while the transcript round-trip is in flight. */
   isTranscribing?: boolean;
-  /** Live microphone levels, normalized 0..1. */
-  voiceLevels?: number[];
+  /** Current recorder for live waveform visualization. */
+  mediaRecorder?: MediaRecorder | null;
   /** Callback when files are attached. Required — every host of ChatInput
    *  needs to ferry attachments somewhere (either into the current chat or
    *  via route state into a forked chat). Making it required keeps the +
@@ -77,7 +76,7 @@ export const ChatInput = ({
   onVoiceCancel,
   isRecording = false,
   isTranscribing = false,
-  voiceLevels = EMPTY_VOICE_LEVELS,
+  mediaRecorder = null,
   onAttach,
   attachments,
   onRemoveAttachment,
@@ -186,18 +185,19 @@ export const ChatInput = ({
         className="hidden"
       />
 
-      <div className="flex h-10 min-w-0 flex-1 items-center gap-[3px] overflow-hidden py-1" aria-label={t('chatInput.stopDictation')}>
-        {voiceLevels.map((level, index) => {
-          const normalized = Math.max(0, Math.min(1, level));
-          const height = 2 + normalized * 34;
-          return (
-            <span
-              key={index}
-              className="min-w-[2px] flex-1 rounded-full bg-ink transition-[height,opacity] duration-75"
-              style={{ height, opacity: normalized > 0.015 ? 1 : 0.34 }}
-            />
-          );
-        })}
+      <div className="h-10 min-w-0 flex-1 overflow-hidden" aria-label={t('chatInput.stopDictation')}>
+        {mediaRecorder || isTranscribing ? (
+          <LiveVoiceWaveform
+            mediaRecorder={mediaRecorder}
+            active={isRecording}
+            processing={isTranscribing}
+            className="h-full w-full"
+          />
+        ) : (
+          <div className="flex h-full items-center">
+            <div className="h-px w-full border-t border-dashed border-ink/25" />
+          </div>
+        )}
       </div>
 
       <span className="w-11 shrink-0 text-center text-[15px] tabular-nums text-ink-2">
