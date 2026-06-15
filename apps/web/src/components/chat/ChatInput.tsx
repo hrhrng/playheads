@@ -9,7 +9,7 @@ import { useTranslation } from 'react-i18next';
 import { useAutoResizeTextarea } from '../../hooks/useChatHelpers';
 import type { ProviderType } from '../../providers/types';
 
-const VOICE_BARS = [18, 34, 52, 70, 84, 90, 88, 86, 84, 82, 82, 82, 84, 88, 90, 88, 82, 70, 54, 36, 22];
+const EMPTY_VOICE_LEVELS = Array.from({ length: 48 }, () => 0);
 
 function formatElapsed(seconds: number): string {
   const mins = Math.floor(seconds / 60);
@@ -36,10 +36,14 @@ interface ChatInputProps {
   onVoiceHoldStart?: () => void;
   /** Mic: stop recording and trigger upload/transcribe. */
   onVoiceHoldEnd?: () => void;
+  /** Mic: cancel recording without upload/transcribe. */
+  onVoiceCancel?: () => void;
   /** True while the user is recording dictation. */
   isRecording?: boolean;
   /** True after release while the transcript round-trip is in flight. */
   isTranscribing?: boolean;
+  /** Live microphone levels, normalized 0..1. */
+  voiceLevels?: number[];
   /** Callback when files are attached. Required — every host of ChatInput
    *  needs to ferry attachments somewhere (either into the current chat or
    *  via route state into a forked chat). Making it required keeps the +
@@ -70,8 +74,10 @@ export const ChatInput = ({
   activeProvider,
   onVoiceHoldStart,
   onVoiceHoldEnd,
+  onVoiceCancel,
   isRecording = false,
   isTranscribing = false,
+  voiceLevels = EMPTY_VOICE_LEVELS,
   onAttach,
   attachments,
   onRemoveAttachment,
@@ -116,6 +122,14 @@ export const ChatInput = ({
     if (isRecording) onVoiceHoldEnd?.();
     else onVoiceHoldStart?.();
   }, [isRecording, onVoiceHoldEnd, onVoiceHoldStart]);
+
+  const handleVoiceCancel = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (isRecording) {
+      (onVoiceCancel ?? onVoiceHoldEnd)?.();
+    }
+  }, [isRecording, onVoiceCancel, onVoiceHoldEnd]);
 
   const handleCollapsedKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key === 'Enter' || e.key === ' ') {
@@ -172,30 +186,27 @@ export const ChatInput = ({
         className="hidden"
       />
 
-      <div className="relative flex min-w-0 flex-1 items-center gap-4 py-2" aria-label={t('chatInput.stopDictation')}>
-        <div className="h-px min-w-8 flex-1 border-t border-dashed border-ink/25" aria-hidden />
-        <div className="flex h-9 shrink-0 items-center gap-[3px]" aria-hidden>
-          {VOICE_BARS.map((height, index) => (
+      <div className="flex h-10 min-w-0 flex-1 items-center gap-[3px] overflow-hidden py-1" aria-label={t('chatInput.stopDictation')}>
+        {voiceLevels.map((level, index) => {
+          const normalized = Math.max(0, Math.min(1, level));
+          const height = 2 + normalized * 34;
+          return (
             <span
               key={index}
-              className="w-[3px] rounded-full bg-ink"
-              style={{
-                height: `${height}%`,
-                animation: isRecording
-                  ? `music-bar ${0.64 + (index % 5) * 0.08}s ease-in-out ${index * 0.025}s infinite`
-                  : undefined,
-              }}
+              className="min-w-[2px] flex-1 rounded-full bg-ink transition-[height,opacity] duration-75"
+              style={{ height, opacity: normalized > 0.015 ? 1 : 0.34 }}
             />
-          ))}
-        </div>
-        <span className="w-11 shrink-0 text-center text-[15px] tabular-nums text-ink-2">
-          {formatElapsed(recordingElapsed)}
-        </span>
+          );
+        })}
       </div>
+
+      <span className="w-11 shrink-0 text-center text-[15px] tabular-nums text-ink-2">
+        {formatElapsed(recordingElapsed)}
+      </span>
 
       <button
         type="button"
-        onClick={handleVoiceClick}
+        onClick={handleVoiceCancel}
         disabled={isLoading || isTranscribing}
         className="w-11 h-11 flex items-center justify-center rounded-full bg-chip-2 text-ink hover:bg-chip-hover transition-colors shrink-0 touch-none select-none"
         title={t('chatInput.stopDictation')}

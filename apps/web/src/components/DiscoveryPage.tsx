@@ -71,8 +71,10 @@ export function DiscoveryPage({
   const {
     isRecording,
     isTranscribing,
+    audioLevels,
     startHold,
     endHold,
+    cancelHold,
   } = useVoiceInput({
     lang: i18n.language,
     onTranscript: (text) =>
@@ -322,8 +324,10 @@ export function DiscoveryPage({
           onRemoveAttachment={handleRemoveAttachment}
           onVoiceHoldStart={startHold}
           onVoiceHoldEnd={endHold}
+          onVoiceCancel={cancelHold}
           isRecording={isRecording}
           isTranscribing={isTranscribing}
+          voiceLevels={audioLevels}
         />
       </div>
     </div>

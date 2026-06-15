@@ -60,6 +60,26 @@ describe('ChatInput', () => {
     expect(onVoiceHoldEnd).toHaveBeenCalledTimes(1);
   });
 
+  it('uses the square button to cancel and the arrow button to submit recorded audio', () => {
+    const onVoiceHoldEnd = vi.fn();
+    const onVoiceCancel = vi.fn();
+
+    renderChatInput({
+      isRecording: true,
+      onVoiceHoldEnd,
+      onVoiceCancel,
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Stop dictation' }));
+
+    expect(onVoiceCancel).toHaveBeenCalledTimes(1);
+    expect(onVoiceHoldEnd).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+    expect(onVoiceHoldEnd).toHaveBeenCalledTimes(1);
+  });
+
   it('turns the whole composer input area into a voice waveform while recording', () => {
     const onVoiceHoldEnd = vi.fn();
 

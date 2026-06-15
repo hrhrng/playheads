@@ -209,8 +209,10 @@ export const ChatInterface = ({
   const {
     isRecording,
     isTranscribing,
+    audioLevels,
     startHold,
     endHold,
+    cancelHold,
   } = useVoiceInput({
     lang: i18n.language,
     // Read input freshly from zustand store — depending on `input` here
@@ -677,8 +679,10 @@ export const ChatInterface = ({
             onActivate={toggleHistory}
             onVoiceHoldStart={startHold}
             onVoiceHoldEnd={endHold}
+            onVoiceCancel={cancelHold}
             isRecording={isRecording}
             isTranscribing={isTranscribing}
+            voiceLevels={audioLevels}
           />
         </div>
 
