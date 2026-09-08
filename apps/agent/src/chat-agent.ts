@@ -7,8 +7,9 @@
  *
  * Ported from apps/backend/agent.py
  */
+import { createChatStream } from "./chat-stream";
 import { AIChatAgent } from "@cloudflare/ai-chat";
-import { streamText, convertToModelMessages, stepCountIs, tool, createUIMessageStream, createUIMessageStreamResponse, type ModelMessage } from "ai";
+import { streamText, convertToModelMessages, stepCountIs, tool, createUIMessageStreamResponse, type ModelMessage } from "ai";
 import { z } from "zod";
 import { createMusicTools } from "./tools";
 import { persistQueueToolResults } from "./tools/music-tools";
@@ -304,7 +305,7 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
     const agentMessages = this.messages;
     const agentEnv = this.env;
 
-    const stream = createUIMessageStream({
+    const stream = createChatStream(this.messages, {
       onError: (err) => {
         // Errors thrown inside streamText (provider 400s etc.) don't bubble
         // to the outer try/catch — capture them here so the frontend gets a

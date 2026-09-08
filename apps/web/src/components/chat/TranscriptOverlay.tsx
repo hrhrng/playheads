@@ -60,7 +60,7 @@ export const TranscriptOverlay = ({
       }`}
       style={maskStyle}
     >
-      <div className="w-full px-6 overflow-y-auto no-scrollbar pb-44 pt-8">
+      <div className="w-full px-6 overflow-y-auto no-scrollbar pb-4 pt-8">
       <div className="max-w-xl mx-auto">
         <MessageList messages={messages} rawMessages={rawMessages} isLoading={isLoading} queueOps={queueOps} storefront={storefront} playTrackById={playTrackById} />
         <div ref={endRef} />

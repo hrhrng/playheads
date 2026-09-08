@@ -34,6 +34,7 @@ interface AddToPlaylistButtonProps {
   className?: string;
   /** Optional icon size override — defaults to w-[18px]. */
   iconClassName?: string;
+  placement?: 'auto' | 'top';
 }
 
 type Status = 'idle' | 'adding' | 'added' | 'duplicate' | 'error';
@@ -45,6 +46,7 @@ export const AddToPlaylistButton = ({
   onMutated,
   className,
   iconClassName,
+  placement = 'auto',
 }: AddToPlaylistButtonProps): React.JSX.Element => {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -94,7 +96,7 @@ export const AddToPlaylistButton = ({
       const popWidth = 240;
       const margin = 8;
       const spaceBelow = window.innerHeight - rect.bottom;
-      const top = spaceBelow < popHeight + margin
+      const top = (placement === 'top' || spaceBelow < popHeight + margin)
         ? Math.max(margin, rect.top - popHeight - margin)
         : rect.bottom + margin;
       // Right-anchor to the button so the popover doesn't run off-screen on
@@ -103,7 +105,7 @@ export const AddToPlaylistButton = ({
       setPos({ top, left });
     }
     setOpen(true);
-  }, [open, playlists.length]);
+  }, [open, playlists.length, placement]);
 
   const handleAdd = useCallback(async (playlistId: string) => {
     if (!track || !userId) return;

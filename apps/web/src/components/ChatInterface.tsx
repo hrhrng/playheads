@@ -395,7 +395,7 @@ export const ChatInterface = ({
   return (
     <div className="flex flex-col h-full relative overflow-hidden">
       {/* Hero Stage */}
-      <div className="flex-1 flex flex-col items-center justify-center relative pb-48">
+      <div className="flex-1 min-h-0 flex flex-col items-center justify-center relative">
         {/* Visualizer Background — soft accent halo when playing */}
         {isPlaying && (
           <div className="absolute inset-0 flex items-center justify-center opacity-20 pointer-events-none">
@@ -406,9 +406,9 @@ export const ChatInterface = ({
         {/* Vertical swipe feed (Swiper.js). One slide per track; Virtual
             module mounts only active ± overscan. See comment above the
             feed useEffects for full reasoning. */}
-        <div className="absolute inset-0">
+        <div className="absolute inset-0" style={{ containerType: 'size' }}>
           {feedTracks.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center pb-20 px-6">
+            <div className="h-full flex flex-col items-center justify-center py-4 px-6 overflow-y-auto">
               <div className="relative z-10 w-full max-w-xl mx-auto">
                 <RecordPlayer
                   currentTrack={null}
@@ -445,8 +445,8 @@ export const ChatInterface = ({
                 const isCenter = idx === currentTrackIndex;
                 return (
                   <SwiperSlide key={track.id} virtualIndex={idx} className="!h-full">
-                    <div className="h-full flex flex-col items-center justify-center pb-20 px-6">
-                      <div className={`relative z-10 w-full max-w-xl mx-auto ${isCenter ? '' : 'pointer-events-none'}`}>
+                    <div className="h-full flex flex-col items-center justify-center py-4 px-6 overflow-y-auto">
+                      <div style={{ width: 'min(100%, max(120px, calc(100cqh - 240px)))' }} className={`relative z-10 w-full max-w-xl mx-auto ${isCenter ? '' : 'pointer-events-none'}`}>
                         <RecordPlayer
                           currentTrack={track}
                           isPaused={isCenter ? !isPlaying : false}
@@ -542,19 +542,19 @@ export const ChatInterface = ({
 
       </div>
 
-      {/* Command Console — fixed at bottom. No bg mask: the composer's
+      {/* Command Console — reserves its own height below the player. No bg mask: the composer's
           own glass pill provides the visual separation. A hard
           `from-page → transparent` gradient here would create a colour
           band where its top edge meets the mood blob bg (the two
           page-derived hues never line up). */}
-      <div className={`absolute bottom-0 left-0 right-0 px-6 pb-5 pt-10 z-30 transition-all duration-300 ${
+      <div className={`relative shrink-0 px-6 pb-5 pt-3 z-30 transition-all duration-300 ${
         showLyrics && !showHistory ? 'opacity-0 pointer-events-none translate-y-4' : 'opacity-100 pointer-events-auto translate-y-0'
       }`}>
         {/* Toggle row — only rendered in chat mode (showHistory) as the
             "back to feed" affordance, or on mobile when a playlist is
             available (the playlist button lives here). In feed mode it's
             empty and not needed: the pill itself is the entry point. */}
-        <div className={`max-w-xl mx-auto flex items-center transition-all duration-200 ${showHistory || hasPlaylist ? 'mb-2 h-8 opacity-100' : 'h-0 mb-0 opacity-0 pointer-events-none overflow-hidden'}`}>
+        <div className={`max-w-xl mx-auto flex items-center transition-all duration-200 ${showHistory ? 'mb-2 h-8 opacity-100' : hasPlaylist ? 'mb-2 h-8 opacity-100 md:hidden' : 'h-0 mb-0 opacity-0 pointer-events-none overflow-hidden'}`}>
           {showHistory && (
             <button
               onClick={toggleHistory}
@@ -636,10 +636,12 @@ export const ChatInterface = ({
               userId={userId}
               conversations={conversationsForLike}
               onMutated={onConversationsRefetch}
+              placement="top"
             />
             {trackMenuItems.length > 0 && (
               <TrackMenu
                 items={trackMenuItems}
+                placement="top"
                 className="w-9 h-9 rounded-full flex items-center justify-center transition-all hairline bg-chip text-ink-2 hover:text-ink hover:bg-chip-2"
                 iconClassName="w-[18px] h-[18px]"
               />

@@ -56,3 +56,17 @@ deploy commands use `--no-x-provision`: the configured bucket, D1 database and
 KV namespace already exist, so deployment should bind those resources without
 requiring resource creation/management permissions. Keep the explicit names/IDs.
 See [Cloudflare automatic provisioning](https://developers.cloudflare.com/changelog/post/2025-10-24-automatic-resource-provisioning/).
+
+## Continuation message identity and player layout
+
+`createChatStream` passes `originalMessages` to the outer AI SDK stream. When a
+client tool resumes an assistant turn, its start chunk must retain that message's
+ID. Otherwise the Cloudflare client seeds the continuation with existing parts
+and inserts them again under a fresh ID, creating a visible duplicate. The
+regression test exercises the actual AI SDK stream's start chunk.
+
+The composer and track action row occupy normal flex layout space below the
+player. The cover scales against the remaining stage height; the stage can scroll
+on very short screens. Bottom action menus explicitly open above their triggers,
+while menus elsewhere retain automatic placement. Verified with the real
+ChatInterface in a local browser fixture (mocked chat and lyrics data).

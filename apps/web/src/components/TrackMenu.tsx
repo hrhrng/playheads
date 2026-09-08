@@ -40,11 +40,12 @@ interface TrackMenuProps {
   className?: string;
   /** Class for the dots SVG. Defaults to 18×18. */
   iconClassName?: string;
+  placement?: 'auto' | 'top';
   /** aria-label / title for the button. */
   label?: string;
 }
 
-export const TrackMenu = ({ items, className, iconClassName, label }: TrackMenuProps): React.JSX.Element | null => {
+export const TrackMenu = ({ items, className, iconClassName, label, placement = 'auto' }: TrackMenuProps): React.JSX.Element | null => {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
@@ -77,10 +78,10 @@ export const TrackMenu = ({ items, className, iconClassName, label }: TrackMenuP
     if (rect) {
       const itemH = 38;
       const popHeight = Math.min(280, items.length * itemH + 12);
-      const popWidth = 200;
+      const popWidth = 208;
       const margin = 8;
       const spaceBelow = window.innerHeight - rect.bottom;
-      const top = spaceBelow < popHeight + margin
+      const top = (placement === 'top' || spaceBelow < popHeight + margin)
         ? Math.max(margin, rect.top - popHeight - margin)
         : rect.bottom + margin;
       const left = Math.max(
@@ -90,7 +91,7 @@ export const TrackMenu = ({ items, className, iconClassName, label }: TrackMenuP
       setPos({ top, left });
     }
     setOpen(true);
-  }, [open, items.length]);
+  }, [open, items.length, placement]);
 
   const close = useCallback(() => setOpen(false), []);
 
