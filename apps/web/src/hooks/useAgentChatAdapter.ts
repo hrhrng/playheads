@@ -2,8 +2,8 @@
  * Adapter hook that wraps Cloudflare Agents SDK's useAgentChat
  * and maps UIMessage format to our app's Message format.
  *
- * Player control tools (play_track, add_to_queue, skip_next,
- * remove_from_playlist) execute on the SERVER and return JSON results
+ * add_to_queue is a client tool: await MusicKit and return its real result.
+ * Legacy controls (play_track, skip_next, remove_from_playlist) execute on the SERVER and return JSON results
  * containing an `_action` field. This hook watches for new tool results
  * and dispatches queue operations as a side effect.
  */
@@ -14,6 +14,7 @@ import { useAgent } from "agents/react";
 import { useAgentChat } from "@cloudflare/ai-chat/react";
 import type { UIMessage } from "ai";
 import type { Message, MessagePart } from "../types/chat";
+import type { QueueAddResult } from "./usePlayQueue";
 import type { UnifiedTrack } from "../providers/types";
 
 /**
@@ -33,6 +34,7 @@ export interface MusicActions {
 export interface QueueOperations {
   addTrack: (track: UnifiedTrack) => void;
   addTracks: (tracks: UnifiedTrack[]) => void;
+  addTrackIds?: (ids: string[]) => Promise<QueueAddResult>;
   /** Insert tracks at head of queue and start playing the first one. */
   playTracks: (tracks: UnifiedTrack[]) => Promise<void>;
   removeTrack: (index: number) => void;
@@ -108,12 +110,13 @@ function mapUIMessagesToMessages(uiMessages: UIMessage[]): Message[] {
               errorText?: string;
             };
             const hasOutput = toolPart.state === "output-available" || toolPart.output !== undefined;
-            const hasError = toolPart.state === "output-error";
+            let hasError = toolPart.state === "output-error";
 
             let displayResult: unknown = undefined;
             if (hasOutput && !hasError && typeof toolPart.output === "string") {
               try {
                 const parsed = JSON.parse(toolPart.output);
+                if (parsed?.ok === false) hasError = true;
                 if (parsed?.message) displayResult = parsed.message;
                 else displayResult = toolPart.output;
               } catch {
@@ -174,6 +177,29 @@ export function useAgentChatAdapter({
   } = useAgentChat({
     agent,
     body: { session_id: sessionId, user_id: userId, storefront: musicActions?.storefront || 'us' },
+    async onToolCall({ toolCall, addToolOutput }) {
+      if (toolCall.toolName !== 'add_to_queue') return;
+      try {
+        const ops = queueOpsRef.current;
+        if (!ops?.addTrackIds) throw new Error('Apple Music player is not ready.');
+        const ids = (toolCall.input as { track_ids?: unknown })?.track_ids;
+        if (!Array.isArray(ids) || ids.length === 0 || ids.some(id => typeof id !== 'string' || !id)) {
+          throw new Error('Invalid Apple Music track IDs.');
+        }
+        const { tracks, failed } = await ops.addTrackIds(ids);
+        const message = `Added ${tracks.length} tracks to queue.` + (failed.length ? ` Skipped ${failed.length}: ${failed.map(item => `${item.id} (${item.error})`).join('; ')}` : '');
+        addToolOutput({
+          toolCallId: toolCall.toolCallId,
+          output: JSON.stringify({ ok: tracks.length > 0, partial: tracks.length > 0 && failed.length > 0, message, tracks, failed }),
+        });
+      } catch (error) {
+        const message = `Could not add tracks to queue: ${error instanceof Error ? error.message : String(error)}`;
+        // Return a normal tool result so the model can recover (e.g. search a
+        // replacement ID). SDK output-error disables automatic continuation.
+        addToolOutput({ toolCallId: toolCall.toolCallId, output: JSON.stringify({ ok: false, message }) });
+        toast.error(message);
+      }
+    },
     onError(err: Error) {
       // Surface backend / LLM errors that flow through the UI message stream
       // so users see what went wrong instead of a frozen loading state.

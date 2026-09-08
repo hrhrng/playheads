@@ -1,13 +1,13 @@
 /**
  * Music tools for the Playhead DJ agent.
  *
- * Player control tools (play_track, skip_next, remove_from_playlist,
- * add_to_queue) run on the server and return JSON results that include
+ * add_to_queue executes in the browser and returns MusicKit acknowledgements.
+ * Other player controls run on the server and return JSON results that include
  * an `_action` field. The client watches for these action payloads in
  * tool results and executes the corresponding MusicKit JS operations
  * as a side effect — matching the old SSE action dispatch pattern.
  */
-import { tool } from "ai";
+import { tool, type UIMessage } from "ai";
 import { z } from "zod";
 import { appleMusicGet } from "../apple-music";
 import type { Env, PlaybackState } from "../types";
@@ -76,6 +76,24 @@ async function appendToConversationPlaylist(
   }
 }
 
+/** Save only confirmed client-tool additions when the model resumes. */
+export async function persistQueueToolResults(env: Env, sessionId: string | undefined, messages: UIMessage[]) {
+  const latest = messages[messages.length - 1];
+  if (latest?.role !== 'assistant') return;
+  const entries: PlaylistEntry[] = [];
+  for (const part of latest.parts) {
+    if (part.type !== 'tool-add_to_queue' && !(part.type === 'dynamic-tool' && part.toolName === 'add_to_queue')) continue;
+    if (part.state !== 'output-available') continue;
+    try {
+      const result = typeof part.output === 'string' ? JSON.parse(part.output) : part.output;
+      if (!result?.ok || !Array.isArray(result.tracks)) continue;
+      entries.push(...result.tracks.filter((track: PlaylistEntry) =>
+        typeof track?.id === 'string' && track.provider === 'apple-music'));
+    } catch { /* Legacy/non-JSON output has no confirmed additions. */ }
+  }
+  await appendToConversationPlaylist(env, sessionId, entries);
+}
+
 /** Action payload embedded in tool results for client-side MusicKit dispatch. */
 export interface MusicAction {
   type: "add_to_queue" | "play_track" | "skip_next" | "remove_track";
@@ -85,9 +103,8 @@ export interface MusicAction {
 /**
  * Create all music tools bound to the given context.
  *
- * All tools have `execute` — the AI SDK auto-calls them on the server.
- * Player control tools embed a `_action` field in their result so the
- * frontend can dispatch MusicKit operations (same pattern as old SSE actions).
+ * add_to_queue is a client tool; the remaining player controls still use
+ * legacy _action dispatch. Search and metadata tools execute on the server.
  */
 export function createMusicTools(ctx: ToolContext) {
   return {
@@ -102,92 +119,9 @@ export function createMusicTools(ctx: ToolContext) {
           .min(1)
           .describe('Apple Music song IDs in the order they should be queued (e.g. ["12345","67890"]). Returned by search_music.'),
       }),
-      execute: async ({ track_ids }) => {
-        try {
-          // Fetch all tracks in parallel; preserve input order in the result.
-          const apiStart = Date.now();
-          const results = await Promise.allSettled(
-            track_ids.map((id) =>
-              appleMusicGet(`v1/catalog/${ctx.storefront}/songs/${id}`, ctx.env),
-            ),
-          );
-          console.log("[tool:add_to_queue] batch elapsed=%dms n=%d", Date.now() - apiStart, track_ids.length);
+      // No execute: MusicKit runs in the browser. The client returns confirmed
+      // additions and per-ID failures through addToolOutput before continuation.
 
-          const tracksData: Array<{
-            track_id: string;
-            name: string;
-            artist: string;
-            album: string;
-            artwork_url: string;
-            duration: number;
-          }> = [];
-          const entries: PlaylistEntry[] = [];
-          const missing: string[] = [];
-
-          for (let i = 0; i < results.length; i++) {
-            const r = results[i];
-            const reqId = track_ids[i];
-            if (r.status !== "fulfilled") {
-              missing.push(reqId);
-              continue;
-            }
-            const songs = (r.value.data as Array<Record<string, unknown>>) || [];
-            if (!songs.length) {
-              missing.push(reqId);
-              continue;
-            }
-            const song = songs[0];
-            const attrs = (song.attributes || {}) as Record<string, unknown>;
-            const artwork = (attrs.artwork || {}) as Record<string, unknown>;
-            const name = (attrs.name as string) || "Unknown";
-            const artist = (attrs.artistName as string) || "Unknown Artist";
-            const album = (attrs.albumName as string) || "";
-            const artworkUrl = (artwork.url as string) || "";
-            const durationSeconds = ((attrs.durationInMillis as number) || 0) / 1000;
-
-            tracksData.push({
-              track_id: song.id as string,
-              name,
-              artist,
-              album,
-              artwork_url: artworkUrl,
-              duration: durationSeconds,
-            });
-            entries.push({
-              id: song.id as string,
-              name,
-              artist,
-              album,
-              artworkUrl,
-              durationSeconds,
-              provider: "apple-music",
-            });
-          }
-
-          if (tracksData.length === 0) {
-            return `No tracks found for IDs: ${track_ids.join(", ")}`;
-          }
-
-          // Single D1 write for the whole batch — preserves order and is atomic.
-          await appendToConversationPlaylist(ctx.env, ctx.sessionId, entries);
-
-          const summary = tracksData.length === 1
-            ? `Added '${tracksData[0].name}' by ${tracksData[0].artist} to queue.`
-            : `Added ${tracksData.length} tracks to queue.`;
-          const note = missing.length ? ` (skipped ${missing.length} unresolved)` : "";
-
-          return JSON.stringify({
-            message: summary + note,
-            _action: {
-              type: "add_to_queue",
-              data: { tracks: tracksData },
-            },
-          });
-        } catch (e) {
-          console.error("[tool:add_to_queue] error:", e);
-          return `Error adding to queue: ${String(e)}`;
-        }
-      },
     }),
 
     play_track: tool({

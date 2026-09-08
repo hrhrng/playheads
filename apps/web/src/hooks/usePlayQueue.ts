@@ -13,6 +13,11 @@ import { API_BASE } from '../config/api';
 import type { UnifiedTrack } from '../providers/types';
 import type { AppleMusicProvider } from '../providers/AppleMusicProvider';
 
+export interface QueueAddResult {
+  tracks: UnifiedTrack[];
+  failed: Array<{ id: string; error: string }>;
+}
+
 export interface UsePlayQueueReturn {
   /** queue[0] = now playing, queue[1..] = up next */
   queue: UnifiedTrack[];
@@ -25,6 +30,7 @@ export interface UsePlayQueueReturn {
   isRestoring: boolean;
   addTrack(track: UnifiedTrack): void;
   addTracks(tracks: UnifiedTrack[]): void;
+  addTrackIds(ids: string[]): Promise<QueueAddResult>;
   /** Insert tracks at head of queue and start playing the first one. */
   playTracks(tracks: UnifiedTrack[]): Promise<void>;
   removeTrack(index: number): void;
@@ -157,6 +163,30 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
     p.addManyToNativeQueue(tracks.map(t => t.id)).catch(console.error);
   }, []);
 
+  /** Client tools must await MusicKit, then use its resolved track metadata. */
+  const addTrackIds = useCallback(async (ids: string[]) => {
+    const p = providerRef.current;
+    if (!p) throw new Error('Apple Music player is not ready.');
+    if (ids.length === 0) throw new Error('No track IDs supplied.');
+    const result: QueueAddResult = { tracks: [], failed: [] };
+    // Resolve independently: one unavailable song must not reject the whole batch.
+    for (const id of ids) {
+      try {
+        const before = p.getQueueSnapshot().items.filter(track => track.id === id).length;
+        await p.addManyToNativeQueue([id]);
+        const matches = p.getQueueSnapshot().items.filter(track => track.id === id);
+        if (matches.length <= before) {
+          throw new Error('Apple Music did not confirm this track in the queue. Check the queue before retrying.');
+        }
+        result.tracks.push(matches[matches.length - 1]);
+      } catch (error) {
+        result.failed.push({ id, error: error instanceof Error ? error.message : String(error) });
+      }
+      bump();
+    }
+    return result;
+  }, [bump]);
+
   /** Insert tracks at head of queue (playNext) and skip to the first one. */
   const playTracks = useCallback(async (tracks: UnifiedTrack[]) => {
     const p = providerRef.current;
@@ -274,6 +304,7 @@ export function usePlayQueue({ provider, userId }: UsePlayQueueParams): UsePlayQ
     isRestoring: isRestoringRef.current,
     addTrack,
     addTracks,
+    addTrackIds,
     playTracks,
     removeTrack,
     playAtIndex,

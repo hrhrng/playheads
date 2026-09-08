@@ -11,6 +11,7 @@ import { AIChatAgent } from "@cloudflare/ai-chat";
 import { streamText, convertToModelMessages, stepCountIs, tool, createUIMessageStream, createUIMessageStreamResponse, type ModelMessage } from "ai";
 import { z } from "zod";
 import { createMusicTools } from "./tools";
+import { persistQueueToolResults } from "./tools/music-tools";
 import { pipeYamlRender } from "@json-render/yaml";
 import { yamlPrompt } from "@json-render/yaml";
 import { musicCatalog } from "./genui-catalog";
@@ -51,6 +52,7 @@ Workflow:
 
 IMPORTANT:
 - search_music only searches — it does NOT add to queue or play.
+- add_to_queue runs on the client and returns actual MusicKit results. Never claim success before its result. For partial success, report the actual added count and retry ONLY failed IDs with newly searched alternatives; never re-add successful tracks. Do not infer a total queue size from the number requested.
 - add_to_queue needs track_ids (an array) from search_music results. Pass MULTIPLE in one call to queue multiple tracks — don't loop.
 - play_track plays a track ALREADY in the playlist (1-indexed).
 - remove_from_playlist takes a 1-indexed position.
@@ -223,6 +225,7 @@ export class MusicChatAgent extends AIChatAgent<Env, PlaybackState> {
     const userId = body.user_id as string | undefined;
     const storefront = (body.storefront as string) || "us";
     const messageCount = this.messages.length;
+    await persistQueueToolResults(this.env, sessionId, this.messages);
 
     // Read global queue from D1 profile (user-level, not per-session)
     let globalState: PlaybackState = this.state;

@@ -500,17 +500,19 @@ export class AppleMusicProvider implements MusicProvider {
   /** Batch add multiple songs to the END of the queue (playLater). */
   async addManyToNativeQueue(songIds: string[]): Promise<void> {
     if (songIds.length === 0) return;
-    this.mutationChain = this.mutationChain.then(async () => {
-      if (!this.musicKit) return;
+    const operation = this.mutationChain.then(async () => {
+      if (!this.musicKit) throw new Error('Apple Music player is not ready.');
       try {
         await (this.musicKit as any).playLater({ songs: songIds });
       } catch (e) {
-        console.error('[AppleMusicProvider] addManyToNativeQueue error:', e);
         const classified = classifyError(e);
         if (classified.category === ErrorCategory.AUTH_EXPIRED) this.handleAuthLost();
+        throw e;
       }
     });
-    return this.mutationChain;
+    // Keep subsequent mutations usable, but return this operation's real failure.
+    this.mutationChain = operation.catch(() => {});
+    return operation;
   }
 
   /** Batch insert songs right after current track (playNext = head of queue). */

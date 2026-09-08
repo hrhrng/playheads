@@ -75,4 +75,4 @@ That's it. No other combinations. Native and custom providers both follow this.
 
 # Doc
 docs guid:
-1.
+1. `docs/client-queue-tools.md` — Client-side queue execution, best-effort receipts, failure recovery, and regression checks.
