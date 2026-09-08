@@ -47,3 +47,12 @@ pnpm --filter playheads-agent exec wrangler deploy --dry-run
 These checks use a controlled MusicKit boundary; they do not prove production
 rollout or real playback. Validate one unavailable ID mixed with valid IDs in the
 browser after deployment, checking both the queue and the model's partial result.
+
+## Deployment prerequisite
+
+The 2026-09-08 production run reached web and agent deployment but failed on the
+gateway's automatic R2 provisioning check (Cloudflare 10000). Both gateway CI
+deploy commands use `--no-x-provision`: the configured bucket, D1 database and
+KV namespace already exist, so deployment should bind those resources without
+requiring resource creation/management permissions. Keep the explicit names/IDs.
+See [Cloudflare automatic provisioning](https://developers.cloudflare.com/changelog/post/2025-10-24-automatic-resource-provisioning/).
